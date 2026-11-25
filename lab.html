@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ALUN Scene Lab</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #081e2c; font-family: Fredoka, system-ui, sans-serif; }
+      #stage { position: relative; width: 100%; height: 100%; }
+      canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+
+      #panel { position: absolute; right: 14px; top: 14px; width: 246px; padding: 14px 16px 15px; border-radius: 18px; background: #131d3ae0; color: #e8f1ff; font-size: 13px; font-weight: 500; box-shadow: 0 6px 0 #0a1128; user-select: none; backdrop-filter: blur(6px); }
+      #panel.hide { display: none; }
+      #panel h1 { margin: 0 0 2px; font-size: 17px; font-weight: 700; }
+      #stats { margin: 0 0 10px; color: #8fb2d8; font-size: 12px; font-variant-numeric: tabular-nums; }
+      .row { margin-top: 11px; }
+      .row > span, .row > label { display: flex; justify-content: space-between; color: #a9c2e2; font-size: 12px; margin-bottom: 5px; }
+      .row b { color: #fff; font-weight: 600; font-variant-numeric: tabular-nums; }
+      .btns { display: flex; flex-wrap: wrap; gap: 5px; }
+      button { flex: 1 1 auto; padding: 6px 8px; border: 0; border-radius: 9px; background: #26365f; color: #e8f1ff; font: 600 12px Fredoka, system-ui, sans-serif; cursor: pointer; }
+      button:hover { background: #33477b; }
+      button:focus-visible, input:focus-visible { outline: 2px solid #6fe8ff; outline-offset: 2px; }
+      button.sel { background: #2fa8e8; color: #04223a; }
+      input[type='range'] { width: 100%; margin: 0; accent-color: #37c7e8; }
+      small { display: block; margin-top: 10px; color: #7f9cc2; font-size: 11px; line-height: 1.45; }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <canvas id="lab-canvas"></canvas>
+
+      <div id="panel">
+        <h1>Scene lab</h1>
+        <p id="stats">&nbsp;</p>
+
+        <div class="row">
+          <span>Quality</span>
+          <div class="btns" id="qual">
+            <button data-q="low">Low</button>
+            <button data-q="medium">Med</button>
+            <button data-q="high">High</button>
+            <button data-q="ultra">Ultra</button>
+          </div>
+        </div>
+        <div class="row">
+          <span>Time of day</span>
+          <div class="btns" id="tod">
+            <button data-tod="morning">Morning</button>
+            <button data-tod="noon">Noon</button>
+            <button data-tod="sunset">Sunset</button>
+            <button data-tod="monsoon">Storm</button>
+            <button data-tod="dawn">Dawn</button>
+          </div>
+        </div>
+        <div class="row">
+          <label for="eco">Lagoon health <b id="eco-v"></b></label>
+          <input id="eco" type="range" min="0" max="100" value="10" />
+        </div>
+        <div class="row">
+          <label for="net">Net level <b id="net-v"></b></label>
+          <input id="net" type="range" min="0" max="5" value="1" />
+        </div>
+        <div class="row">
+          <span>Throw a wave</span>
+          <div class="btns" id="throw">
+            <button data-c="tap">Tap</button>
+            <button data-c="0">Quick</button>
+            <button data-c="0.5">Half</button>
+            <button data-c="1">Full charge</button>
+          </div>
+        </div>
+        <div class="row">
+          <label for="pitch">Camera tilt <b id="pitch-v"></b></label>
+          <input id="pitch" type="range" min="36" max="72" value="50" />
+          <div class="btns" id="cam" style="margin-top: 6px">
+            <button data-cam="play">Play</button>
+            <button data-cam="title">Title</button>
+            <button data-cam="cut">Cutscene</button>
+          </div>
+        </div>
+        <div class="row">
+          <span>Spawn</span>
+          <div class="btns" id="spawn">
+            <button data-s="Boat">Boat</button>
+            <button data-s="Fire">Fire</button>
+            <button data-s="Oil">Oil</button>
+            <button data-s="Trawler">Boss</button>
+            <button data-s="buoy">AI buoy</button>
+            <button data-s="loot">Rare loot</button>
+          </div>
+        </div>
+        <small>Drag on the water to throw, hold to charge. H hides this panel, Space pauses.</small>
+      </div>
+    </div>
+    <script type="module" src="/src/lab.ts"></script>
+  </body>
+</html>

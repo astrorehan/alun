@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>ALUN — Gema Pesisir Tropis</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game-canvas"></canvas>
+
+      <!-- ================= IN-GAME ARCADE GLOSS HUD ================= -->
+      <div id="hud" class="hud hidden" aria-label="Status Permainan">
+        <!-- Top Row: Center Energy Meter + Right Time/Eco/Boss Cluster -->
+        <div class="hud-top">
+          <div class="hud-top-left">
+            <div class="ui-currency-pill" id="hud-coin-pill">
+              <span class="ui-currency-icon" id="hud-coin-icon"></span>
+              <span class="ui-currency-val t-stroke-md t-lime num" id="hud-coins">0</span>
+              <div class="ui-delta-stack" id="hud-coin-deltas"></div>
+            </div>
+
+            <div class="ui-combo-chip hidden" id="hud-combo-pill" data-swatch="gold">
+              <span class="t-stroke-xs">KOMBO</span>
+              <span class="t-stroke-sm t-gold num" id="hud-combo-val">x1.0</span>
+            </div>
+          </div>
+
+          <div class="hud-top-center">
+            <div class="ui-meter-pill" data-swatch="blue">
+              <div class="ui-meter-badge" data-swatch="blue" id="hud-energy-icon"></div>
+              <div class="ui-meter-content">
+                <div class="ui-meter-top">
+                  <span class="ui-meter-label t-stroke-xs">Energi Ombak</span>
+                  <span class="ui-meter-num t-stroke-xs t-gold num" id="hud-energy-val">100/100</span>
+                </div>
+                <div class="ui-bar-track">
+                  <div class="ui-bar-fill" id="hud-energy-bar" data-swatch="orange" style="width: 100%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="hud-top-right">
+            <div class="hud-right-row">
+              <button type="button" id="btn-hud-settings" class="ui-square-btn" data-swatch="blue" title="Pengaturan Grafis (G)" aria-label="Pengaturan Grafis"></button>
+              <button type="button" id="btn-mute" class="ui-square-btn" data-swatch="dark" title="Suara (M)" aria-label="Suara"></button>
+              <div class="ui-time-pill" id="hud-time-pill" data-swatch="blue">
+                <span id="hud-time-icon"></span>
+                <span class="ui-time-text t-stroke-sm" id="hud-day-label">PAGI CERAH</span>
+              </div>
+            </div>
+
+            <div class="hud-right-bars">
+              <div class="ui-slim-bar-wrap" title="Pemulihan Ekosistem & Mangrove">
+                <div class="ui-slim-bar-track">
+                  <div class="ui-slim-bar-fill" id="hud-eco-bar" data-swatch="green" style="width: 10%"></div>
+                  <span class="ui-slim-bar-val t-stroke-xs num" id="hud-eco-pct">10% · 0 Pohon</span>
+                </div>
+                <div class="ui-slim-bar-medallion" data-swatch="green" id="hud-eco-icon"></div>
+              </div>
+
+              <div class="ui-slim-bar-wrap hidden" id="hud-boss-pill" title="Kekuatan Kapal Limbah Ilegal">
+                <div class="ui-slim-bar-track">
+                  <div class="ui-slim-bar-fill" id="hud-boss-bar" data-swatch="red" style="width: 100%"></div>
+                  <span class="ui-slim-bar-val t-stroke-xs num" id="hud-boss-val">KAPAL 100%</span>
+                </div>
+                <div class="ui-slim-bar-medallion" data-swatch="red" id="hud-boss-icon"></div>
+              </div>
+            </div>
+
+            <!-- Compact Right-Edge Arcade Action Stack (Lobby Style!) -->
+            <div class="hud-action-stack">
+              <button id="btn-open-shop" class="ui-btn hud-shop-btn t-stroke-sm" data-swatch="slate" disabled>
+                <span id="shop-btn-icon" class="ui-btn-icon"></span>
+                <span id="shop-btn-label" class="num">KALIBRASI · 0/20</span>
+                <span id="shop-badge" class="ui-notif-badge hidden">0</span>
+              </button>
+
+              <button id="btn-open-achieve" class="ui-btn ui-btn-sm hud-sub-btn t-stroke-xs hidden" data-swatch="blue">
+                <span id="achieve-btn-icon" class="ui-btn-icon"></span>
+                <span>Pencapaian</span>
+                <span id="achieve-badge" class="ui-notif-badge hidden">0</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Floating Objective Banner (Exact f_031 Objective Template) -->
+        <div class="hud-objective-anchor">
+          <div id="hud-objective" class="ui-objective-banner hidden" data-swatch="orange" title="Klik untuk menyembunyikan">
+            <span class="ui-objective-kicker t-stroke-xs">MISI AKTIF</span>
+            <div class="ui-objective-icon" id="hud-obj-icon"></div>
+            <div class="ui-objective-copy">
+              <div class="ui-objective-title t-stroke-md" id="hud-obj-title">Buka Kalibrasi A.L.U.N.</div>
+              <div class="ui-objective-sub t-stroke-xs" id="hud-obj-sub">Sapukan limbah ke Jaring Desa (20 Koin)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom Bar: 3D Keycap Prompts + Comic Speech Bubble -->
+        <div class="hud-bottom">
+          <div class="hud-bottom-left">
+            <div class="ui-keycap-group">
+              <span class="ui-keycap t-stroke-xs">Geser</span>
+              <span class="ui-keycap-pill t-stroke-xs" data-swatch="blue">Sapu Ombak</span>
+            </div>
+            <div class="ui-keycap-group" id="keycap-shop-wrap">
+              <span class="ui-keycap t-stroke-xs">Tab</span>
+              <button type="button" id="btn-keycap-shop" class="ui-keycap-pill t-stroke-xs" data-swatch="gold">Kalibrasi</button>
+            </div>
+          </div>
+
+          <div class="hud-bottom-center">
+            <div id="radio-toast" class="ui-speech-bubble hidden" role="status" aria-live="polite">
+              <div class="ui-speech-sender t-stroke-xs" id="radio-sender">A.L.U.N.</div>
+              <div class="ui-speech-text" id="radio-text"></div>
+            </div>
+          </div>
+
+          <div class="hud-bottom-right">
+            <div class="ui-keycap-group">
+              <span class="ui-keycap t-stroke-xs">G</span>
+              <button type="button" id="btn-keycap-settings" class="ui-keycap-pill t-stroke-xs" data-swatch="blue">Grafis</button>
+            </div>
+            <div class="ui-keycap-group">
+              <span class="ui-keycap t-stroke-xs">M</span>
+              <button type="button" id="btn-keycap-mute" class="ui-keycap-pill t-stroke-xs" data-swatch="dark">Suara</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Floating Bottom-Center Pill Toast (+Koin / Terbuka / Error) -->
+      <div id="ui-toast-host" class="ui-toast-host hidden" aria-live="polite"></div>
+
+      <!-- ================= TITLE OVERLAY (ARCADE TROPICAL LAUNCH) ================= -->
+      <section id="title-screen" class="overlay title-screen">
+        <div class="ui-modal-frame ui-shell-navy title-modal">
+          <div class="ui-modal-ribbon" data-swatch="orange">
+            <span class="ui-modal-ribbon-title t-stroke-lg">IT RUSH 2026</span>
+          </div>
+
+          <div class="title-hero">
+            <div class="title-emblem" id="title-emblem"></div>
+            <div>
+              <div class="title-kicker t-stroke-xs t-cyan">ONLY ONE MECHANICS IN A TROPICAL</div>
+              <h1 class="game-title t-stroke-xl">ALUN</h1>
+              <p class="game-subtitle">
+                <strong>Autonomous Littoral Utility Node</strong> — Satu mekanik murni:
+                <strong>sapuan ombak terarah</strong> untuk membersihkan laguna tanpa henti, menumbuhkan mangrove, &amp; menyelamatkan pesisir tropis!
+              </p>
+            </div>
+          </div>
+
+          <div class="title-feature-grid">
+            <div class="title-feature-card" data-swatch="blue">
+              <span class="tf-icon" id="tf-icon-1"></span>
+              <div>
+                <div class="tf-title t-stroke-sm">01 · SATU MEKANIK</div>
+                <div class="tf-desc">Klik &amp; geser di air untuk menyapu ombak. Tahan untuk gelombang pasang super!</div>
+              </div>
+            </div>
+            <div class="title-feature-card" data-swatch="teal">
+              <span class="tf-icon" id="tf-icon-2"></span>
+              <div>
+                <div class="tf-title t-stroke-sm">02 · INCREMENTAL BEBAS</div>
+                <div class="tf-desc">Tanpa batas fase! Buka Kalibrasi [Tab] kapan saja untuk upgrade, rarity muatan &amp; AI.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="title-actions">
+            <button type="button" id="btn-play" class="ui-btn ui-btn-lg t-stroke-md" data-swatch="green">
+              <span class="ui-btn-icon" id="title-play-icon"></span>
+              <span>Main Sekarang</span>
+            </button>
+            <button type="button" id="btn-continue" class="ui-btn ui-btn-lg t-stroke-md hidden" data-swatch="blue">
+              <span>Lanjutkan Laguna</span>
+            </button>
+            <button type="button" id="btn-title-settings" class="ui-btn t-stroke-sm" data-swatch="blue">
+              <span class="ui-btn-icon" id="title-settings-icon"></span>
+              <span>Grafis</span>
+            </button>
+            <button type="button" id="btn-credits" class="ui-btn t-stroke-sm" data-swatch="slate">
+              <span class="ui-btn-icon" id="title-info-icon"></span>
+              <span>Info &amp; AI</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TABBED KALIBRASI MODAL (SHOP / TREE / ACHIEVEMENTS) ================= -->
+      <section id="upgrade-screen" class="ui-modal-backdrop hidden">
+        <div class="ui-modal-frame ui-shell-navy shop-modal" id="shop-modal-frame">
+          <!-- Floating Overlapping Ribbon -->
+          <div class="ui-modal-ribbon" id="shop-ribbon" data-swatch="orange">
+            <span class="ui-modal-ribbon-title t-stroke-lg" id="shop-ribbon-title">Kalibrasi A.L.U.N.</span>
+          </div>
+
+          <!-- Overhanging Red Glossy Close Square [X] -->
+          <button type="button" id="btn-close-shop" class="ui-close-btn" title="Kembali ke Laguna (Esc)"></button>
+
+          <!-- Top Bar: Segmented Tabs + Currency & Summary Chips -->
+          <div class="shop-top-bar">
+            <div class="ui-tab-bar" role="tablist">
+              <button type="button" id="tab-cards" class="ui-tab t-stroke-sm is-active" data-swatch="purple" role="tab">
+                <span class="ui-btn-icon" id="tab-icon-cards"></span>
+                <span>Kartu Upgrade</span>
+                <span id="tab-badge-cards" class="ui-notif-badge hidden">0</span>
+              </button>
+              <button type="button" id="tab-tree" class="ui-tab t-stroke-sm" data-swatch="slate" role="tab">
+                <span class="ui-btn-icon" id="tab-icon-tree"></span>
+                <span>Pohon Evolusi</span>
+              </button>
+              <button type="button" id="tab-achievements" class="ui-tab t-stroke-sm" data-swatch="slate" role="tab">
+                <span class="ui-btn-icon" id="tab-icon-achieve"></span>
+                <span>Pencapaian</span>
+                <span id="tab-badge-achieve" class="ui-notif-badge hidden">0</span>
+              </button>
+            </div>
+
+            <div class="shop-bank-wrap">
+              <div class="shop-mini-chips" id="run-summary-chips"></div>
+              <div class="ui-currency-pill shop-bank-pill">
+                <span class="ui-currency-icon" id="shop-coin-icon"></span>
+                <span class="ui-currency-val t-stroke-md t-gold num" id="upgrade-coins">0</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 1: VIBRANT CHECKERED UPGRADE CARDS (Exact Shop Template!) -->
+          <div id="panel-cards" class="shop-panel panel-cards">
+            <div id="cards-scroll" class="cards-scroll"></div>
+          </div>
+
+          <!-- TAB 2: INTERACTIVE SKILL TREE -->
+          <div id="panel-tree" class="shop-panel panel-tree hidden">
+            <div class="tree-body">
+              <div class="tree-viewport" id="tree-viewport">
+                <svg id="tree-links" class="tree-links" viewBox="0 0 1000 560" preserveAspectRatio="xMidYMid meet"></svg>
+                <div id="tree-nodes" class="tree-nodes"></div>
+              </div>
+
+              <aside class="inspector-panel" id="inspector-panel">
+                <div class="insp-header-card" id="insp-header-card" data-swatch="blue">
+                  <div class="insp-branch-pill t-stroke-xs" id="insp-branch">INTI A.L.U.N.</div>
+                  <div class="insp-title-row">
+                    <span class="insp-icon-box" id="insp-icon"></span>
+                    <h3 class="insp-title t-stroke-md" id="insp-title">Pilih Node</h3>
+                  </div>
+                </div>
+
+                <p class="inspector-desc" id="insp-desc">
+                  Klik node di Pohon Evolusi untuk langsung membeli atau melihat detail evolusi ombakmu.
+                </p>
+
+                <div class="inspector-stats" id="insp-stats"></div>
+
+                <button type="button" id="btn-buy-node" class="ui-btn ui-btn-block t-stroke-md hidden" data-swatch="green">
+                  Tingkatkan
+                </button>
+
+                <div class="eco-progress-card">
+                  <div class="eco-row">
+                    <span class="t-stroke-xs">Pemulihan Pesisir</span>
+                    <span class="t-stroke-xs t-lime num" id="insp-eco-val">10%</span>
+                  </div>
+                  <div class="ui-bar-track">
+                    <div class="ui-bar-fill" id="insp-eco-bar" data-swatch="green" style="width: 10%"></div>
+                  </div>
+                  <div class="eco-sub" id="insp-eco-sub">
+                    Buka Rimba &amp; Pelampung AI untuk mengakses Misi Final Badai Muson.
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </div>
+
+          <!-- TAB 3: ACHIEVEMENTS (Exact Chapter 1 / Chapter 2 Template!) -->
+          <div id="panel-achievements" class="shop-panel panel-achievements hidden">
+            <div class="achieve-top-row">
+              <div class="ui-tab-bar">
+                <button type="button" id="ach-chap-1" class="ui-tab t-stroke-sm is-active" data-swatch="orange">
+                  <span>Bab 1 · Laguna</span>
+                  <span id="ach-badge-1" class="ui-notif-badge left hidden">0</span>
+                </button>
+                <button type="button" id="ach-chap-2" class="ui-tab t-stroke-sm" data-swatch="slate">
+                  <span>Bab 2 · Harmoni</span>
+                  <span id="ach-badge-2" class="ui-notif-badge left hidden">0</span>
+                </button>
+              </div>
+
+              <div class="achieve-summary-bar">
+                <span class="ach-sum-item">
+                  <span id="ach-trophy-icon" class="ach-mini-svg"></span>
+                  <strong class="t-stroke-sm t-gold num" id="ach-count-label">0 / 6</strong>
+                </span>
+                <div class="ui-bar-track ach-overall-track">
+                  <div class="ui-bar-fill" id="ach-overall-bar" data-swatch="gold" style="width: 0%"></div>
+                </div>
+                <span class="ach-sum-item">
+                  <span id="ach-coin-icon" class="ach-mini-svg"></span>
+                  <strong class="t-stroke-sm t-lime num" id="ach-coins-label">0 / 665</strong>
+                </span>
+              </div>
+            </div>
+
+            <div id="achieve-grid" class="achieve-grid"></div>
+          </div>
+
+          <!-- Shared Modal Footer -->
+          <div class="shop-footer">
+            <div class="legend-row">
+              <span class="legend-pill" data-swatch="blue"><i class="dot"></i>Ombak</span>
+              <span class="legend-pill" data-swatch="orange"><i class="dot"></i>Energi</span>
+              <span class="legend-pill" data-swatch="teal"><i class="dot"></i>Modul AI</span>
+              <span class="legend-pill" data-swatch="green"><i class="dot"></i>Muatan &amp; Eko</span>
+            </div>
+            <div class="footer-actions">
+              <button type="button" id="btn-reset-save" class="ui-btn ui-btn-sm t-stroke-xs" data-swatch="red">
+                Reset Progres
+              </button>
+              <button type="button" id="btn-resume-lagoon" class="ui-btn t-stroke-sm" data-swatch="green">
+                <span class="ui-btn-icon" id="footer-play-icon"></span>
+                <span>Kembali ke Laguna</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= VICTORY MODAL ================= -->
+      <section id="victory-screen" class="ui-modal-backdrop hidden">
+        <div class="ui-modal-frame ui-shell-navy victory-modal">
+          <div class="ui-modal-ribbon" data-swatch="gold">
+            <span class="ui-modal-ribbon-title t-stroke-lg">Laguna Terselamatkan!</span>
+          </div>
+
+          <div class="victory-head">
+            <div class="victory-sub t-stroke-xs t-cyan">FAJAR HARMONI · EKOSISTEM PULIH SEPENUHNYA</div>
+            <p class="modal-lead">
+              Kapal limbah ilegal terusir dari perairan, hutan mangrove berdiri kokoh menahan ombak, terumbu karang kembali berwarna, dan Bunga Rafflesia mekar di tepi rimba!
+            </p>
+          </div>
+
+          <div class="victory-grid" id="victory-stats"></div>
+
+          <div class="modal-actions">
+            <button type="button" id="btn-endless" class="ui-btn ui-btn-lg t-stroke-md" data-swatch="green">
+              <span>Lanjut Mode Bebas</span>
+            </button>
+            <button type="button" id="btn-victory-tree" class="ui-btn ui-btn-lg t-stroke-md" data-swatch="blue">
+              <span>Buka Kalibrasi</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= INFO & AI TRANSPARENCY MODAL ================= -->
+      <section id="credits-modal" class="ui-modal-backdrop hidden">
+        <div class="ui-modal-frame ui-shell-navy credits-modal">
+          <div class="ui-modal-ribbon" data-swatch="blue">
+            <span class="ui-modal-ribbon-title t-stroke-lg">Info &amp; Transparansi AI</span>
+          </div>
+          <button type="button" id="btn-close-credits" class="ui-close-btn" title="Tutup"></button>
+
+          <div class="credits-list">
+            <div class="credit-block" data-swatch="teal">
+              <h4 class="t-stroke-sm t-cyan">Tema &amp; Konsep · IT RUSH 2026 (UNIB)</h4>
+              <p>
+                Dibuat dari nol untuk Game Jam IT RUSH 2026 bertema <strong>"ONLY ONE MECHANICS IN A TROPICAL"</strong> dan tema utama <em>AI Teknologi untuk Penguatan Masyarakat serta Keberlanjutan Pesisir dan Hutan Tropis</em>.
+              </p>
+            </div>
+            <div class="credit-block" data-swatch="gold">
+              <h4 class="t-stroke-sm t-gold">Deklarasi Penggunaan AI (Transparan)</h4>
+              <p>
+                Kode program (TypeScript, Three.js / WebGL, HTML5 Canvas, UI Kit &amp; Web Audio API prosedural) serta perancangan sistem dibantu secara transparan menggunakan asisten AI (Antigravity / Gemini dan Claude Code). Seluruh grafis dalam game digambar prosedural real-time dan seluruh audio disintesis real-time tanpa aset pihak ketiga berhak cipta. Adegan 3D dirender memakai pustaka Three.js (lisensi MIT).
+              </p>
+            </div>
+            <div class="credit-block" data-swatch="blue">
+              <h4 class="t-stroke-sm t-lime">Kontrol Singkat</h4>
+              <p>
+                <strong>Klik &amp; Geser</strong> di air untuk mengirim ombak terarah. <strong>Tahan</strong> sebelum dilepas untuk mengisi gelombang pasang besar. Tekan <strong>Tab / E</strong> untuk membuka Kalibrasi, <strong>1/2/3</strong> ganti tab, dan <strong>M</strong> untuk suara.
+              </p>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" id="btn-close-credits-ok" class="ui-btn t-stroke-md" data-swatch="green">
+              <span>Mengerti!</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= GRAPHICS SETTINGS MODAL ================= -->
+      <section id="settings-modal" class="ui-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="settings-ribbon-title">
+        <div class="ui-modal-frame ui-shell-navy settings-modal">
+          <div class="ui-modal-ribbon" data-swatch="blue">
+            <span class="ui-modal-ribbon-title t-stroke-lg" id="settings-ribbon-title">Pengaturan Grafis</span>
+          </div>
+          <button type="button" id="btn-close-settings" class="ui-close-btn" title="Tutup (Esc)" aria-label="Tutup Pengaturan Grafis"></button>
+
+          <div class="settings-status-row">
+            <span class="shop-chip chip-ai t-stroke-xs" id="settings-active-chip">Aktif: Otomatis</span>
+            <span class="shop-chip t-stroke-xs num" id="settings-res-chip">1920×1080</span>
+          </div>
+
+          <p class="settings-lead">
+            Pilih kualitas tampilan sesuai perangkatmu. Perubahan diterapkan langsung tanpa mengulang permainan.
+          </p>
+
+          <div id="graphics-options" class="graphics-options" role="radiogroup" aria-label="Kualitas Grafis">
+            <button type="button" class="graphics-opt" data-quality="auto" data-swatch="teal" role="radio" aria-checked="true">
+              <span class="gopt-head">
+                <span class="gopt-title t-stroke-sm">Otomatis</span>
+                <span class="gopt-badge t-stroke-xs">DISARANKAN</span>
+              </span>
+              <span class="gopt-desc">Menyesuaikan tingkat grafis secara otomatis mengikuti kemampuan GPU.</span>
+            </button>
+            <button type="button" class="graphics-opt" data-quality="low" data-swatch="green" role="radio" aria-checked="false">
+              <span class="gopt-head">
+                <span class="gopt-title t-stroke-sm">Rendah</span>
+                <span class="gopt-badge t-stroke-xs">RINGAN</span>
+              </span>
+              <span class="gopt-desc">Tajam di resolusi asli untuk GPU terintegrasi; optimasi air &amp; latar statis.</span>
+            </button>
+            <button type="button" class="graphics-opt" data-quality="medium" data-swatch="blue" role="radio" aria-checked="false">
+              <span class="gopt-head">
+                <span class="gopt-title t-stroke-sm">Sedang</span>
+                <span class="gopt-badge t-stroke-xs">SEIMBANG</span>
+              </span>
+              <span class="gopt-desc">Detail air lebih penuh, bayangan lebih tajam, dan pencahayaan lebih kaya.</span>
+            </button>
+            <button type="button" class="graphics-opt" data-quality="high" data-swatch="purple" role="radio" aria-checked="false">
+              <span class="gopt-head">
+                <span class="gopt-title t-stroke-sm">Tinggi</span>
+                <span class="gopt-badge t-stroke-xs">PENUH</span>
+              </span>
+              <span class="gopt-desc">Render langsung setiap frame, air resolusi penuh, MSAA 4x &amp; bayangan 2K.</span>
+            </button>
+            <button type="button" class="graphics-opt" data-quality="ultra" data-swatch="gold" role="radio" aria-checked="false">
+              <span class="gopt-head">
+                <span class="gopt-title t-stroke-sm">Ultra</span>
+                <span class="gopt-badge t-stroke-xs">MAKSIMAL</span>
+              </span>
+              <span class="gopt-desc">Bayangan 3K, simulasi ombak ultra-halus, dan detail riak maksimal untuk GPU kuat.</span>
+            </button>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" id="btn-close-settings-ok" class="ui-btn t-stroke-md" data-swatch="green">
+              <span>Selesai</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= WEBGL ERROR / RECOVERY OVERLAY ================= -->
+      <section id="webgl-error-modal" class="ui-modal-backdrop hidden" role="alertdialog" aria-modal="true" aria-labelledby="webgl-error-title">
+        <div class="ui-modal-frame ui-shell-navy webgl-error-modal">
+          <div class="ui-modal-ribbon" data-swatch="red">
+            <span class="ui-modal-ribbon-title t-stroke-lg" id="webgl-error-title">Grafis 3D Tidak Tersedia</span>
+          </div>
+          <div class="webgl-error-body">
+            <p class="modal-lead" id="webgl-error-msg">
+              Browser tidak mendukung WebGL2 atau akselerasi grafis sedang nonaktif.
+            </p>
+            <p class="webgl-error-tip" id="webgl-error-tip">
+              Pastikan akselerasi perangkat keras (Hardware Acceleration) aktif di pengaturan browser, lalu coba muat ulang halaman ini.
+            </p>
+          </div>
+          <div class="modal-actions">
+            <button type="button" id="btn-webgl-retry" class="ui-btn ui-btn-lg t-stroke-md" data-swatch="green">
+              <span>Coba Lagi</span>
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

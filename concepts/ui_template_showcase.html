@@ -1,0 +1,1811 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@700;800;900&display=swap" rel="stylesheet" />
+<style>
+/* ==========================================================================
+   ALUN ARCADE GLOSS UI KIT — DESIGN TOKENS
+   Inspired by tactile, thick-outlined, checkered glossy cartoon game UIs.
+   Single source of truth for typography, ink outlines, 3D bevels, patterns,
+   and 10 color swatches shared across every HUD widget, card, tab & modal.
+   ========================================================================== */
+
+:root {
+  /* Typography */
+  --font-display: 'Fredoka', 'Nunito', 'Arial Rounded MT Bold', 'Trebuchet MS', system-ui, sans-serif;
+  --font-body: 'Nunito', 'Fredoka', 'Segoe UI', system-ui, sans-serif;
+
+  /* Ink Outlines & Radii */
+  --ink: #0d121d;
+  --ink-soft: #161e2e;
+  --border-xl: 4px;
+  --border-lg: 3.5px;
+  --border-md: 3px;
+  --border-sm: 2.5px;
+
+  --radius-modal: 26px;
+  --radius-card: 20px;
+  --radius-stage: 15px;
+  --radius-btn: 15px;
+  --radius-tab: 14px;
+  --radius-pill: 999px;
+
+  /* 3D Comic Depth & Gloss */
+  --gloss-top: inset 0 3.5px 0 rgba(255, 255, 255, 0.46);
+  --gloss-top-soft: inset 0 2.5px 0 rgba(255, 255, 255, 0.3);
+  --lip-bot-lg: inset 0 -6px 0 rgba(8, 12, 24, 0.3);
+  --lip-bot-md: inset 0 -5px 0 rgba(8, 12, 24, 0.28);
+  --lip-bot-sm: inset 0 -4px 0 rgba(8, 12, 24, 0.26);
+
+  --shadow-modal: 0 10px 0 #090d16, 0 26px 64px rgba(4, 8, 18, 0.76);
+  --shadow-card: 0 6px 0 var(--ink), 0 12px 24px rgba(6, 10, 20, 0.38);
+  --shadow-btn: 0 5px 0 var(--ink), 0 8px 16px rgba(6, 10, 20, 0.35);
+  --shadow-btn-press: 0 1.5px 0 var(--ink), 0 2px 6px rgba(6, 10, 20, 0.28);
+  --shadow-pill: 0 4.5px 0 var(--ink), 0 10px 20px rgba(6, 10, 20, 0.38);
+
+  /* Motion */
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-snappy: cubic-bezier(0.22, 1.24, 0.36, 1);
+
+  /* Signature Checkered Pattern SVGs (Crisp 2x2 Tile) */
+  --pattern-checker-white: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Crect width='12' height='12' fill='%23ffffff' fill-opacity='0.11'/%3E%3Crect x='12' y='12' width='12' height='12' fill='%23ffffff' fill-opacity='0.11'/%3E%3C/svg%3E");
+  --pattern-checker-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Crect width='12' height='12' fill='%230d121d' fill-opacity='0.065'/%3E%3Crect x='12' y='12' width='12' height='12' fill='%230d121d' fill-opacity='0.065'/%3E%3C/svg%3E");
+  --pattern-checker-paper: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Crect width='14' height='14' fill='%23dbe4f0' fill-opacity='0.36'/%3E%3Crect x='14' y='14' width='14' height='14' fill='%23dbe4f0' fill-opacity='0.36'/%3E%3C/svg%3E");
+
+  /* Default Swatch Fallback (Blue) */
+  --sw-top: #5dd4ff;
+  --sw-bot: #2273ee;
+  --sw-stage-top: #37a5f5;
+  --sw-stage-bot: #195cc9;
+  --sw-glow: rgba(74, 198, 255, 0.45);
+  --sw-text: #ffffff;
+}
+
+/* ==========================================================================
+   COLOR SWATCH SYSTEM (Apply via data-swatch="orange|blue|green|gold|...")
+   Every template component inherits these tokens for 100% palette cohesion.
+   ========================================================================== */
+
+[data-swatch='orange'] {
+  --sw-top: #ffc048;
+  --sw-bot: #ef6114;
+  --sw-stage-top: #ec822b;
+  --sw-stage-bot: #c84a12;
+  --sw-glow: rgba(255, 165, 54, 0.5);
+  --sw-text: #ffffff;
+}
+
+[data-swatch='blue'] {
+  --sw-top: #62d7ff;
+  --sw-bot: #2474ed;
+  --sw-stage-top: #3aa7f6;
+  --sw-stage-bot: #1a58c7;
+  --sw-glow: rgba(78, 198, 255, 0.48);
+  --sw-text: #ffffff;
+}
+
+[data-swatch='green'] {
+  --sw-top: #74f664;
+  --sw-bot: #1db43c;
+  --sw-stage-top: #3fd855;
+  --sw-stage-bot: #168f31;
+  --sw-glow: rgba(84, 240, 98, 0.48);
+  --sw-text: #ffffff;
+}
+
+[data-swatch='gold'] {
+  --sw-top: #ffea58;
+  --sw-bot: #f29612;
+  --sw-stage-top: #f7c937;
+  --sw-stage-bot: #cf790c;
+  --sw-glow: rgba(255, 224, 72, 0.55);
+  --sw-text: #ffffff;
+}
+
+[data-swatch='teal'] {
+  --sw-top: #5af4d2;
+  --sw-bot: #12a19d;
+  --sw-stage-top: #2dd2be;
+  --sw-stage-bot: #0c7a7c;
+  --sw-glow: rgba(72, 240, 212, 0.48);
+  --sw-text: #ffffff;
+}
+
+[data-swatch='purple'] {
+  --sw-top: #c278ff;
+  --sw-bot: #7633ec;
+  --sw-stage-top: #9d56f7;
+  --sw-stage-bot: #5c22c7;
+  --sw-glow: rgba(182, 110, 255, 0.48);
+  --sw-text: #ffffff;
+}
+
+[data-swatch='red'] {
+  --sw-top: #ff6b74;
+  --sw-bot: #d91e34;
+  --sw-stage-top: #ec4352;
+  --sw-stage-bot: #ae1628;
+  --sw-glow: rgba(255, 86, 98, 0.5);
+  --sw-text: #ffffff;
+}
+
+[data-swatch='pink'] {
+  --sw-top: #ff78c4;
+  --sw-bot: #db2886;
+  --sw-stage-top: #ef4ca6;
+  --sw-stage-bot: #b11b6a;
+  --sw-glow: rgba(255, 110, 190, 0.48);
+  --sw-text: #ffffff;
+}
+
+[data-swatch='slate'] {
+  --sw-top: #d7e0ec;
+  --sw-bot: #9aa8bc;
+  --sw-stage-top: #b3c0d2;
+  --sw-stage-bot: #818fa5;
+  --sw-glow: rgba(180, 196, 220, 0.35);
+  --sw-text: #ffffff;
+}
+
+[data-swatch='dark'] {
+  --sw-top: #4b5673;
+  --sw-bot: #272e43;
+  --sw-stage-top: #374059;
+  --sw-stage-bot: #1f2536;
+  --sw-glow: rgba(108, 128, 178, 0.35);
+  --sw-text: #ffffff;
+}
+
+[data-swatch='white'] {
+  --sw-top: #ffffff;
+  --sw-bot: #e9eff7;
+  --sw-stage-top: #f7faff;
+  --sw-stage-bot: #dde6f2;
+  --sw-glow: rgba(255, 255, 255, 0.4);
+  --sw-text: #ffffff;
+}
+
+/* ==========================================================================
+   ALUN ARCADE GLOSS UI KIT — REUSABLE COMPONENT TEMPLATES (BOLD ARCADE SCALE)
+   Every HUD widget, button, modal, tab, card, toast, speech bubble, keycap,
+   achievement row, and skill-tree node is built from these atomic classes.
+   ========================================================================== */
+
+/* ================= TEXT STROKE UTILITY (CRISP CARTOON UISTROKE) ================= */
+.t-stroke-xl,
+.t-stroke-lg,
+.t-stroke-md,
+.t-stroke-sm,
+.t-stroke-xs {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: #ffffff;
+  paint-order: stroke fill;
+  -webkit-text-stroke-color: var(--ink);
+  stroke-linejoin: round;
+  letter-spacing: 0.012em;
+}
+
+.t-stroke-xl {
+  -webkit-text-stroke-width: 9px;
+  text-shadow: 0 5px 0 var(--ink);
+}
+
+.t-stroke-lg {
+  -webkit-text-stroke-width: 6.5px;
+  text-shadow: 0 3.5px 0 var(--ink);
+}
+
+.t-stroke-md {
+  -webkit-text-stroke-width: 4.8px;
+  text-shadow: 0 2.5px 0 var(--ink);
+}
+
+.t-stroke-sm {
+  -webkit-text-stroke-width: 3.6px;
+  text-shadow: 0 2px 0 var(--ink);
+}
+
+.t-stroke-xs {
+  -webkit-text-stroke-width: 2.8px;
+  text-shadow: 0 1.5px 0 var(--ink);
+}
+
+.t-lime {
+  color: #7aff63;
+}
+
+.t-gold {
+  color: #ffe857;
+}
+
+.t-cyan {
+  color: #74f3ff;
+}
+
+.t-coral {
+  color: #ff8278;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ================= CHECKERED GLOSSY SURFACE BASE ================= */
+.ui-surface {
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 26px 26px, 100% 100%;
+  border: var(--border-lg) solid var(--ink);
+  box-shadow: var(--gloss-top), var(--lip-bot-md), var(--shadow-btn);
+}
+
+/* ================= TEMPLATE 1: MODAL SHELL + RIBBON + CLOSE [X] ================= */
+.ui-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 24px 20px;
+  background: rgba(6, 12, 24, 0.66);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+.ui-modal-frame {
+  position: relative;
+  border-radius: var(--radius-modal);
+  border: var(--border-xl) solid var(--ink);
+  box-shadow: var(--shadow-modal);
+  display: flex;
+  flex-direction: column;
+  animation: uiModalPop 0.28s var(--ease-bounce) both;
+}
+
+.ui-modal-frame.ui-shell-navy {
+  background-color: #19244d;
+  background-image:
+    radial-gradient(circle at 14% 22%, rgba(255, 255, 255, 0.24) 2px, transparent 3px),
+    radial-gradient(circle at 82% 18%, rgba(122, 240, 255, 0.26) 2.5px, transparent 3.5px),
+    radial-gradient(circle at 28% 78%, rgba(255, 255, 255, 0.2) 2px, transparent 3px),
+    radial-gradient(circle at 73% 84%, rgba(255, 234, 120, 0.22) 2.2px, transparent 3.5px),
+    radial-gradient(circle at 52% 45%, rgba(65, 134, 224, 0.2), transparent 62%),
+    linear-gradient(180deg, #213067 0%, #151e45 55%, #111838 100%);
+  box-shadow:
+    inset 0 3.5px 0 rgba(140, 185, 255, 0.24),
+    inset 0 -6px 0 rgba(7, 10, 26, 0.58),
+    var(--shadow-modal);
+}
+
+.ui-modal-frame.ui-shell-light {
+  background-color: #ffffff;
+  background-image:
+    var(--pattern-checker-paper),
+    linear-gradient(180deg, #ffffff 0%, #f4f7fc 100%);
+  background-size: 32px 32px, 100% 100%;
+  box-shadow:
+    inset 0 3.5px 0 #ffffff,
+    inset 0 -6px 0 rgba(160, 178, 204, 0.45),
+    var(--shadow-modal);
+}
+
+.ui-modal-ribbon {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -56%);
+  z-index: 6;
+  min-width: 360px;
+  padding: 10px 48px 13px;
+  border-radius: 19px;
+  border: var(--border-xl) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 26px 26px, 100% 100%;
+  box-shadow:
+    var(--gloss-top),
+    inset 0 -6px 0 rgba(8, 12, 24, 0.28),
+    0 6px 0 var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+.ui-modal-ribbon-title {
+  font-size: 34px;
+  line-height: 1.04;
+}
+
+.ui-close-btn {
+  position: absolute;
+  top: -20px;
+  right: -20px;
+  z-index: 8;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  border: var(--border-xl) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, #ff6c76 0%, #da1f35 100%);
+  background-size: 18px 18px, 100% 100%;
+  box-shadow:
+    var(--gloss-top),
+    inset 0 -5px 0 rgba(110, 8, 20, 0.44),
+    0 5px 0 var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.14s var(--ease-bounce), filter 0.15s ease, box-shadow 0.1s ease;
+}
+
+.ui-close-btn:hover {
+  transform: scale(1.09) rotate(4deg);
+  filter: brightness(1.08);
+}
+
+.ui-close-btn:active {
+  transform: translateY(3px) scale(0.95);
+  box-shadow: var(--gloss-top-soft), 0 1px 0 var(--ink);
+}
+
+.ui-close-btn svg {
+  width: 31px;
+  height: 31px;
+}
+
+/* ================= TEMPLATE 2: GLOSSY CHECKERED 3D BUTTON ================= */
+.ui-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 11px 22px 13px;
+  border-radius: var(--radius-btn);
+  border: var(--border-lg) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 24px 24px, 100% 100%;
+  box-shadow: var(--gloss-top), var(--lip-bot-md), var(--shadow-btn);
+  color: var(--sw-text);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+  pointer-events: auto;
+  white-space: nowrap;
+  transition:
+    transform 0.14s var(--ease-bounce),
+    box-shadow 0.1s ease,
+    filter 0.15s ease;
+}
+
+.ui-btn:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.035);
+  filter: brightness(1.06);
+  box-shadow:
+    var(--gloss-top),
+    var(--lip-bot-md),
+    0 7px 0 var(--ink),
+    0 12px 24px var(--sw-glow);
+}
+
+.ui-btn:active:not(:disabled) {
+  transform: translateY(3.5px) scale(0.97);
+  box-shadow: var(--gloss-top-soft), var(--lip-bot-sm), var(--shadow-btn-press);
+}
+
+.ui-btn:disabled {
+  cursor: not-allowed;
+  filter: saturate(0.32) brightness(0.92);
+  opacity: 0.9;
+}
+
+.ui-btn.ui-btn-sm {
+  padding: 8px 16px 10px;
+  border-radius: 13px;
+  border-width: var(--border-md);
+  font-size: 16.5px;
+}
+
+.ui-btn.ui-btn-lg {
+  padding: 14px 28px 16px;
+  border-radius: 17px;
+  border-width: var(--border-xl);
+  font-size: 24px;
+}
+
+.ui-btn.ui-btn-block {
+  width: 100%;
+}
+
+.ui-btn-icon {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 0 rgba(13, 18, 29, 0.75));
+}
+
+.ui-btn.ui-btn-sm .ui-btn-icon {
+  width: 22px;
+  height: 22px;
+}
+
+/* Overhanging Red Notification Circle Badge */
+.ui-notif-badge {
+  position: absolute;
+  top: -11px;
+  right: -11px;
+  min-width: 29px;
+  height: 29px;
+  padding: 0 7px;
+  border-radius: var(--radius-pill);
+  border: 3px solid var(--ink);
+  background: linear-gradient(180deg, #ff646e 0%, #db1b2f 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45), 0 3px 0 var(--ink);
+  color: #ffffff;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4;
+  animation: uiBadgePop 1.8s ease-in-out infinite;
+}
+
+.ui-notif-badge.left {
+  right: auto;
+  left: -11px;
+}
+
+/* ================= TEMPLATE 3: SEGMENTED TABS ================= */
+.ui-tab-bar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ui-tab {
+  position: relative;
+  min-width: 170px;
+  padding: 10px 24px 12px;
+  border-radius: var(--radius-tab);
+  border: var(--border-lg) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 22px 22px, 100% 100%;
+  box-shadow: var(--gloss-top), var(--lip-bot-sm), 0 4.5px 0 var(--ink);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-size: 19px;
+  transition: transform 0.14s var(--ease-bounce), filter 0.15s ease;
+}
+
+.ui-tab:hover {
+  transform: translateY(-2px) scale(1.03);
+  filter: brightness(1.07);
+}
+
+.ui-tab:active {
+  transform: translateY(2px) scale(0.97);
+}
+
+.ui-tab.is-active {
+  transform: translateY(-1px);
+  box-shadow:
+    var(--gloss-top),
+    var(--lip-bot-md),
+    0 5.5px 0 var(--ink),
+    0 0 22px var(--sw-glow);
+}
+
+/* ================= TEMPLATE 4: SECTION DIVIDER (✦ CATEGORY) ================= */
+.ui-section-divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  margin: 6px 0 4px;
+}
+
+.ui-section-divider::before,
+.ui-section-divider::after {
+  content: '';
+  flex: 1;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(255, 224, 114, 0.78), transparent);
+}
+
+.ui-section-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 18px 7px;
+  border-radius: var(--radius-pill);
+  border: 3px solid var(--ink);
+  background: linear-gradient(180deg, #3c4768 0%, #242b44 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.24), 0 3.5px 0 var(--ink);
+  font-size: 15.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ui-section-pill svg {
+  width: 19px;
+  height: 19px;
+}
+
+/* ================= TEMPLATE 5: CHECKERED UPGRADE CARD (BOLD 3-COL SHOP STYLE) ================= */
+.ui-upgrade-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 13px 14px 14px;
+  border-radius: var(--radius-card);
+  border: var(--border-xl) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 26px 26px, 100% 100%;
+  box-shadow:
+    var(--gloss-top),
+    inset 0 -6px 0 rgba(8, 12, 24, 0.26),
+    var(--shadow-card);
+  transition: transform 0.16s var(--ease-bounce), box-shadow 0.16s ease, filter 0.15s ease;
+}
+
+.ui-upgrade-card:hover {
+  transform: translateY(-4px) scale(1.018);
+  box-shadow:
+    var(--gloss-top),
+    inset 0 -6px 0 rgba(8, 12, 24, 0.26),
+    0 9px 0 var(--ink),
+    0 16px 32px var(--sw-glow);
+}
+
+.ui-upgrade-card.is-locked {
+  filter: saturate(0.26) brightness(0.76);
+}
+
+.ui-upgrade-card.is-featured {
+  box-shadow:
+    inset 0 0 0 2.5px rgba(255, 245, 168, 0.78),
+    var(--gloss-top),
+    inset 0 -6px 0 rgba(8, 12, 24, 0.26),
+    var(--shadow-card),
+    0 0 28px rgba(255, 214, 70, 0.38);
+}
+
+.ui-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 30px;
+}
+
+.ui-card-title {
+  font-size: 23.5px;
+  line-height: 1.06;
+}
+
+/* Recessed Inner Preview Stage */
+.ui-card-stage {
+  position: relative;
+  height: 146px;
+  border-radius: var(--radius-stage);
+  border: var(--border-lg) solid var(--ink);
+  background-image:
+    var(--pattern-checker-dark),
+    linear-gradient(180deg, var(--sw-stage-top) 0%, var(--sw-stage-bot) 100%);
+  background-size: 22px 22px, 100% 100%;
+  box-shadow:
+    inset 0 5px 12px rgba(7, 12, 24, 0.36),
+    inset 0 -2.5px 0 rgba(255, 255, 255, 0.24);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.ui-upgrade-card.is-featured .ui-card-stage {
+  border-color: #fff08d;
+  box-shadow:
+    0 0 0 3px var(--ink),
+    inset 0 0 20px rgba(255, 245, 175, 0.38);
+}
+
+.ui-sunburst {
+  position: absolute;
+  inset: -45%;
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(255, 255, 255, 0.21) 0deg 14deg,
+    transparent 14deg 28deg
+  );
+  animation: uiSpinSlow 16s linear infinite;
+  pointer-events: none;
+}
+
+.ui-card-art {
+  position: relative;
+  z-index: 2;
+  width: 78px;
+  height: 78px;
+  margin-bottom: 14px;
+  filter: drop-shadow(0 5px 0 rgba(13, 18, 29, 0.48));
+  transition: transform 0.2s var(--ease-bounce);
+}
+
+.ui-upgrade-card:hover .ui-card-art {
+  transform: scale(1.1) translateY(-3px);
+}
+
+.ui-sparkle {
+  position: absolute;
+  z-index: 3;
+  width: 21px;
+  height: 21px;
+  pointer-events: none;
+  animation: uiTwinkle 2.1s ease-in-out infinite;
+}
+
+.ui-sparkle.sp-1 {
+  top: 12px;
+  left: 14px;
+}
+
+.ui-sparkle.sp-2 {
+  bottom: 30px;
+  right: 14px;
+  width: 17px;
+  height: 17px;
+  animation-delay: 0.9s;
+}
+
+/* Corner Ribbon Tag (NEW! / OP! / MAKS) */
+.ui-corner-tag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 4;
+  padding: 3px 12px 4px;
+  border-radius: var(--radius-pill);
+  border: 2.5px solid var(--ink);
+  background: linear-gradient(180deg, #ffec59 0%, #f59b14 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.55), 0 2.5px 0 var(--ink);
+  font-size: 13.5px;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.ui-corner-tag.tag-max {
+  background: linear-gradient(180deg, #74f664 0%, #1eb43d 100%);
+}
+
+.ui-corner-tag.tag-lock {
+  background: linear-gradient(180deg, #626e8c 0%, #3d465e 100%);
+}
+
+/* Level Star Row at bottom of Stage */
+.ui-star-row {
+  position: absolute;
+  bottom: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.ui-star-pip {
+  width: 23px;
+  height: 23px;
+  filter: drop-shadow(0 2px 0 rgba(13, 18, 29, 0.72));
+}
+
+/* Stat Label & Arrow Delta (x1 ➜ x1.26) */
+.ui-card-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 4px;
+}
+
+.ui-stat-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ui-stat-kicker svg {
+  width: 19px;
+  height: 19px;
+}
+
+.ui-stat-delta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 22px;
+  line-height: 1.08;
+}
+
+.ui-arrow-icon {
+  width: 24px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.ui-card-desc-mini {
+  font-family: var(--font-body);
+  font-size: 13.8px;
+  font-weight: 800;
+  line-height: 1.32;
+  color: rgba(255, 255, 255, 0.96);
+  text-align: center;
+  text-shadow: 0 1.8px 0 rgba(13, 18, 29, 0.9);
+  min-height: 36px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ui-card-cta {
+  margin-top: auto;
+  padding: 10px 14px 12px;
+  font-size: 22px;
+}
+
+/* ================= TEMPLATE 6: ACHIEVEMENT CARD (EXACT BOLD V2 STYLE) ================= */
+.ui-achieve-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 14px 16px;
+  border-radius: 19px;
+  border: var(--border-xl) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 24px 24px, 100% 100%;
+  box-shadow:
+    var(--gloss-top),
+    inset 0 -5px 0 rgba(8, 12, 24, 0.28),
+    0 5px 0 var(--ink);
+  transition: transform 0.14s var(--ease-bounce), filter 0.15s ease;
+}
+
+.ui-achieve-card:hover {
+  transform: translateY(-2px);
+}
+
+.ui-achieve-card.is-claimed {
+  filter: saturate(0.42) brightness(0.74);
+}
+
+.ui-achieve-medallion {
+  width: 74px;
+  height: 74px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: var(--border-xl) solid var(--ink);
+  background:
+    var(--pattern-checker-dark),
+    radial-gradient(circle at 35% 30%, #4e5b7a 0%, #252d42 100%);
+  background-size: 16px 16px, 100% 100%;
+  box-shadow:
+    inset 0 4px 8px rgba(0, 0, 0, 0.45),
+    0 4px 0 var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ui-achieve-medallion svg {
+  width: 44px;
+  height: 44px;
+  filter: drop-shadow(0 2.5px 0 rgba(13, 18, 29, 0.65));
+}
+
+.ui-achieve-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.ui-achieve-title {
+  font-size: 22.5px;
+  line-height: 1.08;
+}
+
+.ui-achieve-desc {
+  font-size: 15px;
+  line-height: 1.28;
+  margin-top: 2px;
+}
+
+.ui-achieve-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.ui-prog-pill {
+  position: relative;
+  height: 40px;
+  border-radius: var(--radius-pill);
+  border: 3px solid var(--ink);
+  background: linear-gradient(180deg, #333c54 0%, #1f2536 100%);
+  box-shadow: inset 0 2.5px 5px rgba(0, 0, 0, 0.45), 0 3px 0 var(--ink);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ui-prog-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(180deg, #74f664 0%, #1eb43d 100%);
+  box-shadow: inset 0 2.5px 0 rgba(255, 255, 255, 0.45);
+  transition: width 0.35s var(--ease-snappy);
+}
+
+.ui-prog-text {
+  position: relative;
+  z-index: 2;
+  font-size: 16.5px;
+}
+
+.ui-claim-btn {
+  height: 40px;
+  padding: 0 12px 2px;
+  border-radius: var(--radius-pill);
+  font-size: 16px;
+  gap: 6px;
+}
+
+.ui-claim-btn .ui-btn-icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* ================= TEMPLATE 7: HUD WIDGETS (BOLD IN-GAME SCALE) ================= */
+.ui-currency-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 136px;
+  height: 54px;
+  padding: 0 20px 3px 54px;
+  margin-left: 18px;
+  border-radius: var(--radius-pill);
+  border: var(--border-xl) solid var(--ink);
+  background: linear-gradient(180deg, #4b556e 0%, #2a3145 100%);
+  box-shadow: var(--gloss-top-soft), var(--lip-bot-sm), var(--shadow-pill);
+  pointer-events: auto;
+  transition: transform 0.16s var(--ease-bounce);
+}
+
+.ui-currency-pill.is-bump {
+  transform: scale(1.1);
+}
+
+.ui-currency-icon {
+  position: absolute;
+  left: -18px;
+  top: 50%;
+  transform: translateY(-52%) rotate(-6deg);
+  width: 62px;
+  height: 62px;
+  filter: drop-shadow(0 3.5px 0 var(--ink));
+  pointer-events: none;
+}
+
+.ui-currency-val {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.ui-delta-stack {
+  position: absolute;
+  left: 48px;
+  top: -26px;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.ui-delta-float {
+  font-size: 20px;
+  white-space: nowrap;
+  animation: uiDeltaRise 1.05s var(--ease-snappy) forwards;
+}
+
+/* Top-Center Progress Meter Pill */
+.ui-meter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 300px;
+  padding: 8px 18px 9px 10px;
+  border-radius: 20px;
+  border: var(--border-xl) solid var(--ink);
+  background: linear-gradient(180deg, #48526b 0%, #272e41 100%);
+  box-shadow: var(--gloss-top-soft), var(--lip-bot-sm), var(--shadow-pill);
+  pointer-events: auto;
+}
+
+.ui-meter-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 3px solid var(--ink);
+  background-image: linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  box-shadow: inset 0 2.5px 0 rgba(255, 255, 255, 0.45), 0 2.5px 0 var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ui-meter-badge svg {
+  width: 27px;
+  height: 27px;
+}
+
+.ui-meter-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.ui-meter-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ui-meter-label {
+  font-size: 16.5px;
+  line-height: 1;
+}
+
+.ui-meter-num {
+  font-size: 15.5px;
+  line-height: 1;
+}
+
+.ui-bar-track {
+  position: relative;
+  width: 100%;
+  height: 15px;
+  border-radius: var(--radius-pill);
+  border: 2.5px solid var(--ink);
+  background: linear-gradient(180deg, #1b2030 0%, #2c344a 100%);
+  box-shadow: inset 0 2.5px 5px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.ui-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  box-shadow: inset 0 2.5px 0 rgba(255, 255, 255, 0.55);
+  transition: width 0.1s linear;
+}
+
+/* Top-Right Sky Time Pill + Square Icon Button + Slim Under-Bars */
+.ui-square-btn {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  border-radius: 15px;
+  border: var(--border-xl) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 18px 18px, 100% 100%;
+  box-shadow: var(--gloss-top-soft), var(--lip-bot-sm), var(--shadow-pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 0.14s var(--ease-bounce), filter 0.15s ease;
+}
+
+.ui-square-btn:hover {
+  transform: translateY(-2px) scale(1.06);
+  filter: brightness(1.08);
+}
+
+.ui-square-btn:active {
+  transform: translateY(2px) scale(0.95);
+}
+
+.ui-square-btn svg {
+  width: 28px;
+  height: 28px;
+}
+
+.ui-time-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 54px;
+  padding: 0 20px 3px 14px;
+  border-radius: var(--radius-pill);
+  border: var(--border-xl) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 22px 22px, 100% 100%;
+  box-shadow: var(--gloss-top), var(--lip-bot-sm), var(--shadow-pill);
+  pointer-events: auto;
+}
+
+.ui-time-pill svg {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 0 rgba(13, 18, 29, 0.5));
+}
+
+.ui-time-text {
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* Slim Status Bar with Overhanging Right Medallion */
+.ui-slim-bar-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 218px;
+  height: 28px;
+  padding-right: 18px;
+  pointer-events: auto;
+}
+
+.ui-slim-bar-track {
+  position: relative;
+  width: 100%;
+  height: 23px;
+  border-radius: var(--radius-pill);
+  border: 3px solid var(--ink);
+  background: linear-gradient(180deg, #272f44 0%, #1a2030 100%);
+  box-shadow: 0 3px 0 var(--ink);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ui-slim-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.5);
+  transition: width 0.25s var(--ease-snappy);
+}
+
+.ui-slim-bar-val {
+  position: relative;
+  z-index: 2;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.ui-slim-bar-medallion {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 37px;
+  height: 37px;
+  border-radius: 50%;
+  border: 3px solid var(--ink);
+  background: linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.5), 0 3px 0 var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ui-slim-bar-medallion svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* ================= TEMPLATE 8: OBJECTIVE BANNER (BOLD f_031 STYLE) ================= */
+.ui-objective-banner {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 15px;
+  padding: 16px 26px 14px 18px;
+  border-radius: 19px;
+  border: var(--border-xl) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 26px 26px, 100% 100%;
+  box-shadow: var(--gloss-top), var(--lip-bot-md), var(--shadow-pill);
+  pointer-events: auto;
+  cursor: pointer;
+  animation: uiPopBounce 0.34s var(--ease-bounce) both;
+  transition: transform 0.15s var(--ease-bounce);
+}
+
+.ui-objective-banner:hover {
+  transform: translateY(-2px) scale(1.02);
+}
+
+.ui-objective-kicker {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -56%);
+  padding: 3px 18px 4px;
+  border-radius: var(--radius-pill);
+  border: 3px solid var(--ink);
+  background: linear-gradient(180deg, #ffec59 0%, #f49b16 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.55), 0 3px 0 var(--ink);
+  font-size: 13.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ui-objective-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: var(--border-lg) solid var(--ink);
+  background: linear-gradient(180deg, #62d7ff 0%, #2474ed 100%);
+  box-shadow: inset 0 2.5px 0 rgba(255, 255, 255, 0.48), 0 3px 0 var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ui-objective-icon svg {
+  width: 34px;
+  height: 34px;
+}
+
+.ui-objective-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ui-objective-title {
+  font-size: 23px;
+  line-height: 1.08;
+}
+
+.ui-objective-sub {
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+/* ================= TEMPLATE 9: COMIC SPEECH BUBBLE + PILL TOAST ================= */
+.ui-speech-bubble {
+  position: relative;
+  max-width: 490px;
+  padding: 13px 20px 14px;
+  border-radius: 22px;
+  border: var(--border-xl) solid var(--ink);
+  background-color: #ffffff;
+  background-image:
+    var(--pattern-checker-paper),
+    linear-gradient(180deg, #ffffff 0%, #f1f6fc 100%);
+  background-size: 22px 22px, 100% 100%;
+  box-shadow: inset 0 2.5px 0 #ffffff, inset 0 -4px 0 rgba(162, 180, 206, 0.5), var(--shadow-pill);
+  pointer-events: none;
+  animation: uiPopBounce 0.3s var(--ease-bounce) both;
+}
+
+.ui-speech-bubble::before {
+  content: '';
+  position: absolute;
+  bottom: -14px;
+  left: 38px;
+  border-width: 14px 11px 0 11px;
+  border-style: solid;
+  border-color: var(--ink) transparent transparent transparent;
+}
+
+.ui-speech-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -8.5px;
+  left: 41px;
+  border-width: 10px 8px 0 8px;
+  border-style: solid;
+  border-color: #f2f7fc transparent transparent transparent;
+}
+
+.ui-speech-sender {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 4px;
+  padding: 2px 12px 3px;
+  border-radius: var(--radius-pill);
+  border: 2.5px solid var(--ink);
+  background: linear-gradient(180deg, #5dd4ff 0%, #2374ee 100%);
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ui-speech-text {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.32;
+  color: #151c2e;
+}
+
+.ui-toast {
+  padding: 10px 26px 12px;
+  border-radius: var(--radius-pill);
+  border: var(--border-xl) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 20px 20px, 100% 100%;
+  box-shadow: var(--gloss-top), var(--lip-bot-sm), var(--shadow-pill);
+  font-size: 19px;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: uiToastPop 0.28s var(--ease-bounce) both;
+}
+
+/* ================= TEMPLATE 10: 3D KEYCAP HINTS ================= */
+.ui-keycap-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  pointer-events: auto;
+}
+
+.ui-keycap {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 11px 2px;
+  border-radius: 10px;
+  border: 3px solid var(--ink);
+  background: linear-gradient(180deg, #ffffff 0%, #dde5f0 100%);
+  box-shadow:
+    inset 0 2px 0 #ffffff,
+    inset 0 -3.5px 0 #aebbd0,
+    0 3.5px 0 var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: #141c2e;
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+  line-height: 1;
+}
+
+.ui-keycap-pill {
+  height: 36px;
+  padding: 0 15px 2px;
+  border-radius: 10px;
+  border: 3px solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 18px 18px, 100% 100%;
+  box-shadow: var(--gloss-top-soft), inset 0 -3.5px 0 rgba(8, 12, 24, 0.26), 0 3.5px 0 var(--ink);
+  display: inline-flex;
+  align-items: center;
+  font-size: 15.5px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.14s var(--ease-bounce);
+}
+
+.ui-keycap-pill:hover {
+  transform: translateY(-1.5px);
+}
+
+.ui-keycap-pill:active {
+  transform: translateY(2px);
+}
+
+/* ================= CONFETTI BURST LAYER ================= */
+#ui-confetti-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 90;
+  overflow: hidden;
+}
+
+.ui-confetti-piece {
+  position: fixed;
+  width: 12px;
+  height: 8px;
+  border-radius: 2px;
+  border: 1.5px solid var(--ink);
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* ================= SHARED ANIMATIONS ================= */
+@keyframes uiModalPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.86) translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes uiPopBounce {
+  0% {
+    opacity: 0;
+    transform: scale(0.82) translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes uiToastPop {
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.84);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes uiDeltaRise {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.75);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.1);
+  }
+  75% {
+    opacity: 1;
+    transform: translateY(-20px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-34px) scale(0.92);
+  }
+}
+
+@keyframes uiSpinSlow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes uiTwinkle {
+  0%, 100% {
+    transform: scale(0.7) rotate(0deg);
+    opacity: 0.65;
+  }
+  50% {
+    transform: scale(1.22) rotate(22deg);
+    opacity: 1;
+  }
+}
+
+@keyframes uiBadgePop {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.14);
+  }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-body); color: #fff; }
+.wrap { display: flex; flex-direction: column; gap: 20px; padding-right: 16px; padding-bottom: 6px; }
+.sec-label { font-family: var(--font-display); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground, #9bc0c7); margin-bottom: 8px; }
+.hud-stage {
+  border-radius: 18px;
+  padding: 16px;
+  background: radial-gradient(circle at 75% 40%, #1eaec0 0%, #0e6f8c 55%, #083d56 100%);
+  border: 3px solid var(--ink);
+  display: flex; flex-direction: column; gap: 18px;
+}
+.hud-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.hud-mid { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 8px; }
+.modal-demo { position: relative; padding: 34px 16px 16px; margin-top: 18px; }
+.cards-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.ach-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.ui-modal-frame, .ui-objective-banner, .ui-speech-bubble { animation: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <div class="sec-label">01 · IN-GAME HUD &amp; BANNER TEMPLATES</div>
+    <div class="hud-stage">
+      <div class="hud-row">
+        <div class="ui-currency-pill">
+          <span class="ui-currency-icon"><svg viewBox="0 0 40 40" fill="none">
+        <circle cx="20" cy="21" r="15.5" fill="#d97706" stroke="#0d121d" stroke-width="3.2"/>
+        <circle cx="20" cy="18.5" r="14.5" fill="#ffe14a" stroke="#0d121d" stroke-width="3.2"/>
+        <circle cx="20" cy="18.5" r="9.8" fill="#f5b318" stroke="#0d121d" stroke-width="2.2"/>
+        <path d="M13 11.5C15.2 8.8 18.6 7.5 22 8" stroke="#fff8c4" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M20 11.5L22.5 16L27 17.5L22.5 20L20 25L17.5 20L13 17.5L17.5 16L20 11.5Z" fill="#fff4a8" stroke="#0d121d" stroke-width="1.8" stroke-linejoin="round"/>
+      </svg></span>
+          <span class="ui-currency-val t-stroke-md t-lime num">1.420</span>
+          <div class="ui-delta-stack" style="top:-18px;"><span class="t-stroke-xs t-lime" style="font-size:13px;">+$40</span></div>
+        </div>
+        <div class="ui-meter-pill" data-swatch="blue">
+          <div class="ui-meter-badge" data-swatch="blue"><svg viewBox="0 0 40 40" fill="none">
+        <path d="M5 24C8 14 15 10 23 11C28 11.6 32 14.5 34 18C30 17 27 18.5 26 21C29 21 33 22 35 25C31 30 24 32 16 32C10 32 6 29 5 24Z" fill="#4ce3ff" stroke="#0d121d" stroke-width="3.2" stroke-linejoin="round"/>
+        <path d="M9 22C12 16 17 14 23 14.5" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="31" cy="12" r="3" fill="#b8fbff" stroke="#0d121d" stroke-width="2.2"/>
+      </svg></div>
+          <div class="ui-meter-content">
+            <div class="ui-meter-top">
+              <span class="ui-meter-label t-stroke-xs">Energi Ombak</span>
+              <span class="ui-meter-num t-stroke-xs t-gold num">140/170</span>
+            </div>
+            <div class="ui-bar-track"><div class="ui-bar-fill" data-swatch="orange" style="width:82%"></div></div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="ui-square-btn" data-swatch="dark"><svg viewBox="0 0 32 32" fill="none">
+        <path d="M5 12H11L18 6V26L11 20H5V12Z" fill="#68e3ff" stroke="#0d121d" stroke-width="2.8" stroke-linejoin="round"/>
+        <path d="M22 11.5C24.2 13.7 24.2 18.3 22 20.5M25.5 8.5C29.3 12.3 29.3 19.7 25.5 23.5" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+      </svg></div>
+          <div class="ui-time-pill" data-swatch="blue"><svg viewBox="0 0 40 40" fill="none">
+        <path d="M20 4V8M20 32V36M4 20H8M32 20H36M8.7 8.7L11.5 11.5M28.5 28.5L31.3 31.3M31.3 8.7L28.5 11.5M11.5 28.5L8.7 31.3" stroke="#ffe54c" stroke-width="3.8" stroke-linecap="round"/>
+        <circle cx="20" cy="20" r="9.5" fill="#ffd438" stroke="#0d121d" stroke-width="3"/>
+        <circle cx="17" cy="17" r="3" fill="#fff6b8"/>
+      </svg><span class="ui-time-text t-stroke-sm">PAGI CERAH</span></div>
+        </div>
+      </div>
+
+      <div class="hud-mid">
+        <div class="ui-objective-banner" data-swatch="orange">
+          <span class="ui-objective-kicker t-stroke-xs">MISI AKTIF</span>
+          <div class="ui-objective-icon"><svg viewBox="0 0 40 40" fill="none">
+        <circle cx="20" cy="21" r="15.5" fill="#d97706" stroke="#0d121d" stroke-width="3.2"/>
+        <circle cx="20" cy="18.5" r="14.5" fill="#ffe14a" stroke="#0d121d" stroke-width="3.2"/>
+        <circle cx="20" cy="18.5" r="9.8" fill="#f5b318" stroke="#0d121d" stroke-width="2.2"/>
+        <path d="M13 11.5C15.2 8.8 18.6 7.5 22 8" stroke="#fff8c4" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M20 11.5L22.5 16L27 17.5L22.5 20L20 25L17.5 20L13 17.5L17.5 16L20 11.5Z" fill="#fff4a8" stroke="#0d121d" stroke-width="1.8" stroke-linejoin="round"/>
+      </svg></div>
+          <div class="ui-objective-copy">
+            <div class="ui-objective-title t-stroke-md">Kumpulkan 20 Koin</div>
+            <div class="ui-objective-sub t-stroke-xs">Sapukan limbah ke Jaring Desa!</div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+          <div class="ui-slim-bar-wrap">
+            <div class="ui-slim-bar-track"><div class="ui-slim-bar-fill" data-swatch="green" style="width:68%"></div><span class="ui-slim-bar-val t-stroke-xs num">68% · 7 Pohon</span></div>
+            <div class="ui-slim-bar-medallion" data-swatch="green"><svg viewBox="0 0 40 40" fill="none">
+        <path d="M14 34L19 23M26 34L21 23M20 34V22" stroke="#b86c35" stroke-width="3.6" stroke-linecap="round"/>
+        <circle cx="13" cy="18" r="7.5" fill="#2cc95a" stroke="#0d121d" stroke-width="3"/>
+        <circle cx="27" cy="18" r="7.5" fill="#2cc95a" stroke="#0d121d" stroke-width="3"/>
+        <circle cx="20" cy="12.5" r="8.5" fill="#68f571" stroke="#0d121d" stroke-width="3"/>
+        <path d="M16 9.5C18 8 21 8 23 9.5" stroke="#d8ffd4" stroke-width="2.4" stroke-linecap="round"/>
+      </svg></div>
+          </div>
+          <button class="ui-btn t-stroke-sm" data-swatch="gold">
+            <span class="ui-btn-icon"><svg viewBox="0 0 36 36" fill="none">
+        <path d="M6 15H30V30H6V15Z" fill="#ffe156" stroke="#0d121d" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M4 15L7 7H29L32 15C30 18 26 18 24 15C22 18 18 18 18 15C18 18 14 18 12 15C10 18 6 18 4 15Z" fill="#ff6a47" stroke="#0d121d" stroke-width="2.8" stroke-linejoin="round"/>
+        <rect x="14" y="21" width="8" height="9" rx="1.5" fill="#46c9ff" stroke="#0d121d" stroke-width="2.4"/>
+      </svg></span><span>KALIBRASI</span><span class="ui-notif-badge">4</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="hud-row">
+        <div class="ui-keycap-group">
+          <span class="ui-keycap t-stroke-xs">Geser</span>
+          <span class="ui-keycap-pill t-stroke-xs" data-swatch="blue">Sapu Ombak</span>
+          <span class="ui-keycap t-stroke-xs">Tab</span>
+          <span class="ui-keycap-pill t-stroke-xs" data-swatch="gold">Kalibrasi</span>
+        </div>
+        <div class="ui-speech-bubble" style="max-width:295px;">
+          <div class="ui-speech-sender t-stroke-xs">A.L.U.N.</div>
+          <div class="ui-speech-text">Arus pasang membawa muatan langka ke laguna!</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="sec-label">02 · MODAL SHELL, TABS, CHECKERED CARDS &amp; ACHIEVEMENTS TEMPLATES</div>
+    <div class="ui-modal-frame ui-shell-navy modal-demo">
+      <div class="ui-modal-ribbon" data-swatch="orange">
+        <span class="ui-modal-ribbon-title t-stroke-lg">Toko Kalibrasi A.L.U.N.</span>
+      </div>
+      <button class="ui-close-btn"><svg viewBox="0 0 28 28" fill="none">
+        <path d="M7 7L21 21M21 7L7 21" stroke="#0d121d" stroke-width="7.2" stroke-linecap="round"/>
+        <path d="M7 7L21 21M21 7L7 21" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+      </svg></button>
+
+      <div style="display:flex;justify-content:center;">
+        <div class="ui-tab-bar">
+          <button class="ui-tab t-stroke-sm is-active" data-swatch="purple"><span class="ui-btn-icon"><svg viewBox="0 0 36 36" fill="none">
+        <path d="M6 15H30V30H6V15Z" fill="#ffe156" stroke="#0d121d" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M4 15L7 7H29L32 15C30 18 26 18 24 15C22 18 18 18 18 15C18 18 14 18 12 15C10 18 6 18 4 15Z" fill="#ff6a47" stroke="#0d121d" stroke-width="2.8" stroke-linejoin="round"/>
+        <rect x="14" y="21" width="8" height="9" rx="1.5" fill="#46c9ff" stroke="#0d121d" stroke-width="2.4"/>
+      </svg></span><span>Kartu Upgrade</span><span class="ui-notif-badge">4</span></button>
+          <button class="ui-tab t-stroke-sm" data-swatch="slate"><span class="ui-btn-icon"><svg viewBox="0 0 36 36" fill="none">
+        <path d="M18 18L9 9M18 18L27 9M18 18L9 27M18 18L27 27" stroke="#9bf5ff" stroke-width="3.6" stroke-linecap="round"/>
+        <circle cx="9" cy="9" r="4.2" fill="#5ad6ff" stroke="#0d121d" stroke-width="2.5"/>
+        <circle cx="27" cy="9" r="4.2" fill="#ffe254" stroke="#0d121d" stroke-width="2.5"/>
+        <circle cx="9" cy="27" r="4.2" fill="#5df2d4" stroke="#0d121d" stroke-width="2.5"/>
+        <circle cx="27" cy="27" r="4.2" fill="#70f566" stroke="#0d121d" stroke-width="2.5"/>
+        <circle cx="18" cy="18" r="5.5" fill="#ffffff" stroke="#0d121d" stroke-width="2.8"/>
+      </svg></span><span>Pohon Evolusi</span></button>
+          <button class="ui-tab t-stroke-sm" data-swatch="slate"><span class="ui-btn-icon"><svg viewBox="0 0 40 40" fill="none">
+        <path d="M10 9H30V18C30 23.5 25.5 27 20 27C14.5 27 10 23.5 10 18V9Z" fill="#ffdf47" stroke="#0d121d" stroke-width="3.2" stroke-linejoin="round"/>
+        <path d="M10 12H6C6 18 8 21 11.5 21M30 12H34C34 18 32 21 28.5 21" stroke="#f5a616" stroke-width="3.2" stroke-linecap="round"/>
+        <path d="M20 27V32M13 33H27" stroke="#0d121d" stroke-width="4" stroke-linecap="round"/>
+        <path d="M15 13H21" stroke="#fff9c4" stroke-width="2.4" stroke-linecap="round"/>
+      </svg></span><span>Pencapaian</span><span class="ui-notif-badge">2</span></button>
+        </div>
+      </div>
+
+      <div class="cards-3">
+        <article class="ui-upgrade-card is-affordable" data-swatch="blue">
+          <div class="ui-card-head"><span class="ui-card-title t-stroke-md">Bentang Ombak</span></div>
+          <div class="ui-card-stage">
+            <div class="ui-sunburst"></div>
+            <svg class="ui-sparkle sp-1" viewBox="0 0 24 24" fill="none">
+        <path d="M12 1.5L14.5 9.5L22.5 12L14.5 14.5L12 22.5L9.5 14.5L1.5 12L9.5 9.5L12 1.5Z" fill="#fff7b8" stroke="#0d121d" stroke-width="1.6" stroke-linejoin="round"/>
+      </svg>
+            <svg class="ui-card-art" viewBox="0 0 40 40" fill="none">
+        <path d="M4 26C9 15 17 13 24 16C28 17.8 31 20 36 24C31 29 24 31 16 31C10 31 6 29 4 26Z" fill="#4ce3ff" stroke="#0d121d" stroke-width="3.2" stroke-linejoin="round"/>
+        <path d="M9 24C13 18.5 19 17.5 25 19.5" stroke="#ffffff" stroke-width="2.8" stroke-linecap="round"/>
+        <path d="M12 10H28" stroke="#ffe759" stroke-width="4" stroke-linecap="round"/>
+        <path d="M5 10L12 5.5V14.5L5 10Z" fill="#ffe759" stroke="#0d121d" stroke-width="2.4" stroke-linejoin="round"/>
+        <path d="M35 10L28 5.5V14.5L35 10Z" fill="#ffe759" stroke="#0d121d" stroke-width="2.4" stroke-linejoin="round"/>
+      </svg>
+            <div class="ui-star-row"><svg class="ui-star-pip" viewBox="0 0 28 28" fill="none">
+        <path d="M14 2.5L17.6 9.8L25.6 11L19.8 16.6L21.2 24.6L14 20.8L6.8 24.6L8.2 16.6L2.4 11L10.4 9.8L14 2.5Z" fill="#ffe142" stroke="#0d121d" stroke-width="2.6" stroke-linejoin="round"/>
+        <path d="M14 6L15.8 10.5L12 10.5L14 6Z" fill="#fff9c4"/>
+      </svg><svg class="ui-star-pip" viewBox="0 0 28 28" fill="none">
+        <path d="M14 2.5L17.6 9.8L25.6 11L19.8 16.6L21.2 24.6L14 20.8L6.8 24.6L8.2 16.6L2.4 11L10.4 9.8L14 2.5Z" fill="#ffe142" stroke="#0d121d" stroke-width="2.6" stroke-linejoin="round"/>
+        <path d="M14 6L15.8 10.5L12 10.5L14 6Z" fill="#fff9c4"/>
+      </svg><svg class="ui-star-pip" viewBox="0 0 28 28" fill="none">
+        <path d="M14 2.5L17.6 9.8L25.6 11L19.8 16.6L21.2 24.6L14 20.8L6.8 24.6L8.2 16.6L2.4 11L10.4 9.8L14 2.5Z" fill="#3a435a" stroke="#0d121d" stroke-width="2.6" stroke-linejoin="round"/>
+      </svg><svg class="ui-star-pip" viewBox="0 0 28 28" fill="none">
+        <path d="M14 2.5L17.6 9.8L25.6 11L19.8 16.6L21.2 24.6L14 20.8L6.8 24.6L8.2 16.6L2.4 11L10.4 9.8L14 2.5Z" fill="#3a435a" stroke="#0d121d" stroke-width="2.6" stroke-linejoin="round"/>
+      </svg><svg class="ui-star-pip" viewBox="0 0 28 28" fill="none">
+        <path d="M14 2.5L17.6 9.8L25.6 11L19.8 16.6L21.2 24.6L14 20.8L6.8 24.6L8.2 16.6L2.4 11L10.4 9.8L14 2.5Z" fill="#3a435a" stroke="#0d121d" stroke-width="2.6" stroke-linejoin="round"/>
+      </svg></div>
+          </div>
+          <div class="ui-card-meta">
+            <div class="ui-stat-kicker t-stroke-xs"><svg viewBox="0 0 40 40" fill="none">
+        <path d="M4 26C9 15 17 13 24 16C28 17.8 31 20 36 24C31 29 24 31 16 31C10 31 6 29 4 26Z" fill="#4ce3ff" stroke="#0d121d" stroke-width="3.2" stroke-linejoin="round"/>
+        <path d="M9 24C13 18.5 19 17.5 25 19.5" stroke="#ffffff" stroke-width="2.8" stroke-linecap="round"/>
+        <path d="M12 10H28" stroke="#ffe759" stroke-width="4" stroke-linecap="round"/>
+        <path d="M5 10L12 5.5V14.5L5 10Z" fill="#ffe759" stroke="#0d121d" stroke-width="2.4" stroke-linejoin="round"/>
+        <path d="M35 10L28 5.5V14.5L35 10Z" fill="#ffe759" stroke="#0d121d" stroke-width="2.4" stroke-linejoin="round"/>
+      </svg><span>LEBAR OMBAK</span></div>
+            <div class="ui-stat-delta num"><span class="t-stroke-sm">x1.52</span><svg class="ui-arrow-icon" viewBox="0 0 28 24" fill="none">
+        <path d="M3 8.5H14.5V4L25 12L14.5 20V15.5H3V8.5Z" fill="#ffe142" stroke="#0d121d" stroke-width="2.6" stroke-linejoin="round"/>
+      </svg><span class="t-stroke-sm t-lime">x1.78</span></div>
+          </div>
+          <button class="ui-btn ui-btn-block ui-card-cta t-stroke-md" data-swatch="green"><svg class="ui-btn-icon" viewBox="0 0 40 40" fill="none">
+        <circle cx="20" cy="21" r="15.5" fill="#d97706" stroke="#0d121d" stroke-width="3.2"/>
+        <circle cx="20" cy="18.5" r="14.5" fill="#ffe14a" stroke="#0d121d" stroke-width="3.2"/>
+        <circle cx="20" cy="18.5" r="9.8" fill="#f5b318" stroke="#0d121d" stroke-width="2.2"/>
+        <path d="M13 11.5C15.2 8.8 18.6 7.5 22 8" stroke="#fff8c4" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M20 11.5L22.5 16L27 17.5L22.5 20L20 25L17.5 20L13 17.5L17.5 16L20 11.5Z" fill="#fff4a8" stroke="#0d121d" stroke-width="1.8" stroke-linejoin="round"/>
+      </svg><span>61</span></button>
+        </article>
+
+        <article class="ui-upgrade-card is-featured is-affordable" data-swatch="gold">
+          <div class="ui-card-head"><span class="ui-card-title t-stroke-md">Kelangkaan Muatan</span></div>
+          <div class="ui-card-stage">
+            <div class="ui-sunburst"></div>
+            <span class="ui-corner-tag t-stroke-xs">OP VALUE!</span>
+            <svg class="ui-sparkle sp-1" viewBox="0 0 24 24" fill="none">
+        <path d="M12 1.5L14.5 9.5L22.5 12L14.5 14.5L12 22.5L9.5 14.5L1.5 12L9.5 9.5L12 1.5Z" fill="#fff7b8" stroke="#0d121d" stroke-width="1.6" stroke-linejoin="round"/>
+      </svg><svg class="ui-sparkle sp-2" viewBox="0 0 24 24" fill="none">
+        <path d="M12 1.5L14.5 9.5L22.5 12L14.5 14.5L12 22.5L9.5 14.5L1.5 12L9.5 9.5L12 1.5Z" fill="#fff7b8" stroke="#0d121d" stroke-width="1.6" stroke-linejoin="round"/>
+      </svg>
+            <svg class="ui-card-art" viewBox="0 0 40 40" fill="none">
+        <path d="M12 8H28L35 17L20 34L5 17L12 8Z" fill="#ff73dc" stroke="#0d121d" stroke-width="3.2" stroke-linejoin="round"/>
+        <path d="M12 8L15 17L20 34L25 17L28 8" stroke="#0d121d" stroke-width="2.2" stroke-linejoin="round"/>
+        <path d="M5 17H35" stroke="#0d121d" stroke-width="2.4"/>
+        <path d="M15 17L20 9L25 17H15Z" fill="#ffe0fa"/>
+      </svg>
+            <div class="ui-star-row"><svg class="ui-star-pip" viewBox="0 0 28 28" fill="none">
+        <path d="M14 2.5L17.6 9.8L25.6 11L19.8 16.6L21.2 24.6L14 20.8L6.8 24.6L8.2 16.6L2.4 11L10.4 9.8L14 2.5Z" fill="#ffe142" stroke="#0d121d" stroke-width="2.6" stroke-linejoin="round"/>
+        <path d="M14 6L15.8 10.5L12 10.5L14 6Z" fill="#fff9c4"/>
+      </svg><svg class="ui-star-pip" viewBox="0 0 28 28" fill="none">
+        <path d="M14 2.5L17.6 9.8L25.6 11L19.8 16.6L21.2 24.6L14 20.8L6.8 24.6L8.2 16.6L2.4 11L10.4 9.8L14 2.5Z" fill="#ffe142" stroke="#0d121d" stroke-width="2.6" stroke-linejoin="round"/>
+        <path d="M14 6L15.8 10.5L12 10.5L14 6Z" fill="#fff9c4"/>
+      </svg><svg class="ui-star-pip" viewBox="0 0 28 28" fill="none">
+        <path d="M14 2.5L17.6 9.8L25.6 11L19.8 16.6L21.2 24.6L14 20.8L6.8 24.6L8.2 16.6L2.4 11L10.4 9.8L14 2.5Z" fill="#ffe142" stroke="#0d121d" stroke-width="2.6" stroke-linejoin="round"/>
+        <path d="M14 6L15.8 10.5L12 10.5L14 6Z" fill="#fff9c4"/>
+      </svg><svg class="ui-star-pip" viewBox="0 0 28 28" fill="none">
+        <path d="M14 2.5L17.6 9.8L25.6 11L19.8 16.6L21.2 24.6L14 20.8L6.8 24.6L8.2 16.6L2.4 11L10.4 9.8L14 2.5Z" fill="#3a435a" stroke="#0d121d" stroke-width="2.6" stroke-linejoin="round"/>
+      </svg><svg class="ui-star-pip" viewBox="0 0 28 28" fill="none">
+        <path d="M14 2.5L17.6 9.8L25.6 11L19.8 16.6L21.2 24.6L14 20.8L6.8 24.6L8.2 16.6L2.4 11L10.4 9.8L14 2.5Z" fill="#3a435a" stroke="#0d121d" stroke-width="2.6" stroke-linejoin="round"/>
+      </svg></div>
+          </div>
+          <div class="ui-card-meta">
+            <div class="ui-stat-kicker t-stroke-xs"><svg viewBox="0 0 40 40" fill="none">
+        <path d="M12 8H28L35 17L20 34L5 17L12 8Z" fill="#ff73dc" stroke="#0d121d" stroke-width="3.2" stroke-linejoin="round"/>
+        <path d="M12 8L15 17L20 34L25 17L28 8" stroke="#0d121d" stroke-width="2.2" stroke-linejoin="round"/>
+        <path d="M5 17H35" stroke="#0d121d" stroke-width="2.4"/>
+        <path d="M15 17L20 9L25 17H15Z" fill="#ffe0fa"/>
+      </svg><span>KELANGKAAN</span></div>
+            <div class="ui-stat-delta num"><span class="t-stroke-sm">EPIK</span><svg class="ui-arrow-icon" viewBox="0 0 28 24" fill="none">
+        <path d="M3 8.5H14.5V4L25 12L14.5 20V15.5H3V8.5Z" fill="#ffe142" stroke="#0d121d" stroke-width="2.6" stroke-linejoin="round"/>
+      </svg><span class="t-stroke-sm t-lime">LEGEND</span></div>
+          </div>
+          <button class="ui-btn ui-btn-block ui-card-cta t-stroke-md" data-swatch="green"><svg class="ui-btn-icon" viewBox="0 0 40 40" fill="none">
+        <circle cx="20" cy="21" r="15.5" fill="#d97706" stroke="#0d121d" stroke-width="3.2"/>
+        <circle cx="20" cy="18.5" r="14.5" fill="#ffe14a" stroke="#0d121d" stroke-width="3.2"/>
+        <circle cx="20" cy="18.5" r="9.8" fill="#f5b318" stroke="#0d121d" stroke-width="2.2"/>
+        <path d="M13 11.5C15.2 8.8 18.6 7.5 22 8" stroke="#fff8c4" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M20 11.5L22.5 16L27 17.5L22.5 20L20 25L17.5 20L13 17.5L17.5 16L20 11.5Z" fill="#fff4a8" stroke="#0d121d" stroke-width="1.8" stroke-linejoin="round"/>
+      </svg><span>385</span></button>
+        </article>
+
+        <article class="ui-upgrade-card is-featured" data-swatch="teal">
+          <div class="ui-card-head"><span class="ui-card-title t-stroke-md">AI Arus Pemandu</span></div>
+          <div class="ui-card-stage">
+            <div class="ui-sunburst"></div>
+            <span class="ui-corner-tag t-stroke-xs">AI SMART!</span>
+            <svg class="ui-card-art" viewBox="0 0 40 40" fill="none">
+        <path d="M10 10V21A10 10 0 0 0 30 21V10H24V21A4 4 0 0 1 16 21V10H10Z" fill="#4bf2e0" stroke="#0d121d" stroke-width="3.2" stroke-linejoin="round"/>
+        <rect x="10" y="7" width="6" height="6" rx="1.5" fill="#ffe554" stroke="#0d121d" stroke-width="2.6"/>
+        <rect x="24" y="7" width="6" height="6" rx="1.5" fill="#ffe554" stroke="#0d121d" stroke-width="2.6"/>
+      </svg>
+            <div class="ui-star-row"><svg class="ui-star-pip" viewBox="0 0 28 28" fill="none">
+        <path d="M14 2.5L17.6 9.8L25.6 11L19.8 16.6L21.2 24.6L14 20.8L6.8 24.6L8.2 16.6L2.4 11L10.4 9.8L14 2.5Z" fill="#ffe142" stroke="#0d121d" stroke-width="2.6" stroke-linejoin="round"/>
+        <path d="M14 6L15.8 10.5L12 10.5L14 6Z" fill="#fff9c4"/>
+      </svg><svg class="ui-star-pip" viewBox="0 0 28 28" fill="none">
+        <path d="M14 2.5L17.6 9.8L25.6 11L19.8 16.6L21.2 24.6L14 20.8L6.8 24.6L8.2 16.6L2.4 11L10.4 9.8L14 2.5Z" fill="#3a435a" stroke="#0d121d" stroke-width="2.6" stroke-linejoin="round"/>
+      </svg><svg class="ui-star-pip" viewBox="0 0 28 28" fill="none">
+        <path d="M14 2.5L17.6 9.8L25.6 11L19.8 16.6L21.2 24.6L14 20.8L6.8 24.6L8.2 16.6L2.4 11L10.4 9.8L14 2.5Z" fill="#3a435a" stroke="#0d121d" stroke-width="2.6" stroke-linejoin="round"/>
+      </svg><svg class="ui-star-pip" viewBox="0 0 28 28" fill="none">
+        <path d="M14 2.5L17.6 9.8L25.6 11L19.8 16.6L21.2 24.6L14 20.8L6.8 24.6L8.2 16.6L2.4 11L10.4 9.8L14 2.5Z" fill="#3a435a" stroke="#0d121d" stroke-width="2.6" stroke-linejoin="round"/>
+      </svg></div>
+          </div>
+          <div class="ui-card-meta">
+            <div class="ui-stat-kicker t-stroke-xs"><svg viewBox="0 0 40 40" fill="none">
+        <path d="M10 10V21A10 10 0 0 0 30 21V10H24V21A4 4 0 0 1 16 21V10H10Z" fill="#4bf2e0" stroke="#0d121d" stroke-width="3.2" stroke-linejoin="round"/>
+        <rect x="10" y="7" width="6" height="6" rx="1.5" fill="#ffe554" stroke="#0d121d" stroke-width="2.6"/>
+        <rect x="24" y="7" width="6" height="6" rx="1.5" fill="#ffe554" stroke="#0d121d" stroke-width="2.6"/>
+      </svg><span>PANDUAN AI</span></div>
+            <div class="ui-stat-delta num"><span class="t-stroke-sm">+36%</span><svg class="ui-arrow-icon" viewBox="0 0 28 24" fill="none">
+        <path d="M3 8.5H14.5V4L25 12L14.5 20V15.5H3V8.5Z" fill="#ffe142" stroke="#0d121d" stroke-width="2.6" stroke-linejoin="round"/>
+      </svg><span class="t-stroke-sm t-lime">+72%</span></div>
+          </div>
+          <button class="ui-btn ui-btn-block ui-card-cta t-stroke-md" data-swatch="slate" disabled><svg class="ui-btn-icon" viewBox="0 0 40 40" fill="none">
+        <circle cx="20" cy="21" r="15.5" fill="#d97706" stroke="#0d121d" stroke-width="3.2"/>
+        <circle cx="20" cy="18.5" r="14.5" fill="#ffe14a" stroke="#0d121d" stroke-width="3.2"/>
+        <circle cx="20" cy="18.5" r="9.8" fill="#f5b318" stroke="#0d121d" stroke-width="2.2"/>
+        <path d="M13 11.5C15.2 8.8 18.6 7.5 22 8" stroke="#fff8c4" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M20 11.5L22.5 16L27 17.5L22.5 20L20 25L17.5 20L13 17.5L17.5 16L20 11.5Z" fill="#fff4a8" stroke="#0d121d" stroke-width="1.8" stroke-linejoin="round"/>
+      </svg><span>96</span></button>
+        </article>
+      </div>
+
+      <div class="ach-2">
+        <article class="ui-achieve-card" data-swatch="green">
+          <div class="ui-achieve-medallion"><svg viewBox="0 0 40 40" fill="none">
+        <path d="M5 24C8 14 15 10 23 11C28 11.6 32 14.5 34 18C30 17 27 18.5 26 21C29 21 33 22 35 25C31 30 24 32 16 32C10 32 6 29 5 24Z" fill="#4ce3ff" stroke="#0d121d" stroke-width="3.2" stroke-linejoin="round"/>
+        <path d="M9 22C12 16 17 14 23 14.5" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="31" cy="12" r="3" fill="#b8fbff" stroke="#0d121d" stroke-width="2.2"/>
+      </svg></div>
+          <div class="ui-achieve-body">
+            <div>
+              <div class="ui-achieve-title t-stroke-md">Sapuan Pertama</div>
+              <div class="ui-achieve-desc t-stroke-xs">Kirim 5 sapuan ombak di laguna</div>
+            </div>
+            <div class="ui-achieve-actions">
+              <div class="ui-prog-pill"><div class="ui-prog-fill" style="width:100%"></div><span class="ui-prog-text t-stroke-xs num">5 / 5</span></div>
+              <button class="ui-btn ui-claim-btn t-stroke-xs" data-swatch="green"><span>Klaim</span><svg class="ui-btn-icon" viewBox="0 0 40 40" fill="none">
+        <circle cx="20" cy="21" r="15.5" fill="#d97706" stroke="#0d121d" stroke-width="3.2"/>
+        <circle cx="20" cy="18.5" r="14.5" fill="#ffe14a" stroke="#0d121d" stroke-width="3.2"/>
+        <circle cx="20" cy="18.5" r="9.8" fill="#f5b318" stroke="#0d121d" stroke-width="2.2"/>
+        <path d="M13 11.5C15.2 8.8 18.6 7.5 22 8" stroke="#fff8c4" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M20 11.5L22.5 16L27 17.5L22.5 20L20 25L17.5 20L13 17.5L17.5 16L20 11.5Z" fill="#fff4a8" stroke="#0d121d" stroke-width="1.8" stroke-linejoin="round"/>
+      </svg><span>+25</span></button>
+            </div>
+          </div>
+        </article>
+
+        <article class="ui-achieve-card" data-swatch="blue">
+          <div class="ui-achieve-medallion"><svg viewBox="0 0 40 40" fill="none">
+        <path d="M12 8H28L35 17L20 34L5 17L12 8Z" fill="#ff73dc" stroke="#0d121d" stroke-width="3.2" stroke-linejoin="round"/>
+        <path d="M12 8L15 17L20 34L25 17L28 8" stroke="#0d121d" stroke-width="2.2" stroke-linejoin="round"/>
+        <path d="M5 17H35" stroke="#0d121d" stroke-width="2.4"/>
+        <path d="M15 17L20 9L25 17H15Z" fill="#ffe0fa"/>
+      </svg></div>
+          <div class="ui-achieve-body">
+            <div>
+              <div class="ui-achieve-title t-stroke-md">Pemburu Langka</div>
+              <div class="ui-achieve-desc t-stroke-xs">Panen 5 muatan Langka/Epik/Legend</div>
+            </div>
+            <div class="ui-achieve-actions">
+              <div class="ui-prog-pill"><div class="ui-prog-fill" style="width:60%"></div><span class="ui-prog-text t-stroke-xs num">3 / 5</span></div>
+              <button class="ui-btn ui-claim-btn t-stroke-xs" data-swatch="slate" disabled><svg class="ui-btn-icon" viewBox="0 0 40 40" fill="none">
+        <circle cx="20" cy="21" r="15.5" fill="#d97706" stroke="#0d121d" stroke-width="3.2"/>
+        <circle cx="20" cy="18.5" r="14.5" fill="#ffe14a" stroke="#0d121d" stroke-width="3.2"/>
+        <circle cx="20" cy="18.5" r="9.8" fill="#f5b318" stroke="#0d121d" stroke-width="2.2"/>
+        <path d="M13 11.5C15.2 8.8 18.6 7.5 22 8" stroke="#fff8c4" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M20 11.5L22.5 16L27 17.5L22.5 20L20 25L17.5 20L13 17.5L17.5 16L20 11.5Z" fill="#fff4a8" stroke="#0d121d" stroke-width="1.8" stroke-linejoin="round"/>
+      </svg><span>+130</span></button>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

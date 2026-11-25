@@ -1,0 +1,1295 @@
+/* ==========================================================================
+   ALUN ARCADE GLOSS UI KIT — REUSABLE COMPONENT TEMPLATES (BOLD ARCADE SCALE)
+   Every HUD widget, button, modal, tab, card, toast, speech bubble, keycap,
+   achievement row, and skill-tree node is built from these atomic classes.
+   ========================================================================== */
+
+/* ================= TEXT STROKE UTILITY (CRISP CARTOON UISTROKE) ================= */
+.t-stroke-xl,
+.t-stroke-lg,
+.t-stroke-md,
+.t-stroke-sm,
+.t-stroke-xs {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: #ffffff;
+  paint-order: stroke fill;
+  -webkit-text-stroke-color: var(--ink);
+  stroke-linejoin: round;
+  letter-spacing: 0.012em;
+}
+
+.t-stroke-xl {
+  -webkit-text-stroke-width: 9px;
+  text-shadow: 0 5px 0 var(--ink);
+}
+
+.t-stroke-lg {
+  -webkit-text-stroke-width: 6.5px;
+  text-shadow: 0 3.5px 0 var(--ink);
+}
+
+.t-stroke-md {
+  -webkit-text-stroke-width: 4.8px;
+  text-shadow: 0 2.5px 0 var(--ink);
+}
+
+.t-stroke-sm {
+  -webkit-text-stroke-width: 3.6px;
+  text-shadow: 0 2px 0 var(--ink);
+}
+
+.t-stroke-xs {
+  -webkit-text-stroke-width: 2.8px;
+  text-shadow: 0 1.5px 0 var(--ink);
+}
+
+.t-lime {
+  color: #7aff63;
+}
+
+.t-gold {
+  color: #ffe857;
+}
+
+.t-cyan {
+  color: #74f3ff;
+}
+
+.t-coral {
+  color: #ff8278;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ================= CHECKERED GLOSSY SURFACE BASE ================= */
+.ui-surface {
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 26px 26px, 100% 100%;
+  border: var(--border-lg) solid var(--ink);
+  box-shadow: var(--gloss-top), var(--lip-bot-md), var(--shadow-btn);
+}
+
+/* ================= TEMPLATE 1: MODAL SHELL + RIBBON + CLOSE [X] ================= */
+.ui-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 24px 20px;
+  background: rgba(6, 12, 24, 0.66);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+.ui-modal-frame {
+  position: relative;
+  border-radius: var(--radius-modal);
+  border: var(--border-xl) solid var(--ink);
+  box-shadow: var(--shadow-modal);
+  display: flex;
+  flex-direction: column;
+  animation: uiModalPop 0.28s var(--ease-bounce) both;
+}
+
+.ui-modal-frame.ui-shell-navy {
+  background-color: #19244d;
+  background-image:
+    radial-gradient(circle at 14% 22%, rgba(255, 255, 255, 0.24) 2px, transparent 3px),
+    radial-gradient(circle at 82% 18%, rgba(122, 240, 255, 0.26) 2.5px, transparent 3.5px),
+    radial-gradient(circle at 28% 78%, rgba(255, 255, 255, 0.2) 2px, transparent 3px),
+    radial-gradient(circle at 73% 84%, rgba(255, 234, 120, 0.22) 2.2px, transparent 3.5px),
+    radial-gradient(circle at 52% 45%, rgba(65, 134, 224, 0.2), transparent 62%),
+    linear-gradient(180deg, #213067 0%, #151e45 55%, #111838 100%);
+  box-shadow:
+    inset 0 3.5px 0 rgba(140, 185, 255, 0.24),
+    inset 0 -6px 0 rgba(7, 10, 26, 0.58),
+    var(--shadow-modal);
+}
+
+.ui-modal-frame.ui-shell-light {
+  background-color: #ffffff;
+  background-image:
+    var(--pattern-checker-paper),
+    linear-gradient(180deg, #ffffff 0%, #f4f7fc 100%);
+  background-size: 32px 32px, 100% 100%;
+  box-shadow:
+    inset 0 3.5px 0 #ffffff,
+    inset 0 -6px 0 rgba(160, 178, 204, 0.45),
+    var(--shadow-modal);
+}
+
+.ui-modal-ribbon {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -56%);
+  z-index: 6;
+  min-width: 360px;
+  padding: 10px 48px 13px;
+  border-radius: 19px;
+  border: var(--border-xl) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 26px 26px, 100% 100%;
+  box-shadow:
+    var(--gloss-top),
+    inset 0 -6px 0 rgba(8, 12, 24, 0.28),
+    0 6px 0 var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+.ui-modal-ribbon-title {
+  font-size: 34px;
+  line-height: 1.04;
+}
+
+.ui-close-btn {
+  position: absolute;
+  top: -20px;
+  right: -20px;
+  z-index: 8;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  border: var(--border-xl) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, #ff6c76 0%, #da1f35 100%);
+  background-size: 18px 18px, 100% 100%;
+  box-shadow:
+    var(--gloss-top),
+    inset 0 -5px 0 rgba(110, 8, 20, 0.44),
+    0 5px 0 var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.14s var(--ease-bounce), filter 0.15s ease, box-shadow 0.1s ease;
+}
+
+.ui-close-btn:hover {
+  transform: scale(1.09) rotate(4deg);
+  filter: brightness(1.08);
+}
+
+.ui-close-btn:active {
+  transform: translateY(3px) scale(0.95);
+  box-shadow: var(--gloss-top-soft), 0 1px 0 var(--ink);
+}
+
+.ui-close-btn svg {
+  width: 31px;
+  height: 31px;
+}
+
+/* ================= TEMPLATE 2: GLOSSY CHECKERED 3D BUTTON ================= */
+.ui-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 11px 22px 13px;
+  border-radius: var(--radius-btn);
+  border: var(--border-lg) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 24px 24px, 100% 100%;
+  box-shadow: var(--gloss-top), var(--lip-bot-md), var(--shadow-btn);
+  color: var(--sw-text);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+  pointer-events: auto;
+  white-space: nowrap;
+  transition:
+    transform 0.14s var(--ease-bounce),
+    box-shadow 0.1s ease,
+    filter 0.15s ease;
+}
+
+.ui-btn:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.035);
+  filter: brightness(1.06);
+  box-shadow:
+    var(--gloss-top),
+    var(--lip-bot-md),
+    0 7px 0 var(--ink),
+    0 12px 24px var(--sw-glow);
+}
+
+.ui-btn:active:not(:disabled) {
+  transform: translateY(3.5px) scale(0.97);
+  box-shadow: var(--gloss-top-soft), var(--lip-bot-sm), var(--shadow-btn-press);
+}
+
+.ui-btn:disabled {
+  cursor: not-allowed;
+  filter: saturate(0.32) brightness(0.92);
+  opacity: 0.9;
+}
+
+.ui-btn.ui-btn-sm {
+  padding: 8px 16px 10px;
+  border-radius: 13px;
+  border-width: var(--border-md);
+  font-size: 16.5px;
+}
+
+.ui-btn.ui-btn-lg {
+  padding: 14px 28px 16px;
+  border-radius: 17px;
+  border-width: var(--border-xl);
+  font-size: 24px;
+}
+
+.ui-btn.ui-btn-block {
+  width: 100%;
+}
+
+.ui-btn-icon {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 0 rgba(13, 18, 29, 0.75));
+}
+
+.ui-btn.ui-btn-sm .ui-btn-icon {
+  width: 22px;
+  height: 22px;
+}
+
+/* Overhanging Red Notification Circle Badge */
+.ui-notif-badge {
+  position: absolute;
+  top: -11px;
+  right: -11px;
+  min-width: 29px;
+  height: 29px;
+  padding: 0 7px;
+  border-radius: var(--radius-pill);
+  border: 3px solid var(--ink);
+  background: linear-gradient(180deg, #ff646e 0%, #db1b2f 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45), 0 3px 0 var(--ink);
+  color: #ffffff;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4;
+  animation: uiBadgePop 1.8s ease-in-out infinite;
+}
+
+.ui-notif-badge.left {
+  right: auto;
+  left: -11px;
+}
+
+/* ================= TEMPLATE 3: SEGMENTED TABS ================= */
+.ui-tab-bar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ui-tab {
+  position: relative;
+  min-width: 170px;
+  padding: 10px 24px 12px;
+  border-radius: var(--radius-tab);
+  border: var(--border-lg) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 22px 22px, 100% 100%;
+  box-shadow: var(--gloss-top), var(--lip-bot-sm), 0 4.5px 0 var(--ink);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-size: 19px;
+  transition: transform 0.14s var(--ease-bounce), filter 0.15s ease;
+}
+
+.ui-tab:hover {
+  transform: translateY(-2px) scale(1.03);
+  filter: brightness(1.07);
+}
+
+.ui-tab:active {
+  transform: translateY(2px) scale(0.97);
+}
+
+.ui-tab.is-active {
+  transform: translateY(-1px);
+  box-shadow:
+    var(--gloss-top),
+    var(--lip-bot-md),
+    0 5.5px 0 var(--ink),
+    0 0 22px var(--sw-glow);
+}
+
+/* ================= TEMPLATE 4: SECTION DIVIDER (✦ CATEGORY) ================= */
+.ui-section-divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  margin: 6px 0 4px;
+}
+
+.ui-section-divider::before,
+.ui-section-divider::after {
+  content: '';
+  flex: 1;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(255, 224, 114, 0.78), transparent);
+}
+
+.ui-section-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 18px 7px;
+  border-radius: var(--radius-pill);
+  border: 3px solid var(--ink);
+  background: linear-gradient(180deg, #3c4768 0%, #242b44 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.24), 0 3.5px 0 var(--ink);
+  font-size: 15.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ui-section-pill svg {
+  width: 19px;
+  height: 19px;
+}
+
+/* ================= TEMPLATE 5: CHECKERED UPGRADE CARD (BOLD 3-COL SHOP STYLE) ================= */
+.ui-upgrade-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 13px 14px 14px;
+  border-radius: var(--radius-card);
+  border: var(--border-xl) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 26px 26px, 100% 100%;
+  box-shadow:
+    var(--gloss-top),
+    inset 0 -6px 0 rgba(8, 12, 24, 0.26),
+    var(--shadow-card);
+  transition: transform 0.16s var(--ease-bounce), box-shadow 0.16s ease, filter 0.15s ease;
+}
+
+.ui-upgrade-card:hover {
+  transform: translateY(-4px) scale(1.018);
+  box-shadow:
+    var(--gloss-top),
+    inset 0 -6px 0 rgba(8, 12, 24, 0.26),
+    0 9px 0 var(--ink),
+    0 16px 32px var(--sw-glow);
+}
+
+.ui-upgrade-card.is-locked {
+  filter: saturate(0.26) brightness(0.76);
+}
+
+.ui-upgrade-card.is-featured {
+  box-shadow:
+    inset 0 0 0 2.5px rgba(255, 245, 168, 0.78),
+    var(--gloss-top),
+    inset 0 -6px 0 rgba(8, 12, 24, 0.26),
+    var(--shadow-card),
+    0 0 28px rgba(255, 214, 70, 0.38);
+}
+
+.ui-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 30px;
+}
+
+.ui-card-title {
+  font-size: 23.5px;
+  line-height: 1.06;
+}
+
+/* Recessed Inner Preview Stage */
+.ui-card-stage {
+  position: relative;
+  height: 146px;
+  border-radius: var(--radius-stage);
+  border: var(--border-lg) solid var(--ink);
+  background-image:
+    var(--pattern-checker-dark),
+    linear-gradient(180deg, var(--sw-stage-top) 0%, var(--sw-stage-bot) 100%);
+  background-size: 22px 22px, 100% 100%;
+  box-shadow:
+    inset 0 5px 12px rgba(7, 12, 24, 0.36),
+    inset 0 -2.5px 0 rgba(255, 255, 255, 0.24);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.ui-upgrade-card.is-featured .ui-card-stage {
+  border-color: #fff08d;
+  box-shadow:
+    0 0 0 3px var(--ink),
+    inset 0 0 20px rgba(255, 245, 175, 0.38);
+}
+
+.ui-sunburst {
+  position: absolute;
+  inset: -45%;
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(255, 255, 255, 0.21) 0deg 14deg,
+    transparent 14deg 28deg
+  );
+  animation: uiSpinSlow 16s linear infinite;
+  pointer-events: none;
+}
+
+.ui-card-art {
+  position: relative;
+  z-index: 2;
+  width: 78px;
+  height: 78px;
+  margin-bottom: 14px;
+  filter: drop-shadow(0 5px 0 rgba(13, 18, 29, 0.48));
+  transition: transform 0.2s var(--ease-bounce);
+}
+
+.ui-upgrade-card:hover .ui-card-art {
+  transform: scale(1.1) translateY(-3px);
+}
+
+.ui-sparkle {
+  position: absolute;
+  z-index: 3;
+  width: 21px;
+  height: 21px;
+  pointer-events: none;
+  animation: uiTwinkle 2.1s ease-in-out infinite;
+}
+
+.ui-sparkle.sp-1 {
+  top: 12px;
+  left: 14px;
+}
+
+.ui-sparkle.sp-2 {
+  bottom: 30px;
+  right: 14px;
+  width: 17px;
+  height: 17px;
+  animation-delay: 0.9s;
+}
+
+/* Corner Ribbon Tag (NEW! / OP! / MAKS) */
+.ui-corner-tag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 4;
+  padding: 3px 12px 4px;
+  border-radius: var(--radius-pill);
+  border: 2.5px solid var(--ink);
+  background: linear-gradient(180deg, #ffec59 0%, #f59b14 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.55), 0 2.5px 0 var(--ink);
+  font-size: 13.5px;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.ui-corner-tag.tag-max {
+  background: linear-gradient(180deg, #74f664 0%, #1eb43d 100%);
+}
+
+.ui-corner-tag.tag-lock {
+  background: linear-gradient(180deg, #626e8c 0%, #3d465e 100%);
+}
+
+/* Level Star Row at bottom of Stage */
+.ui-star-row {
+  position: absolute;
+  bottom: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.ui-star-pip {
+  width: 23px;
+  height: 23px;
+  filter: drop-shadow(0 2px 0 rgba(13, 18, 29, 0.72));
+}
+
+/* Stat Label & Arrow Delta (x1 ➜ x1.26) */
+.ui-card-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 4px;
+}
+
+.ui-stat-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ui-stat-kicker svg {
+  width: 19px;
+  height: 19px;
+}
+
+.ui-stat-delta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 22px;
+  line-height: 1.08;
+}
+
+.ui-arrow-icon {
+  width: 24px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.ui-card-desc-mini {
+  font-family: var(--font-body);
+  font-size: 13.8px;
+  font-weight: 800;
+  line-height: 1.32;
+  color: rgba(255, 255, 255, 0.96);
+  text-align: center;
+  text-shadow: 0 1.8px 0 rgba(13, 18, 29, 0.9);
+  min-height: 36px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ui-card-cta {
+  margin-top: auto;
+  padding: 10px 14px 12px;
+  font-size: 22px;
+}
+
+/* ================= TEMPLATE 6: ACHIEVEMENT CARD (EXACT BOLD V2 STYLE) ================= */
+.ui-achieve-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 14px 16px;
+  border-radius: 19px;
+  border: var(--border-xl) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 24px 24px, 100% 100%;
+  box-shadow:
+    var(--gloss-top),
+    inset 0 -5px 0 rgba(8, 12, 24, 0.28),
+    0 5px 0 var(--ink);
+  transition: transform 0.14s var(--ease-bounce), filter 0.15s ease;
+}
+
+.ui-achieve-card:hover {
+  transform: translateY(-2px);
+}
+
+.ui-achieve-card.is-claimed {
+  filter: saturate(0.42) brightness(0.74);
+}
+
+.ui-achieve-medallion {
+  width: 74px;
+  height: 74px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: var(--border-xl) solid var(--ink);
+  background:
+    var(--pattern-checker-dark),
+    radial-gradient(circle at 35% 30%, #4e5b7a 0%, #252d42 100%);
+  background-size: 16px 16px, 100% 100%;
+  box-shadow:
+    inset 0 4px 8px rgba(0, 0, 0, 0.45),
+    0 4px 0 var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ui-achieve-medallion svg {
+  width: 44px;
+  height: 44px;
+  filter: drop-shadow(0 2.5px 0 rgba(13, 18, 29, 0.65));
+}
+
+.ui-achieve-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.ui-achieve-title {
+  font-size: 22.5px;
+  line-height: 1.08;
+}
+
+.ui-achieve-desc {
+  font-size: 15px;
+  line-height: 1.28;
+  margin-top: 2px;
+}
+
+.ui-achieve-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.ui-prog-pill {
+  position: relative;
+  height: 40px;
+  border-radius: var(--radius-pill);
+  border: 3px solid var(--ink);
+  background: linear-gradient(180deg, #333c54 0%, #1f2536 100%);
+  box-shadow: inset 0 2.5px 5px rgba(0, 0, 0, 0.45), 0 3px 0 var(--ink);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ui-prog-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(180deg, #74f664 0%, #1eb43d 100%);
+  box-shadow: inset 0 2.5px 0 rgba(255, 255, 255, 0.45);
+  transition: width 0.35s var(--ease-snappy);
+}
+
+.ui-prog-text {
+  position: relative;
+  z-index: 2;
+  font-size: 16.5px;
+}
+
+.ui-claim-btn {
+  height: 40px;
+  padding: 0 12px 2px;
+  border-radius: var(--radius-pill);
+  font-size: 16px;
+  gap: 6px;
+}
+
+.ui-claim-btn .ui-btn-icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* ================= TEMPLATE 7: HUD WIDGETS (BOLD IN-GAME SCALE) ================= */
+.ui-currency-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 136px;
+  height: 54px;
+  padding: 0 20px 3px 54px;
+  margin-left: 18px;
+  border-radius: var(--radius-pill);
+  border: var(--border-xl) solid var(--ink);
+  background: linear-gradient(180deg, #4b556e 0%, #2a3145 100%);
+  box-shadow: var(--gloss-top-soft), var(--lip-bot-sm), var(--shadow-pill);
+  pointer-events: auto;
+  transition: transform 0.16s var(--ease-bounce);
+}
+
+.ui-currency-pill.is-bump {
+  transform: scale(1.1);
+}
+
+.ui-currency-icon {
+  position: absolute;
+  left: -18px;
+  top: 50%;
+  transform: translateY(-52%) rotate(-6deg);
+  width: 62px;
+  height: 62px;
+  filter: drop-shadow(0 3.5px 0 var(--ink));
+  pointer-events: none;
+}
+
+.ui-currency-val {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.ui-delta-stack {
+  position: absolute;
+  left: 48px;
+  top: -26px;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.ui-delta-float {
+  font-size: 20px;
+  white-space: nowrap;
+  animation: uiDeltaRise 1.05s var(--ease-snappy) forwards;
+}
+
+/* Top-Center Progress Meter Pill */
+.ui-meter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 300px;
+  padding: 8px 18px 9px 10px;
+  border-radius: 20px;
+  border: var(--border-xl) solid var(--ink);
+  background: linear-gradient(180deg, #48526b 0%, #272e41 100%);
+  box-shadow: var(--gloss-top-soft), var(--lip-bot-sm), var(--shadow-pill);
+  pointer-events: auto;
+}
+
+.ui-meter-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 3px solid var(--ink);
+  background-image: linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  box-shadow: inset 0 2.5px 0 rgba(255, 255, 255, 0.45), 0 2.5px 0 var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ui-meter-badge svg {
+  width: 27px;
+  height: 27px;
+}
+
+.ui-meter-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.ui-meter-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ui-meter-label {
+  font-size: 16.5px;
+  line-height: 1;
+}
+
+.ui-meter-num {
+  font-size: 15.5px;
+  line-height: 1;
+}
+
+.ui-bar-track {
+  position: relative;
+  width: 100%;
+  height: 15px;
+  border-radius: var(--radius-pill);
+  border: 2.5px solid var(--ink);
+  background: linear-gradient(180deg, #1b2030 0%, #2c344a 100%);
+  box-shadow: inset 0 2.5px 5px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.ui-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  box-shadow: inset 0 2.5px 0 rgba(255, 255, 255, 0.55);
+  transition: width 0.1s linear;
+}
+
+/* Top-Right Sky Time Pill + Square Icon Button + Slim Under-Bars */
+.ui-square-btn {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  border-radius: 15px;
+  border: var(--border-xl) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 18px 18px, 100% 100%;
+  box-shadow: var(--gloss-top-soft), var(--lip-bot-sm), var(--shadow-pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 0.14s var(--ease-bounce), filter 0.15s ease;
+}
+
+.ui-square-btn:hover {
+  transform: translateY(-2px) scale(1.06);
+  filter: brightness(1.08);
+}
+
+.ui-square-btn:active {
+  transform: translateY(2px) scale(0.95);
+}
+
+.ui-square-btn svg {
+  width: 28px;
+  height: 28px;
+}
+
+.ui-time-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 54px;
+  padding: 0 20px 3px 14px;
+  border-radius: var(--radius-pill);
+  border: var(--border-xl) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 22px 22px, 100% 100%;
+  box-shadow: var(--gloss-top), var(--lip-bot-sm), var(--shadow-pill);
+  pointer-events: auto;
+}
+
+.ui-time-pill svg {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 0 rgba(13, 18, 29, 0.5));
+}
+
+.ui-time-text {
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* Slim Status Bar with Overhanging Right Medallion */
+.ui-slim-bar-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 218px;
+  height: 28px;
+  padding-right: 18px;
+  pointer-events: auto;
+}
+
+.ui-slim-bar-track {
+  position: relative;
+  width: 100%;
+  height: 23px;
+  border-radius: var(--radius-pill);
+  border: 3px solid var(--ink);
+  background: linear-gradient(180deg, #272f44 0%, #1a2030 100%);
+  box-shadow: 0 3px 0 var(--ink);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ui-slim-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.5);
+  transition: width 0.25s var(--ease-snappy);
+}
+
+.ui-slim-bar-val {
+  position: relative;
+  z-index: 2;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.ui-slim-bar-medallion {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 37px;
+  height: 37px;
+  border-radius: 50%;
+  border: 3px solid var(--ink);
+  background: linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.5), 0 3px 0 var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ui-slim-bar-medallion svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* ================= TEMPLATE 8: OBJECTIVE BANNER (BOLD f_031 STYLE) ================= */
+.ui-objective-banner {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 15px;
+  padding: 16px 26px 14px 18px;
+  border-radius: 19px;
+  border: var(--border-xl) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 26px 26px, 100% 100%;
+  box-shadow: var(--gloss-top), var(--lip-bot-md), var(--shadow-pill);
+  pointer-events: auto;
+  cursor: pointer;
+  animation: uiPopBounce 0.34s var(--ease-bounce) both;
+  transition: transform 0.15s var(--ease-bounce);
+}
+
+.ui-objective-banner:hover {
+  transform: translateY(-2px) scale(1.02);
+}
+
+.ui-objective-kicker {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -56%);
+  padding: 3px 18px 4px;
+  border-radius: var(--radius-pill);
+  border: 3px solid var(--ink);
+  background: linear-gradient(180deg, #ffec59 0%, #f49b16 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.55), 0 3px 0 var(--ink);
+  font-size: 13.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ui-objective-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: var(--border-lg) solid var(--ink);
+  background: linear-gradient(180deg, #62d7ff 0%, #2474ed 100%);
+  box-shadow: inset 0 2.5px 0 rgba(255, 255, 255, 0.48), 0 3px 0 var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ui-objective-icon svg {
+  width: 34px;
+  height: 34px;
+}
+
+.ui-objective-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ui-objective-title {
+  font-size: 23px;
+  line-height: 1.08;
+}
+
+.ui-objective-sub {
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+/* ================= TEMPLATE 9: COMIC SPEECH BUBBLE + PILL TOAST ================= */
+.ui-speech-bubble {
+  position: relative;
+  max-width: 490px;
+  padding: 13px 20px 14px;
+  border-radius: 22px;
+  border: var(--border-xl) solid var(--ink);
+  background-color: #ffffff;
+  background-image:
+    var(--pattern-checker-paper),
+    linear-gradient(180deg, #ffffff 0%, #f1f6fc 100%);
+  background-size: 22px 22px, 100% 100%;
+  box-shadow: inset 0 2.5px 0 #ffffff, inset 0 -4px 0 rgba(162, 180, 206, 0.5), var(--shadow-pill);
+  pointer-events: none;
+  animation: uiPopBounce 0.3s var(--ease-bounce) both;
+}
+
+.ui-speech-bubble::before {
+  content: '';
+  position: absolute;
+  bottom: -14px;
+  left: 38px;
+  border-width: 14px 11px 0 11px;
+  border-style: solid;
+  border-color: var(--ink) transparent transparent transparent;
+}
+
+.ui-speech-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -8.5px;
+  left: 41px;
+  border-width: 10px 8px 0 8px;
+  border-style: solid;
+  border-color: #f2f7fc transparent transparent transparent;
+}
+
+.ui-speech-sender {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 4px;
+  padding: 2px 12px 3px;
+  border-radius: var(--radius-pill);
+  border: 2.5px solid var(--ink);
+  background: linear-gradient(180deg, #5dd4ff 0%, #2374ee 100%);
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ui-speech-text {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.32;
+  color: #151c2e;
+}
+
+.ui-toast {
+  padding: 10px 26px 12px;
+  border-radius: var(--radius-pill);
+  border: var(--border-xl) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 20px 20px, 100% 100%;
+  box-shadow: var(--gloss-top), var(--lip-bot-sm), var(--shadow-pill);
+  font-size: 19px;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: uiToastPop 0.28s var(--ease-bounce) both;
+}
+
+/* ================= TEMPLATE 10: 3D KEYCAP HINTS ================= */
+.ui-keycap-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  pointer-events: auto;
+}
+
+.ui-keycap {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 11px 2px;
+  border-radius: 10px;
+  border: 3px solid var(--ink);
+  background: linear-gradient(180deg, #ffffff 0%, #dde5f0 100%);
+  box-shadow:
+    inset 0 2px 0 #ffffff,
+    inset 0 -3.5px 0 #aebbd0,
+    0 3.5px 0 var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: #141c2e;
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+  line-height: 1;
+}
+
+.ui-keycap-pill {
+  height: 36px;
+  padding: 0 15px 2px;
+  border-radius: 10px;
+  border: 3px solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 18px 18px, 100% 100%;
+  box-shadow: var(--gloss-top-soft), inset 0 -3.5px 0 rgba(8, 12, 24, 0.26), 0 3.5px 0 var(--ink);
+  display: inline-flex;
+  align-items: center;
+  font-size: 15.5px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.14s var(--ease-bounce);
+}
+
+.ui-keycap-pill:hover {
+  transform: translateY(-1.5px);
+}
+
+.ui-keycap-pill:active {
+  transform: translateY(2px);
+}
+
+/* ================= CONFETTI BURST LAYER ================= */
+#ui-confetti-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 90;
+  overflow: hidden;
+}
+
+.ui-confetti-piece {
+  position: fixed;
+  width: 12px;
+  height: 8px;
+  border-radius: 2px;
+  border: 1.5px solid var(--ink);
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* ================= SHARED ANIMATIONS ================= */
+@keyframes uiModalPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.86) translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes uiPopBounce {
+  0% {
+    opacity: 0;
+    transform: scale(0.82) translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes uiToastPop {
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.84);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes uiDeltaRise {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.75);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.1);
+  }
+  75% {
+    opacity: 1;
+    transform: translateY(-20px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-34px) scale(0.92);
+  }
+}
+
+@keyframes uiSpinSlow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes uiTwinkle {
+  0%, 100% {
+    transform: scale(0.7) rotate(0deg);
+    opacity: 0.65;
+  }
+  50% {
+    transform: scale(1.22) rotate(22deg);
+    opacity: 1;
+  }
+}
+
+@keyframes uiBadgePop {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.14);
+  }
+}

@@ -1,0 +1,161 @@
+/* ==========================================================================
+   ALUN ARCADE GLOSS UI KIT — DESIGN TOKENS
+   Inspired by tactile, thick-outlined, checkered glossy cartoon game UIs.
+   Single source of truth for typography, ink outlines, 3D bevels, patterns,
+   and 10 color swatches shared across every HUD widget, card, tab & modal.
+   ========================================================================== */
+
+:root {
+  /* Typography */
+  --font-display: 'Fredoka', 'Nunito', 'Arial Rounded MT Bold', 'Trebuchet MS', system-ui, sans-serif;
+  --font-body: 'Nunito', 'Fredoka', 'Segoe UI', system-ui, sans-serif;
+
+  /* Ink Outlines & Radii */
+  --ink: #0d121d;
+  --ink-soft: #161e2e;
+  --border-xl: 4px;
+  --border-lg: 3.5px;
+  --border-md: 3px;
+  --border-sm: 2.5px;
+
+  --radius-modal: 26px;
+  --radius-card: 20px;
+  --radius-stage: 15px;
+  --radius-btn: 15px;
+  --radius-tab: 14px;
+  --radius-pill: 999px;
+
+  /* 3D Comic Depth & Gloss */
+  --gloss-top: inset 0 3.5px 0 rgba(255, 255, 255, 0.46);
+  --gloss-top-soft: inset 0 2.5px 0 rgba(255, 255, 255, 0.3);
+  --lip-bot-lg: inset 0 -6px 0 rgba(8, 12, 24, 0.3);
+  --lip-bot-md: inset 0 -5px 0 rgba(8, 12, 24, 0.28);
+  --lip-bot-sm: inset 0 -4px 0 rgba(8, 12, 24, 0.26);
+
+  --shadow-modal: 0 10px 0 #090d16, 0 26px 64px rgba(4, 8, 18, 0.76);
+  --shadow-card: 0 6px 0 var(--ink), 0 12px 24px rgba(6, 10, 20, 0.38);
+  --shadow-btn: 0 5px 0 var(--ink), 0 8px 16px rgba(6, 10, 20, 0.35);
+  --shadow-btn-press: 0 1.5px 0 var(--ink), 0 2px 6px rgba(6, 10, 20, 0.28);
+  --shadow-pill: 0 4.5px 0 var(--ink), 0 10px 20px rgba(6, 10, 20, 0.38);
+
+  /* Motion */
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-snappy: cubic-bezier(0.22, 1.24, 0.36, 1);
+
+  /* Signature Checkered Pattern SVGs (Crisp 2x2 Tile) */
+  --pattern-checker-white: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Crect width='12' height='12' fill='%23ffffff' fill-opacity='0.11'/%3E%3Crect x='12' y='12' width='12' height='12' fill='%23ffffff' fill-opacity='0.11'/%3E%3C/svg%3E");
+  --pattern-checker-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Crect width='12' height='12' fill='%230d121d' fill-opacity='0.065'/%3E%3Crect x='12' y='12' width='12' height='12' fill='%230d121d' fill-opacity='0.065'/%3E%3C/svg%3E");
+  --pattern-checker-paper: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Crect width='14' height='14' fill='%23dbe4f0' fill-opacity='0.36'/%3E%3Crect x='14' y='14' width='14' height='14' fill='%23dbe4f0' fill-opacity='0.36'/%3E%3C/svg%3E");
+
+  /* Default Swatch Fallback (Blue) */
+  --sw-top: #5dd4ff;
+  --sw-bot: #2273ee;
+  --sw-stage-top: #37a5f5;
+  --sw-stage-bot: #195cc9;
+  --sw-glow: rgba(74, 198, 255, 0.45);
+  --sw-text: #ffffff;
+}
+
+/* ==========================================================================
+   COLOR SWATCH SYSTEM (Apply via data-swatch="orange|blue|green|gold|...")
+   Every template component inherits these tokens for 100% palette cohesion.
+   ========================================================================== */
+
+[data-swatch='orange'] {
+  --sw-top: #ffc048;
+  --sw-bot: #ef6114;
+  --sw-stage-top: #ec822b;
+  --sw-stage-bot: #c84a12;
+  --sw-glow: rgba(255, 165, 54, 0.5);
+  --sw-text: #ffffff;
+}
+
+[data-swatch='blue'] {
+  --sw-top: #62d7ff;
+  --sw-bot: #2474ed;
+  --sw-stage-top: #3aa7f6;
+  --sw-stage-bot: #1a58c7;
+  --sw-glow: rgba(78, 198, 255, 0.48);
+  --sw-text: #ffffff;
+}
+
+[data-swatch='green'] {
+  --sw-top: #74f664;
+  --sw-bot: #1db43c;
+  --sw-stage-top: #3fd855;
+  --sw-stage-bot: #168f31;
+  --sw-glow: rgba(84, 240, 98, 0.48);
+  --sw-text: #ffffff;
+}
+
+[data-swatch='gold'] {
+  --sw-top: #ffea58;
+  --sw-bot: #f29612;
+  --sw-stage-top: #f7c937;
+  --sw-stage-bot: #cf790c;
+  --sw-glow: rgba(255, 224, 72, 0.55);
+  --sw-text: #ffffff;
+}
+
+[data-swatch='teal'] {
+  --sw-top: #5af4d2;
+  --sw-bot: #12a19d;
+  --sw-stage-top: #2dd2be;
+  --sw-stage-bot: #0c7a7c;
+  --sw-glow: rgba(72, 240, 212, 0.48);
+  --sw-text: #ffffff;
+}
+
+[data-swatch='purple'] {
+  --sw-top: #c278ff;
+  --sw-bot: #7633ec;
+  --sw-stage-top: #9d56f7;
+  --sw-stage-bot: #5c22c7;
+  --sw-glow: rgba(182, 110, 255, 0.48);
+  --sw-text: #ffffff;
+}
+
+[data-swatch='red'] {
+  --sw-top: #ff6b74;
+  --sw-bot: #d91e34;
+  --sw-stage-top: #ec4352;
+  --sw-stage-bot: #ae1628;
+  --sw-glow: rgba(255, 86, 98, 0.5);
+  --sw-text: #ffffff;
+}
+
+[data-swatch='pink'] {
+  --sw-top: #ff78c4;
+  --sw-bot: #db2886;
+  --sw-stage-top: #ef4ca6;
+  --sw-stage-bot: #b11b6a;
+  --sw-glow: rgba(255, 110, 190, 0.48);
+  --sw-text: #ffffff;
+}
+
+[data-swatch='slate'] {
+  --sw-top: #d7e0ec;
+  --sw-bot: #9aa8bc;
+  --sw-stage-top: #b3c0d2;
+  --sw-stage-bot: #818fa5;
+  --sw-glow: rgba(180, 196, 220, 0.35);
+  --sw-text: #ffffff;
+}
+
+[data-swatch='dark'] {
+  --sw-top: #4b5673;
+  --sw-bot: #272e43;
+  --sw-stage-top: #374059;
+  --sw-stage-bot: #1f2536;
+  --sw-glow: rgba(108, 128, 178, 0.35);
+  --sw-text: #ffffff;
+}
+
+[data-swatch='white'] {
+  --sw-top: #ffffff;
+  --sw-bot: #e9eff7;
+  --sw-stage-top: #f7faff;
+  --sw-stage-bot: #dde6f2;
+  --sw-glow: rgba(255, 255, 255, 0.4);
+  --sw-text: #ffffff;
+}
