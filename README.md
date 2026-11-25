@@ -20,6 +20,13 @@ Semua dilakukan dengan satu gerakan: **klik dan geser di air** untuk mengirim om
 | 1 / 2 / 3 | Ganti tab Kalibrasi |
 | G | Pengaturan grafis |
 | M | Suara |
+| Esc / Enter / Spasi | Lewati intro |
+
+Permainan baru dibuka dengan intro singkat: drone menyisir laguna yang masih bersih, rombongan wisatawan datang dan membuang sampah ke laut, lalu A.L.U.N. aktif. Sampah yang mereka buang adalah sampah yang kamu bersihkan. Pemain yang mengaktifkan *reduce motion* di sistemnya langsung masuk ke permainan.
+
+Setelah sekitar 40 detik bermain, seekor lumba-lumba terjerat jaring hantu (sekali per save). Kamera beralih ke lokasinya, lalu kirim ombak ke arahnya sampai tiga lapis jaringnya lepas. Potongan jaring dan sampahnya jatuh ke air dan bisa disapu ke Jaring Desa.
+
+Kicauan burung mengikuti keadaan laguna: makin ramai saat laguna pulih, hilang saat badai, dan terdiam saat sampah dibuang di intro.
 
 Koin dari sampah dipakai untuk upgrade. Waktu hari dan kesehatan laguna berubah mengikuti kemajuan, dari pagi sampai badai muson dan kapal limbah.
 
@@ -34,7 +41,7 @@ npm run build    # hasil di dist/
 npm run preview  # mencoba hasil build
 ```
 
-Game butuh browser dengan WebGL2 (Chrome, Edge, atau Firefox terbaru). `lab.html` hanya untuk pengembangan: mengatur waktu hari, kesehatan laguna, dan mencoba cutscene.
+Game butuh browser dengan WebGL2 (Chrome, Edge, atau Firefox terbaru). `lab.html` hanya untuk pengembangan: mengatur waktu hari, kesehatan laguna, dan mencoba cutscene, intro (tombol Opening), serta penyelamatan lumba-lumba (tombol Dolphin).
 
 ## Pengaturan grafis
 
@@ -57,6 +64,8 @@ Pengukuran di 1919x948:
 | `src/audio.ts` | Suara yang disintesis dengan Web Audio |
 | `src/ui.ts`, `src/ui-kit/` | Antarmuka |
 | `src/scene/` | Renderer 3D, air, hutan, terumbu, desa, post-processing, cutscene |
+| `src/scene/opening.ts` | Intro permainan baru: tur drone, kapal wisata yang membuang sampah, A.L.U.N. aktif |
+| `src/scene/rescue.ts` | Lumba-lumba terjerat jaring: model, kamera, lapisan jaring, lompatan saat bebas |
 | `src/scene/quality.ts` | Definisi tier grafis |
 | `concepts/` | Klip adegan 3D dan contoh UI kit |
 

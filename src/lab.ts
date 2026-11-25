@@ -23,8 +23,51 @@ setUp({ wave_width: 2, wave_power: 2, tidal_charge: 1, net_expand: 1, trash_dens
 
 const step = (dt: number): void => {
   const stats = computeStats(progress);
-  sim.update(dt * renderer.director.speed, progress, stats);
-  renderer.render(sim, progress, stats, true);
+  const film = renderer.openingActive;
+  // under the opening the lagoon only drifts, the same as in the game
+  if (film) {
+    sim.updateAmbientOnly(dt, progress, stats);
+    sim.drift(dt);
+  } else sim.update(dt * renderer.director.speed, progress, stats);
+  renderer.render(sim, progress, stats, !film);
+};
+
+/** The dolphin event as the game plays it: watch, then free it with waves from the close view. */
+const rescue = (): void => {
+  const stage = $('stage');
+  const caption = $('caption');
+  const e = sim.spawnDolphin();
+  stage.classList.add('film');
+  renderer.playRescue(sim, e.id, {
+    caption: (kicker, line) => {
+      caption.innerHTML = line ? `${kicker ? `<b>${kicker}</b>` : ''}${line}` : '';
+    },
+    help: () => stage.classList.remove('film'),
+    freed: () => stage.classList.add('film'),
+    done: () => stage.classList.remove('film'),
+  });
+};
+
+/** The opening as the game plays it, from an empty lagoon. */
+const opening = (): void => {
+  const stage = $('stage');
+  const caption = $('caption');
+  const stats = computeStats(progress);
+  // the opening sets the lagoon's health and light itself
+  renderer.forceEco = null;
+  renderer.forceTod = null;
+  sim.initLagoon(progress, stats, true);
+  stage.classList.add('film');
+  renderer.playOpening(
+    sim,
+    stats,
+    {
+      caption: (kicker, line) => {
+        caption.innerHTML = line ? `${kicker ? `<b>${kicker}</b>` : ''}${line}` : '';
+      },
+    },
+    () => stage.classList.remove('film')
+  );
 };
 
 const api = {
@@ -44,6 +87,8 @@ const api = {
   tod(t: TimeOfDay | null): void {
     renderer.forceTod = t;
   },
+  opening,
+  rescue,
 };
 /** A wave big enough to fill the frame, whatever the upgrades say. */
 const bigWave = (x: number, y: number, tilt: number, width: number, charge: number): void => {
@@ -159,6 +204,7 @@ onButtons('throw', 'c', (v) => {
 onButtons('cam', 'cam', (v) => {
   const d = renderer.director;
   if (v === 'cut') d.cutscene(INTRO);
+  else if (v === 'opening') opening();
   else d.setMode(v as 'play' | 'title', 2.8);
 });
 
@@ -169,6 +215,7 @@ onButtons('spawn', 's', (v) => {
     progress.upgrades.ai_buoy = ((progress.upgrades.ai_buoy ?? 0) % 3) + 1;
     any.syncAiBuoys(computeStats(progress));
   } else if (v === 'loot') for (const r of RARE) any.spawnSingleTrash(computeStats(progress), true, r);
+  else if (v === 'dolphin') rescue();
   else any[`spawn${v}`]();
 });
 

@@ -94,6 +94,9 @@ export const MANGROVE_SLOTS: Point[] = MANGROVE_YS.map((y, idx) => ({
   y,
 }));
 
+/** Where the dolphin gets caught: the south-east of the lagoon, in the lee of the small rocks. */
+export const DOLPHIN_SPOT: Point = { x: 880, y: 560 };
+
 /** Strategic lagoon coordinates for Autonomous AI Buoys */
 export const AI_BUOY_SLOTS: Point[] = [
   { x: 640, y: 355 },

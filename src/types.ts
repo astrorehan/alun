@@ -1,4 +1,4 @@
-export type GamePhase = 'title' | 'playing' | 'upgrade' | 'victory';
+export type GamePhase = 'title' | 'intro' | 'playing' | 'upgrade' | 'victory';
 
 export type ShopTab = 'cards' | 'tree' | 'achievements';
 
@@ -106,7 +106,8 @@ export type EntityKind =
   | 'boat'
   | 'fire'
   | 'oil'
-  | 'trawler';
+  | 'trawler'
+  | 'dolphin';
 
 export interface Entity {
   id: number;
@@ -219,6 +220,8 @@ export interface PlayerProgress {
   victoryAchieved: boolean;
   endlessMode: boolean;
   claimedAchievements: string[];
+  /** The dolphin caught in the ghost net has been set free. Missing in older saves. */
+  dolphinRescued?: boolean;
 }
 
 export interface RarityWeights {

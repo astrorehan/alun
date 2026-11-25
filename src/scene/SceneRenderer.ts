@@ -25,6 +25,8 @@ import { Village } from './village';
 import { Net } from './net';
 import { Fx, TextLayer } from './fx';
 import { Actors } from './actors';
+import { Opening, type OpeningHooks } from './opening';
+import { Rescue, type RescueHooks } from './rescue';
 import { shoreAt, simX, simY, toX, toZ, UNIT } from './space';
 
 const REFRESH_BANDS = 16;
@@ -176,6 +178,8 @@ export class SceneRenderer {
   private net: Net;
   private fx: Fx;
   private actors: Actors;
+  private opening: Opening;
+  private rescue: Rescue;
   private text: TextLayer;
 
   private canvas: HTMLCanvasElement;
@@ -290,6 +294,8 @@ export class SceneRenderer {
     this.fx = new Fx(this.water);
     this.actors = new Actors(this.water, this.net, this.fx);
     this.actors.onCatch = () => this.village.cheer();
+    this.opening = new Opening(this.water, this.fx, this.actors);
+    this.rescue = new Rescue(this.water, this.fx, this.actors, this.director);
 
     this.underDynGroup.add(this.reef.dynGroup);
     this.underDynGroup.add(this.actors.underGroup);
@@ -299,6 +305,8 @@ export class SceneRenderer {
     this.dynGroup.add(this.beach.dynGroup);
     this.dynGroup.add(this.net.group);
     this.dynGroup.add(this.actors.group);
+    this.dynGroup.add(this.opening.group);
+    this.dynGroup.add(this.rescue.group);
 
     this.worldScene.add(this.staticGroup, this.underDynGroup, this.dynGroup);
 
@@ -544,10 +552,84 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     if (phase === this.phase) return;
     const first = this.phase === null;
     this.phase = phase;
+    this.forceNextFrame = true;
+    // the opening flies the camera itself
+    if (phase === 'intro') return;
     const mode = phase === 'title' ? 'title' : 'play';
     if (first) this.director.snap(mode);
     else this.director.setMode(mode, 2.8);
+  }
+
+  /**
+   * Plays the opening film over the live lagoon. `sim` should start empty: the tourists fill it.
+   * `done` runs once, when the film ends or is skipped, with the camera on its way to the play view.
+   */
+  playOpening(sim: GameSimulation, stats: ComputedStats, hooks: OpeningHooks, done: () => void): void {
+    this.opening.end();
+    this.opening.begin(sim, stats, hooks);
+    this.director.film(
+      (t, out) => this.opening.shoot(t, out, this.director.playPose),
+      () => {
+        this.opening.end();
+        done();
+      }
+    );
     this.forceNextFrame = true;
+  }
+
+  /** Cuts the opening short, leaving the lagoon exactly as the end of it would have. */
+  skipOpening(): void {
+    if (!this.opening.active) return;
+    this.opening.finish();
+    this.director.skip();
+  }
+
+  get openingActive(): boolean {
+    return this.opening.active;
+  }
+
+  /**
+   * Pulls the camera away to the tangled dolphin (entity `id`, see GameSimulation.spawnDolphin) and
+   * keeps play there until it is free, then films it leaping away and comes back to the lagoon.
+   */
+  playRescue(sim: GameSimulation, id: number, hooks: RescueHooks): void {
+    this.rescue.cancel();
+    this.rescue.begin(sim, id, hooks);
+    this.forceNextFrame = true;
+  }
+
+  /** Skips the rescue's current film, if one is running. */
+  skipRescueFilm(): void {
+    this.rescue.skip();
+  }
+
+  /** Drops the rescue without ceremony (reset, new game). */
+  cancelRescue(): void {
+    this.rescue.cancel();
+  }
+
+  get rescueActive(): boolean {
+    return this.rescue.active;
+  }
+
+  /** Where to draw the "swipe like this" hint, in CSS pixels, while the player has not hit the net yet. */
+  rescueHint(): { ax: number; ay: number; bx: number; by: number } | null {
+    const h = this.rescue.hint();
+    if (!h || this.director.inCutscene) return null;
+    const cam = this.director.camera;
+    const r = this.canvas.getBoundingClientRect();
+    const sh = this.director.screenShift;
+    const toScreen = (v: THREE.Vector3): [number, number] | null => {
+      v.project(cam);
+      if (v.z > 1) return null;
+      // undo the 2D parallax shift the same way screenToWorld does, but in reverse
+      const u = (v.x * 0.5 + 0.5 - 0.5 - sh.x) * sh.z + 0.5;
+      const w = (v.y * 0.5 + 0.5 - 0.5 - sh.y) * sh.z + 0.5;
+      return [r.left + u * r.width, r.top + (1 - w) * r.height];
+    };
+    const a = toScreen(h.from);
+    const b = toScreen(h.to);
+    return a && b ? { ax: a[0], ay: a[1], bx: b[0], by: b[1] } : null;
   }
 
   setSettingsOpen(open: boolean): void {
@@ -862,7 +944,9 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     // the title shows the lagoon as it should be; pressing play reveals the one you are handed
     const onTitle = this.phase === 'title';
     const tod = this.forceTod ?? (onTitle ? 'dawn' : sim.getTimeOfDay(progress, stats));
-    const ecoTarget = (this.forceEco ?? (onTitle ? Math.max(85, stats.ecoPercent) : stats.ecoPercent)) / 100;
+    // the opening starts from the lagoon of the title and spoils it as the rubbish goes in
+    const ecoNow = this.opening.active ? this.opening.eco(stats.ecoPercent) : onTitle ? Math.max(85, stats.ecoPercent) : stats.ecoPercent;
+    const ecoTarget = (this.forceEco ?? ecoNow) / 100;
     if (this.lastTod === null) {
       this.look = cloneLook(LOOKS[tod]);
       this.lastTod = tod;
@@ -884,6 +968,11 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     this.shore.update(dt, this.time, this.look.swell);
     this.director.use2DShift = Q.cached && this.fixedDt === null;
     this.director.update(real, sim.screenShake);
+    if (this.opening.active) {
+      // something else took the camera (the lab's buttons can): wrap the opening up where it stands
+      if (this.director.inCutscene) this.opening.update(this.director.clock, dt, this.time, this.look.swell, this.director.camera.position);
+      else this.opening.finish();
+    }
 
     const cam = this.director.camera;
     const cine = this.director.cinematic();
@@ -900,6 +989,8 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     }
     this.fx.update(dt, this.time, sim, stats, this.look, cam.position, cine);
     this.actors.update(dt, this.time, sim, stats, this.look, cam.position, cine);
+    // after the sprite batch is opened, so its marker rings make it to the screen
+    this.rescue.update(dt, this.time, this.look.swell, stats);
     this.fx.sprites.end();
     this.village.applyLamps([...this.actors.lamps, ...this.net.lamps], this.time);
     this.flora.update(this.time, progress, stats.mangroveLevel > 0, stats.forestLevel > 0 || stats.ecoPercent >= 45 ? 1 : 0.2);

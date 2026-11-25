@@ -19,6 +19,7 @@ import { TropicalAudio } from './audio';
 import {
   AI_BUOY_SLOTS,
   COLLECTOR_NET,
+  DOLPHIN_SPOT,
   FIRE_SPOTS,
   getShoreX,
   MANGROVE_SLOTS,
@@ -161,8 +162,16 @@ export class GameSimulation {
     return 'monsoon';
   }
 
-  /** Initializes or resets the continuous tropical lagoon session. */
-  public initLagoon(progress: PlayerProgress, stats: ComputedStats): void {
+  /** How much trash a fresh lagoon starts with. */
+  public startingTrashCount(stats: ComputedStats): number {
+    return Math.min(stats.maxTrashCount, Math.max(9, Math.round(stats.maxTrashCount * 0.65)));
+  }
+
+  /**
+   * Initializes or resets the continuous tropical lagoon session.
+   * `clean` leaves the water empty and A.L.U.N. silent, for the opening that puts the trash there itself.
+   */
+  public initLagoon(progress: PlayerProgress, stats: ComputedStats, clean = false): void {
     this.waves = [];
     this.entities = [];
     this.particles = [];
@@ -183,7 +192,7 @@ export class GameSimulation {
     this.syncAiBuoys(stats);
 
     // Populate a rich, welcoming starting lagoon!
-    const initCount = Math.min(stats.maxTrashCount, Math.max(9, Math.round(stats.maxTrashCount * 0.65)));
+    const initCount = clean ? 0 : this.startingTrashCount(stats);
     for (let i = 0; i < initCount; i++) {
       this.spawnSingleTrash(stats, true);
     }
@@ -197,11 +206,41 @@ export class GameSimulation {
     const tod = this.getTimeOfDay(progress, stats);
     this.audio.setStormAmbience(tod === 'monsoon' ? 1 : 0);
 
+    if (!clean) this.greet(progress);
+  }
+
+  /** A.L.U.N.'s first words on the radio: how to play, for anyone who has not opened Kalibrasi yet. */
+  public greet(progress: PlayerProgress): void {
     if (!progress.shopUnlocked) {
       this.onRadio(
         'A.L.U.N. · SISTEM AKTIF',
         'Geser di air untuk menyapu limbah ke Jaring Desa. Kumpulkan 20 Koin untuk membuka Kalibrasi!'
       );
+    }
+  }
+
+  /**
+   * What floats while nobody is playing yet: trash bobs and slows to a stop where it fell, and nothing
+   * is pulled into the net or paid out. Used under the opening.
+   */
+  public drift(dt: number): void {
+    for (const e of this.entities) {
+      e.age += dt;
+      e.bobPhase += dt * 3.1;
+      e.hitFlash = Math.max(0, e.hitFlash - dt);
+      if (!isTrashKind(e.kind)) continue;
+      // the same easy westward set the lagoon has in play, without the net's pull
+      e.vx += (-6 + Math.sin(this.time + e.bobPhase) * 4) * dt;
+      e.vy += Math.cos(this.time * 0.8 + e.bobPhase) * 5 * dt;
+      const damp = Math.pow(0.962, dt * 60);
+      e.vx *= damp;
+      e.vy *= damp;
+      e.x += e.vx * dt;
+      e.y += e.vy * dt;
+      e.rotation += e.angVel * dt;
+      e.angVel *= 0.94;
+      e.y = Math.min(WORLD_H - 42, Math.max(42, e.y));
+      e.x = Math.min(WORLD_W - 24, Math.max(getShoreX(e.y) + e.radius + 4, e.x));
     }
   }
 
@@ -734,6 +773,27 @@ export class GameSimulation {
 
       if (!hit) continue;
 
+      // a tangled dolphin: every wave that reaches it tears a piece of the net away. It only counts once
+      // the player has been shown what to do, and the AI buoys leave this one to the player.
+      if (e.kind === 'dolphin') {
+        if (e.actionTimer > 0 && e.hp > 0 && w.kind !== 'buoy_pulse' && !w.hitMap.has(e.id)) {
+          w.hitMap.set(e.id, w.age);
+          const tear = w.kind === 'resonance' ? 3 : w.charge >= 0.55 ? 2 : 1;
+          e.hp = Math.max(0, e.hp - tear);
+          e.hitFlash = 0.32;
+          this.screenShake = Math.max(this.screenShake, 3.5);
+          this.spawnBurstParticles(e.x, e.y, '#c8fff4', 14);
+          if (e.hp <= 0) {
+            const reward = Math.round(e.value * stats.coinMultiplier);
+            this.awardCoins(reward, e.x, e.y - 20, 'LUMBA-LUMBA BEBAS!', '#7ffcff', progress);
+            progress.dolphinRescued = true;
+          } else {
+            this.spawnFloatingText(e.x, e.y - 26, tear > 1 ? 'SOBEK BESAR!' : 'JARING LEPAS!', '#c8fff4', 0.95);
+          }
+        }
+        continue;
+      }
+
       if (e.kind === 'fire') {
         const lastHit = w.hitMap.get(e.id) ?? -1;
         if (w.age - lastHit >= 0.2) {
@@ -863,6 +923,13 @@ export class GameSimulation {
       e.bobPhase += dt * 3.1;
       e.hitFlash = Math.max(0, e.hitFlash - dt);
       e.aiGuidedTimer = Math.max(0, e.aiGuidedTimer - dt);
+
+      // held fast by the net: it thrashes, but it goes nowhere
+      if (e.kind === 'dolphin') {
+        e.vx = 0;
+        e.vy = 0;
+        continue;
+      }
 
       if (e.kind === 'fire') {
         if (Math.random() < 0.32) {
@@ -1072,6 +1139,8 @@ export class GameSimulation {
           const reward = Math.round((32 + stats.mangroveLevel * 22) * stats.coinMultiplier * this.comboMult);
           this.awardCoins(reward, shore + 8, e.y - 14, 'MANGROVE TUMBUH!', '#5ef29e', progress);
           this.audio.playMangrovePlant();
+          // new trees, and the birds come straight back to them
+          this.audio.playBirdBurst(0.8);
           this.spawnBurstParticles(shore + 6, e.y, '#5ef29e', 16, 'leaf');
           continue;
         }
@@ -1229,6 +1298,17 @@ export class GameSimulation {
     overrideX?: number,
     overrideY?: number
   ): void {
+    this.entities.push(this.createTrash(stats, spreadAcrossLagoon, forcedRarity, overrideX, overrideY));
+  }
+
+  /** A piece of trash, ready to go in the water but not in it yet: the caller decides when it lands. */
+  public createTrash(
+    stats: ComputedStats,
+    spreadAcrossLagoon: boolean,
+    forcedRarity?: TrashRarity,
+    overrideX?: number,
+    overrideY?: number
+  ): Entity {
     const rarity = forcedRarity ?? this.rollTrashRarity(stats);
 
     let kind: EntityKind = 'trash_bottle';
@@ -1274,7 +1354,7 @@ export class GameSimulation {
       overrideX ?? (spreadAcrossLagoon ? 455 + Math.random() * 620 : 940 + Math.random() * 290);
     const y = overrideY ?? 76 + Math.random() * (WORLD_H - 152);
 
-    this.entities.push({
+    return {
       id: this.nextId++,
       kind,
       rarity,
@@ -1295,7 +1375,7 @@ export class GameSimulation {
       hitFlash: 0,
       variant: Math.floor(Math.random() * 3),
       actionTimer: 0,
-    });
+    };
   }
 
   private spawnMangroveSeed(initial: boolean): void {
@@ -1347,6 +1427,36 @@ export class GameSimulation {
       variant: Math.floor(Math.random() * 2),
       actionTimer: 0,
     });
+  }
+
+  /**
+   * A dolphin caught in a ghost net and rubbish, held in place until enough of the net is torn away.
+   * `hp` is the pieces of net still on it; `actionTimer` above zero means waves may tear at it.
+   */
+  public spawnDolphin(): Entity {
+    const e: Entity = {
+      id: this.nextId++,
+      kind: 'dolphin',
+      x: DOLPHIN_SPOT.x,
+      y: DOLPHIN_SPOT.y,
+      vx: 0,
+      vy: 0,
+      radius: 26,
+      mass: 99,
+      hp: 3,
+      maxHp: 3,
+      value: 150,
+      age: 0,
+      rotation: 0,
+      angVel: 0,
+      bobPhase: 0,
+      aiGuidedTimer: 0,
+      hitFlash: 0,
+      variant: 0,
+      actionTimer: 0,
+    };
+    this.entities.push(e);
+    return e;
   }
 
   private spawnFire(): void {

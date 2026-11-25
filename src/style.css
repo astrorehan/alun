@@ -220,6 +220,154 @@ body {
   pointer-events: none;
 }
 
+/* ================= RESCUE HINT ================= */
+.rescue-hint {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 14;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.rescue-hint line {
+  stroke: #ffe457;
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 1 17;
+  animation: rescueHintDash 0.8s linear infinite;
+}
+
+@keyframes rescueHintDash {
+  to {
+    stroke-dashoffset: -18;
+  }
+}
+
+.rescue-hint-ring {
+  fill: none;
+  stroke: #ffe457;
+  stroke-width: 5;
+  opacity: 0.9;
+}
+
+.rescue-hint-dot {
+  fill: #ffffff;
+  stroke: var(--ink);
+  stroke-width: 4;
+}
+
+.rescue-hint-label {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  fill: #ffffff;
+  stroke: var(--ink);
+  stroke-width: 5px;
+  paint-order: stroke fill;
+  stroke-linejoin: round;
+}
+
+/* ================= OPENING FILM (LETTERBOX + SUBTITLES) ================= */
+.intro-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.intro-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 9.5vh;
+  background: #05080f;
+  animation: introBarIn 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.intro-bar-top {
+  top: 0;
+  transform-origin: top;
+}
+
+.intro-bar-bottom {
+  bottom: 0;
+  transform-origin: bottom;
+}
+
+@keyframes introBarIn {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.intro-caption {
+  position: absolute;
+  left: 50%;
+  bottom: calc(9.5vh + 22px);
+  width: min(940px, 88vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+  transform: translateX(-50%);
+  transition: opacity 0.45s ease, transform 0.45s ease;
+}
+
+.intro-caption.is-out {
+  opacity: 0;
+  transform: translate(-50%, 8px);
+}
+
+.intro-kicker {
+  font-size: 15px;
+  letter-spacing: 0.14em;
+}
+
+.intro-kicker:empty {
+  display: none;
+}
+
+.intro-line {
+  font-size: clamp(22px, 2.5vw, 34px);
+  line-height: 1.2;
+}
+
+.intro-skip {
+  position: absolute;
+  right: 22px;
+  bottom: max(8px, calc(4.75vh - 22px));
+  gap: 10px;
+  pointer-events: auto;
+  animation: introSkipIn 0.4s ease 1.2s both;
+}
+
+.intro-skip-key {
+  padding: 1px 7px 2px;
+  border: 2px solid var(--ink);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.18);
+  font-size: 12px;
+  -webkit-text-stroke-width: 0;
+  text-shadow: none;
+}
+
+/* opacity only, so the button's own hover and press transforms still work */
+@keyframes introSkipIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* ================= TITLE SCREEN (BOLD HEROIC LAUNCH CARD) ================= */
 .title-screen {
   align-items: center;

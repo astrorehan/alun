@@ -138,6 +138,28 @@
         </div>
       </div>
 
+      <!-- ================= RESCUE HINT ("GESER" FROM OPEN WATER TO THE DOLPHIN) ================= -->
+      <svg id="rescue-hint" class="rescue-hint hidden" aria-hidden="true">
+        <line id="rescue-hint-line" x1="0" y1="0" x2="0" y2="0" />
+        <circle id="rescue-hint-ring" class="rescue-hint-ring" cx="0" cy="0" r="34" />
+        <circle id="rescue-hint-dot" class="rescue-hint-dot" cx="0" cy="0" r="14" />
+        <text id="rescue-hint-label" class="rescue-hint-label" x="0" y="0" text-anchor="end">GESER</text>
+      </svg>
+
+      <!-- ================= OPENING FILM (LETTERBOX + SUBTITLES) ================= -->
+      <section id="intro-overlay" class="intro-overlay hidden" aria-label="Pembukaan">
+        <div class="intro-bar intro-bar-top"></div>
+        <div class="intro-bar intro-bar-bottom"></div>
+        <div id="intro-caption" class="intro-caption is-out" role="status" aria-live="polite">
+          <span class="intro-kicker t-stroke-xs t-cyan" id="intro-kicker"></span>
+          <span class="intro-line t-stroke-md" id="intro-line"></span>
+        </div>
+        <button type="button" id="btn-skip-intro" class="ui-btn ui-btn-sm t-stroke-xs intro-skip" data-swatch="slate" title="Lewati pembukaan (Esc)">
+          <span>Lewati</span>
+          <span class="intro-skip-key">Esc</span>
+        </button>
+      </section>
+
       <!-- Floating Bottom-Center Pill Toast (+Koin / Terbuka / Error) -->
       <div id="ui-toast-host" class="ui-toast-host hidden" aria-live="polite"></div>
 

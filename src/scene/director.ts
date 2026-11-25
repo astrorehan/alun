@@ -14,6 +14,12 @@ const P = (px: number, py: number, pz: number, lx: number, ly: number, lz: numbe
   fov,
 });
 
+/**
+ * A camera move worked out live: given seconds into the take, write the pose for this frame.
+ * Return false once the take is over. Used when the camera has to keep up with something moving.
+ */
+export type Reel = (t: number, out: Pose) => boolean;
+
 export interface Shot {
   at: number;
   pose: Pose;
@@ -51,12 +57,15 @@ export const INTRO: Shot[] = [
 export class Director {
   readonly camera = new THREE.PerspectiveCamera(27, 16 / 9, 1, 1400);
   private play: Pose = P(0, 100, 80, 0, 0, 0, 27);
+  /** While set, play happens up close somewhere else: this replaces the overhead view as the resting pose. */
+  private focusPose: Pose | null = null;
   private cur: Pose = P(0, 100, 80, 0, 0, 0, 27);
   private from: Pose = P(0, 100, 80, 0, 0, 0, 27);
   private to: Pose | null = null;
   private t = 1;
   private dur = 1;
   private shots: Shot[] | null = null;
+  private reel: Reel | null = null;
   private shotT = 0;
   private after: (() => void) | null = null;
   /** Scene speed the running cutscene asks for; 1 the rest of the time. */
@@ -81,14 +90,46 @@ export class Director {
   poseVersion = 0;
 
   get inCutscene(): boolean {
-    return this.shots !== null;
+    return this.shots !== null || this.reel !== null;
+  }
+
+  /** Seconds into the running cutscene, or -1. Whatever performs in a cutscene keeps this clock so it stays in step with the camera. */
+  get clock(): number {
+    return this.shots || this.reel ? this.shotT : -1;
+  }
+
+  /** The overhead gameplay framing for the current aspect, as a copy. */
+  get playPose(): Pose {
+    return { pos: this.play.pos.clone(), look: this.play.look.clone(), fov: this.play.fov };
+  }
+
+  /** Where the camera settles when nothing is moving it. */
+  private rest(): Pose {
+    return this.mode === 'title' ? TITLE_POSE : (this.focusPose ?? this.play);
+  }
+
+  /**
+   * Moves play somewhere else for a while: the gameplay camera frames `p` instead of the lagoon, with
+   * input, parallax and caching working as usual. `null` goes back to the overhead view.
+   */
+  focus(p: Pose | null, seconds = 1.6): void {
+    this.focusPose = p ? { pos: p.pos.clone(), look: p.look.clone(), fov: p.fov } : null;
+    this.poseVersion++;
+    if (!this.shots && !this.reel && this.mode === 'play') {
+      this.hold = false;
+      this.moveTo(this.rest(), seconds);
+    }
+  }
+
+  get focused(): boolean {
+    return this.focusPose !== null;
   }
 
   /** True when the camera is resting at a fixed pose and safe to cache. */
   isSettled(): boolean {
-    if (this.shots || this.to) return false;
+    if (this.shots || this.reel || this.to) return false;
     if (this.hold) return true;
-    const tgt = this.mode === 'title' ? TITLE_POSE : this.play;
+    const tgt = this.rest();
     return (
       this.cur.pos.distanceToSquared(tgt.pos) < 1e-3 &&
       this.cur.look.distanceToSquared(tgt.look) < 1e-3 &&
@@ -96,9 +137,9 @@ export class Director {
     );
   }
 
-  /** 0 in the gameplay view, 1 when the camera is somewhere cinematic. */
+  /** 0 in the gameplay view (overhead, or a focus), 1 when the camera is somewhere cinematic. */
   cinematic(): number {
-    return clamp(this.cur.pos.distanceTo(this.play.pos) / 60, 0, 1);
+    return clamp(this.cur.pos.distanceTo((this.focusPose ?? this.play).pos) / 60, 0, 1);
   }
 
   fit(aspect: number): void {
@@ -146,8 +187,8 @@ export class Director {
     if (!this.started) {
       this.started = true;
       this.copy(this.cur, this.mode === 'title' ? TITLE_POSE : this.play);
-    } else if (!this.shots && !this.to && !this.hold && this.mode === 'play') {
-      this.copy(this.cur, this.play);
+    } else if (!this.shots && !this.reel && !this.to && !this.hold && this.mode === 'play') {
+      this.copy(this.cur, this.rest());
     }
     this.poseVersion++;
   }
@@ -159,22 +200,25 @@ export class Director {
   }
 
   setMode(mode: 'play' | 'title', seconds = 2.6): void {
-    if (mode === this.mode && !this.shots) return;
+    if (mode === this.mode && !this.shots && !this.reel) return;
     this.mode = mode;
     this.shots = null;
-    this.moveTo(mode === 'title' ? TITLE_POSE : this.play, seconds);
+    this.reel = null;
+    this.moveTo(this.rest(), seconds);
   }
 
   snap(mode: 'play' | 'title'): void {
     this.mode = mode;
     this.shots = null;
+    this.reel = null;
     this.to = null;
-    this.copy(this.cur, mode === 'title' ? TITLE_POSE : this.play);
+    this.copy(this.cur, this.rest());
     this.poseVersion++;
   }
 
   pose(p: Pose): void {
     this.shots = null;
+    this.reel = null;
     this.to = null;
     this.hold = true;
     this.copy(this.cur, p);
@@ -195,22 +239,43 @@ export class Director {
   cutscene(shots: Shot[], done?: () => void): void {
     this.hold = false;
     this.shots = shots;
+    this.reel = null;
+    this.shotT = 0;
+    this.after = done ?? null;
+    this.to = null;
+  }
+
+  /** Runs a live camera move and lands in the gameplay view (overhead, or the focus if one is set) when it is over. */
+  film(reel: Reel, done?: () => void): void {
+    this.hold = false;
+    this.mode = 'play';
+    this.shots = null;
+    this.reel = reel;
     this.shotT = 0;
     this.after = done ?? null;
     this.to = null;
   }
 
   skip(): void {
-    if (!this.shots) return;
+    if (!this.shots && !this.reel) return;
     this.shots = null;
-    this.moveTo(this.play, 1.6);
+    this.reel = null;
+    this.moveTo(this.rest(), 1.6);
     this.after?.();
     this.after = null;
   }
 
   update(dt: number, shake: number): void {
     let want = 1;
-    if (this.shots) {
+    if (this.reel) {
+      this.shotT += dt;
+      if (!this.reel(this.shotT, this.cur)) {
+        this.reel = null;
+        this.moveTo(this.rest(), 1.4);
+        this.after?.();
+        this.after = null;
+      }
+    } else if (this.shots) {
       const t0 = this.shotT;
       this.shotT += dt;
       const s = this.shots;
@@ -222,7 +287,7 @@ export class Director {
       }
       if (this.shotT >= last.at + 0.5) {
         this.shots = null;
-        this.moveTo(this.mode === 'title' ? TITLE_POSE : this.play, 3.2);
+        this.moveTo(this.rest(), 3.2);
         this.after?.();
         this.after = null;
       } else {
@@ -240,7 +305,7 @@ export class Director {
         this.poseVersion++;
       }
     } else if (!this.hold) {
-      const tgt = this.mode === 'title' ? TITLE_POSE : this.play;
+      const tgt = this.rest();
       if (this.cur.pos.distanceToSquared(tgt.pos) < 1e-4 && this.cur.look.distanceToSquared(tgt.look) < 1e-4) {
         this.copy(this.cur, tgt);
       } else {
@@ -257,7 +322,8 @@ export class Director {
     this.px += (this.parallaxX - this.px) * Math.min(1, dt * 2.4);
     this.py += (this.parallaxY - this.py) * Math.min(1, dt * 2.4);
     cam.position.copy(this.cur.pos);
-    const amt = this.hold ? 0 : this.mode === 'title' ? 0.5 : 0.9;
+    // a filmed move is framed by hand, so the pointer does not get to nudge it
+    const amt = this.hold || this.reel ? 0 : this.mode === 'title' ? 0.5 : 0.9;
     let sx = 0;
     let sy = 0;
     if (shake > 0.05) {

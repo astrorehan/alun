@@ -500,6 +500,7 @@ export function createInitialProgress(): PlayerProgress {
     victoryAchieved: false,
     endlessMode: false,
     claimedAchievements: [],
+    dolphinRescued: false,
   };
 }
 

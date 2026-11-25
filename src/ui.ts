@@ -102,6 +102,7 @@ export interface UIHandlers {
   onOpenShopFromVictory: () => void;
   onSelectQuality: (setting: QualitySetting) => void;
   onSettingsToggle?: (open: boolean) => void;
+  onSkipIntro: () => void;
   onTabSwitch?: () => void;
   onUiClick?: () => void;
   onUiError?: () => void;
@@ -110,6 +111,16 @@ export interface UIHandlers {
 export class GameUI {
   private hud = document.getElementById('hud')!;
   private titleScreen = document.getElementById('title-screen')!;
+  private introOverlay = document.getElementById('intro-overlay')!;
+  private introCaption = document.getElementById('intro-caption')!;
+  private introKicker = document.getElementById('intro-kicker')!;
+  private introLine = document.getElementById('intro-line')!;
+  private rescueHint = document.getElementById('rescue-hint')!;
+  private rescueLine = document.getElementById('rescue-hint-line')!;
+  private rescueRing = document.getElementById('rescue-hint-ring')!;
+  private rescueDot = document.getElementById('rescue-hint-dot')!;
+  private rescueLabel = document.getElementById('rescue-hint-label')!;
+  private eventObjective: { title: string; sub: string; icon: UiIconName; swatch: UiSwatch } | null = null;
   private upgradeScreen = document.getElementById('upgrade-screen')!;
   private victoryScreen = document.getElementById('victory-screen')!;
   private creditsModal = document.getElementById('credits-modal')!;
@@ -263,6 +274,9 @@ export class GameUI {
     this.btnContinue.addEventListener('click', () => {
       this.handlers.onUiClick?.();
       this.handlers.onContinue();
+    });
+    document.getElementById('btn-skip-intro')!.addEventListener('click', () => {
+      this.handlers.onSkipIntro();
     });
     this.btnOpenShop.addEventListener('click', () => {
       if (!this.btnOpenShop.disabled) {
@@ -560,10 +574,62 @@ export class GameUI {
 
   public showPhase(phase: GamePhase, hasSavedProgress: boolean): void {
     this.titleScreen.classList.toggle('hidden', phase !== 'title');
+    if (phase === 'intro' && this.introOverlay.classList.contains('hidden')) this.setIntroCaption('', '');
+    this.introOverlay.classList.toggle('hidden', phase !== 'intro');
     this.hud.classList.toggle('hidden', phase !== 'playing');
     this.upgradeScreen.classList.toggle('hidden', phase !== 'upgrade');
     this.victoryScreen.classList.toggle('hidden', phase !== 'victory');
     this.btnContinue.classList.toggle('hidden', !hasSavedProgress);
+  }
+
+  /** Letterbox and subtitles over play, for a short film in the middle of the game; the HUD steps aside. */
+  public setFilm(on: boolean): void {
+    if (on && this.introOverlay.classList.contains('hidden')) this.setIntroCaption('', '');
+    this.introOverlay.classList.toggle('hidden', !on);
+    this.hud.classList.toggle('hidden', on);
+  }
+
+  /** A mission that outranks the usual ones for a while (the dolphin), or `null` to go back to them. */
+  public setEventObjective(o: { title: string; sub: string; icon: UiIconName; swatch: UiSwatch } | null): void {
+    this.eventObjective = o;
+    this.lastObjectiveKey = '';
+  }
+
+  /** The "swipe like this" hint: a dot running from open water to the target, or `null` to hide it. */
+  public updateRescueHint(h: { ax: number; ay: number; bx: number; by: number } | null, time: number): void {
+    if (!h) {
+      if (!this.rescueHint.classList.contains('hidden')) this.rescueHint.classList.add('hidden');
+      return;
+    }
+    this.rescueHint.classList.remove('hidden');
+    const set = (el: Element, attrs: Record<string, number | string>): void => {
+      for (const k in attrs) el.setAttribute(k, String(attrs[k]));
+    };
+    set(this.rescueLine, { x1: h.ax.toFixed(1), y1: h.ay.toFixed(1), x2: h.bx.toFixed(1), y2: h.by.toFixed(1) });
+    const p = (time % 1.7) / 1.7;
+    const u = Math.min(1, p / 0.72);
+    const k = u * u * (3 - 2 * u);
+    set(this.rescueDot, {
+      cx: (h.ax + (h.bx - h.ax) * k).toFixed(1),
+      cy: (h.ay + (h.by - h.ay) * k).toFixed(1),
+      opacity: (p < 0.08 ? p / 0.08 : p > 0.82 ? Math.max(0, 1 - (p - 0.82) / 0.18) : 1).toFixed(2),
+    });
+    set(this.rescueRing, { cx: h.bx.toFixed(1), cy: h.by.toFixed(1), r: (34 + Math.sin(time * 5) * 5).toFixed(1) });
+    set(this.rescueLabel, { x: (h.ax - 26).toFixed(1), y: (h.ay + 7).toFixed(1) });
+  }
+
+  /** The opening's subtitle. Two empty strings fade it out. */
+  public setIntroCaption(kicker: string, line: string): void {
+    if (!line) {
+      this.introCaption.classList.add('is-out');
+      return;
+    }
+    this.introKicker.textContent = kicker;
+    this.introLine.textContent = line;
+    // restart the fade so each new line arrives on its own
+    this.introCaption.classList.add('is-out');
+    void this.introCaption.offsetWidth;
+    this.introCaption.classList.remove('is-out');
   }
 
   public showRadio(sender: string, text: string): void {
@@ -748,7 +814,10 @@ export class GameUI {
     let sub = '';
     let swatch: UiSwatch = 'orange';
 
-    if (!progress.shopUnlocked) {
+    if (this.eventObjective) {
+      ({ title, sub, icon, swatch } = this.eventObjective);
+      key = `event:${title}:${sub}`;
+    } else if (!progress.shopUnlocked) {
       key = 'unlock_shop';
       icon = 'coin';
       title = 'Kumpulkan 20 Koin';

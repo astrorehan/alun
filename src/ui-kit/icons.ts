@@ -45,7 +45,8 @@ export type UiIconName =
   | 'play'
   | 'info'
   | 'swipe'
-  | 'settings';
+  | 'settings'
+  | 'dolphin';
 
 const INK = '#0d121d';
 
@@ -329,6 +330,16 @@ export function getUiIconSvg(name: UiIconName, className = ''): string {
         <path d="M7 22C13 13 22 11 29 14" stroke="#68eeff" stroke-width="4.5" stroke-linecap="round"/>
         <path d="M24 8L31 14L23 19" fill="#ffe457" stroke="${INK}" stroke-width="2.6" stroke-linejoin="round"/>
         <circle cx="9" cy="23" r="4" fill="#ffffff" stroke="${INK}" stroke-width="2.6"/>
+      </svg>`;
+
+    case 'dolphin':
+      return `<svg${cls} viewBox="0 0 36 36" fill="none">
+        <path d="M16 12.4Q15.2 7.6 13 6.2Q19.4 6.8 21.8 11.4Z" fill="#3f9fd6" stroke="${INK}" stroke-width="2.4" stroke-linejoin="round"/>
+        <path d="M9.4 20.6L3.2 15.8Q4.6 21 3.4 26.4Z" fill="#3f9fd6" stroke="${INK}" stroke-width="2.4" stroke-linejoin="round"/>
+        <path d="M8.2 20.2C12 12.4 22 9.2 28 12.6C30 13.6 31.8 14.4 33.4 15.4C32 16.8 30 17.2 28 17.2C24 22.2 15 24.6 8.4 22.4Z" fill="#5ec2ef" stroke="${INK}" stroke-width="2.6" stroke-linejoin="round"/>
+        <path d="M11 21.4C16 22.8 23 21.4 27.4 17.6" stroke="#d8f4ff" stroke-width="2" stroke-linecap="round"/>
+        <path d="M18.2 19.8Q19.4 23.6 16.2 25.6Q16.4 22 15.4 20.2Z" fill="#3f9fd6" stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"/>
+        <circle cx="26.2" cy="14.2" r="1.3" fill="${INK}"/>
       </svg>`;
 
     case 'settings':

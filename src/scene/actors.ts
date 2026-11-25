@@ -454,6 +454,19 @@ interface Ghost {
   scale: number;
 }
 
+/** Something thrown by hand: it flies, tumbles, splashes, and only then becomes a thing in the sim. */
+interface Toss {
+  k: Kind;
+  from: THREE.Vector3;
+  to: THREE.Vector3;
+  t: number;
+  dur: number;
+  arc: number;
+  spin: number;
+  yaw: number;
+  land: () => void;
+}
+
 const SCALE: Record<Kind, number> = { bottle0: 1.02, bottle1: 1.05, bottle2: 1.0, bag0: 1.12, bag1: 1.12, bag2: 1.0, net: 1.08, crate: 1.02, battery: 1.12, relic: 1.15, seed: 1.2, boat0: 1.12, boat1: 1.12 };
 const SINK: Record<Kind, number> = { bottle0: 0.16, bottle1: 0.14, bottle2: 0.12, bag0: 0.2, bag1: 0.2, bag2: 0.1, net: 0.12, crate: 0.1, battery: 0.22, relic: 0.36, seed: 0.1, boat0: 0.16, boat1: 0.16 };
 
@@ -468,6 +481,7 @@ export class Actors {
   private n = {} as Record<Kind, number>;
   private seen = new Map<number, Seen>();
   private ghosts: Ghost[] = [];
+  private tosses: Toss[] = [];
   private slot = 0;
   private buoys: THREE.Mesh[] = [];
   private buoyU: { value: number }[] = [];
@@ -688,6 +702,29 @@ void main(){
     }
   }
 
+  /**
+   * Throws a piece of trash from a hand to the water. `land` runs on the splash, which is the moment
+   * the caller should put the entity in the sim, so the piece in the air and the one afloat are the same.
+   */
+  toss(e: { kind: EntityKind; variant: number }, from: THREE.Vector3, to: THREE.Vector3, dur: number, arc: number, land: () => void): void {
+    const k = kindOf(e);
+    if (!k) {
+      land();
+      return;
+    }
+    this.tosses.push({ k, from: from.clone(), to: to.clone(), t: 0, dur, arc, spin: (this.r() - 0.5) * 9, yaw: this.r() * 6.28, land });
+  }
+
+  /** Lands everything still in the air at once. */
+  landAll(): void {
+    for (const s of this.tosses.splice(0)) s.land();
+  }
+
+  /** A.L.U.N. bounces, the same way he does when the net catches something. */
+  cheerHero(): void {
+    this.heroJoy = 1;
+  }
+
   private floatAt(x: number, z: number, t: number, swell: number, span: number): number {
     const h = this.water.heightAt(x, z, t, swell);
     const hx = this.water.heightAt(x + span, z, t, swell);
@@ -819,6 +856,29 @@ void main(){
       const y = lerp(g.from.y, g.to.y, e) + Math.sin(u * Math.PI) * 4.6;
       this.put(g.k, x, y, z, g.rot + u * 5, g.scale * lerp(1.1, 0.5, e), 1, 0, 0.15, false, u * 4, u * 3);
       if (this.r() < dt * 40) this.fx.spray(x, y, z, 0, 0.6, 0, 0.1, 0.5, 2);
+    }
+
+    /* ---- trash on its way overboard */
+    for (let i = this.tosses.length - 1; i >= 0; i--) {
+      const s = this.tosses[i];
+      s.t += dt / s.dur;
+      if (s.t >= 1) {
+        const h = this.water.heightAt(s.to.x, s.to.z, t, swell);
+        this.water.splash({ x: s.to.x, z: s.to.z, radius: 1.5, foam: 1, impulse: 1.6 });
+        this.fx.burst(s.to.x, h + 0.2, s.to.z, 9, 4.2, 0, 0.14);
+        this.fx.spray(s.to.x, h + 0.3, s.to.z, 0, 1.4, 0, 0.9, 0.7, 1);
+        this.tosses.splice(i, 1);
+        s.land();
+        continue;
+      }
+      const u = s.t;
+      const x = lerp(s.from.x, s.to.x, u);
+      const z = lerp(s.from.z, s.to.z, u);
+      const y = lerp(s.from.y, s.to.y, u) + s.arc * 4 * u * (1 - u);
+      // trash is drawn big so it reads from the play camera; in a hand it would dwarf the hand, so it
+      // leaves small and arrives at the size it floats at
+      const grow = lerp(0.38, 1, smooth(0.1, 0.95, u));
+      this.put(s.k, x, y, z, s.yaw + u * s.spin, SCALE[s.k] * grow, 1, 0, 0, false, u * s.spin * 0.7, u * s.spin * 0.4);
     }
 
     for (const k of Object.keys(this.n) as Kind[]) {

@@ -26,11 +26,21 @@
       button.sel { background: #2fa8e8; color: #04223a; }
       input[type='range'] { width: 100%; margin: 0; accent-color: #37c7e8; }
       small { display: block; margin-top: 10px; color: #7f9cc2; font-size: 11px; line-height: 1.45; }
+      /* the opening's letterbox and subtitles, roughly as the game shows them */
+      .bar { position: absolute; left: 0; right: 0; height: 0; background: #05080f; pointer-events: none; transition: height 0.6s ease; }
+      .bar.top { top: 0; }
+      .bar.bottom { bottom: 0; }
+      .film .bar { height: 9.5vh; }
+      #caption { position: absolute; left: 50%; bottom: calc(9.5vh + 18px); transform: translateX(-50%); max-width: 80vw; text-align: center; color: #fff; font: 700 26px Fredoka, system-ui, sans-serif; text-shadow: 0 2px 0 #0d121d, 0 0 6px #0d121d; pointer-events: none; }
+      #caption b { display: block; font-size: 14px; letter-spacing: 0.12em; color: #74f3ff; }
     </style>
   </head>
   <body>
     <div id="stage">
       <canvas id="lab-canvas"></canvas>
+      <div class="bar top"></div>
+      <div class="bar bottom"></div>
+      <div id="caption"></div>
 
       <div id="panel">
         <h1>Scene lab</h1>
@@ -79,6 +89,7 @@
             <button data-cam="play">Play</button>
             <button data-cam="title">Title</button>
             <button data-cam="cut">Cutscene</button>
+            <button data-cam="opening">Opening</button>
           </div>
         </div>
         <div class="row">
@@ -90,6 +101,7 @@
             <button data-s="Trawler">Boss</button>
             <button data-s="buoy">AI buoy</button>
             <button data-s="loot">Rare loot</button>
+            <button data-s="dolphin">Dolphin</button>
           </div>
         </div>
         <small>Drag on the water to throw, hold to charge. H hides this panel, Space pauses.</small>

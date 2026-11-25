@@ -542,7 +542,7 @@ export class TextLayer {
       g.roundRect(p[0] - w / 2, p[1] - h / 2, w, h, h / 2);
       g.fill();
       const k = clamp(e.hp / e.maxHp, 0, 1);
-      g.fillStyle = e.kind === 'trawler' ? '#ff5d4a' : e.kind === 'fire' ? '#ff9a3d' : '#b58cff';
+      g.fillStyle = e.kind === 'trawler' ? '#ff5d4a' : e.kind === 'fire' ? '#ff9a3d' : e.kind === 'dolphin' ? '#5fe0c8' : '#b58cff';
       g.beginPath();
       g.roundRect(p[0] - w / 2, p[1] - h / 2, Math.max(h, w * k), h, h / 2);
       g.fill();
