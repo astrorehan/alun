@@ -1,15 +1,14 @@
 import assert from 'node:assert/strict';
-import { clearGame, loadGame, OLD_SAVE_KEY, SAVE_KEY, saveGame } from '../src/save';
-import { addDeposit, BOSS_HP, CALM, chapterTitle, heldPollution, PAY } from '../src/story/state';
-import type { PlayerProgress, UpgradeId } from '../src/types';
-import { computeStats, createInitialProgress, getUpgradeCost, isForSale, levelCap, UPGRADE_DEFS } from '../src/upgrades';
-import { PIER_END } from '../src/world';
+import { clearGame, loadBest, loadGame, OLD_SAVE_KEY, SAVE_KEY, saveGame, updateBest } from '../src/save';
+import { platesFor } from '../src/scene/plates';
+import { BASE_PIER_HP, buildNightWave, DAY_DURATION, heldPollution, NIGHT_DURATION, P_TRASH, pierRepairCost, PIRATE_SPECS, pirateScale, pirateSpec, REPAIR_HEAL } from '../src/story/state';
+import { PIRATE_KIND } from '../src/types';
+import { createInitialProgress, getUpgradeCost, isForSale, levelCap, UPGRADE_DEFS, UPGRADE_MAP } from '../src/upgrades';
+import { COLLECTOR_NET } from '../src/world';
 import { MemoryStore, seedRandom, Session, type Style } from './bot';
 
 const DT = 1 / 30;
-const SEEDS = [1, 2, 3];
-const STYLES: Style[] = ['biasa', 'tanpa', 'sejuta'];
-const checkpoints = new Map<number, string>();
+const SPECIAL_PIRATES = [PIRATE_KIND.shield, PIRATE_KIND.dumper, PIRATE_KIND.signal] as const;
 let passed = 0;
 let failed = 0;
 
@@ -24,469 +23,323 @@ function test(name: string, run: () => void): void {
   }
 }
 
-function time(s: number): string {
+function mm(s: number): string {
   return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 }
 
 function reach(s: Session, seconds: number, ready: () => boolean, label: string): void {
   if (!ready()) s.runFor(seconds, ready, DT);
-  assert.ok(ready(), `${label} pada ${time(s.clock)} (${s.sim.story.objective().title})`);
+  assert.ok(ready(), `${label} pada ${mm(s.clock)} (Hari ${s.progress.story.day}/${s.progress.story.cycle}, HP ${s.progress.story.pierHp}/${s.progress.story.maxPierHp})`);
 }
 
 function invariant(s: Session): void {
   assert.deepEqual(s.violations, []);
   assert.equal(s.progress.story.pollution, heldPollution(s.progress));
-  assert.ok(s.bestMinute() <= 492, `${s.bestMinute()} koin baru dalam 60 dtk`);
-  for (const start of s.starts) assert.ok(start.calm >= CALM, `${start.id}: jeda ${start.calm} dtk`);
-  const entries = s.jobs();
-  assert.equal(new Set(entries.map((entry) => entry.id)).size, entries.length);
-}
-
-function snapshot(s: Session): string {
-  s.save();
-  const raw = s.store.getItem(SAVE_KEY);
-  assert.ok(raw, 'Simpanan v3 tersedia');
-  return raw;
-}
-
-function resume(raw: string, style: Style = 'diam'): Session {
-  const store = new MemoryStore();
-  store.setItem(SAVE_KEY, raw);
-  assert.ok(loadGame(store).hasSave);
-  return new Session(store, style);
-}
-
-function at(chapter: number, style: Style = 'diam'): Session {
-  const raw = checkpoints.get(chapter);
-  assert.ok(raw, `Simpanan awal bab ${chapter} tersedia`);
-  seedRandom(14 + chapter);
-  return resume(raw, style);
+  assert.ok(s.progress.story.pierHp >= 0 && s.progress.story.pierHp <= s.progress.story.maxPierHp);
 }
 
 function reload(s: Session, style?: Style): Session {
-  const data = snapshot(s);
-  const before = s.progress.story;
-  const objective = s.sim.story.objective();
-  const restored = resume(data, style);
-  const after = restored.progress.story;
+  s.save();
+  const raw = s.store.getItem(SAVE_KEY);
+  assert.ok(raw, 'Simpanan v4 tersedia');
+  const store = new MemoryStore();
+  store.setItem(SAVE_KEY, raw);
+  assert.ok(loadGame(store).hasSave);
+  const restored = new Session(store, style ?? s.style);
   assert.equal(restored.progress.coins, s.progress.coins, 'Saldo');
-  assert.equal(restored.progress.totalCoinsEarned, s.progress.totalCoinsEarned, 'Pendapatan tercatat');
-  assert.deepEqual(restored.progress.upgrades, s.progress.upgrades, 'Pembelian');
-  assert.deepEqual(after.flags, before.flags, 'Bukti cerita');
-  for (const field of ['chapter', 'step', 'clock', 'pollution', 'calmUntil', 'turn', 'threat', 'jobSeq', 'supplyTimer', 'box', 'openingLeft', 'baskets', 'bossHp'] as const) {
-    assert.equal(after[field], before[field], field);
-  }
-  assert.deepEqual(after.arrivals, before.arrivals, 'Jatah pasang');
-  assert.deepEqual(after.trash, before.trash, 'Benda di laguna');
-  assert.deepEqual(after.sources, before.sources, 'Sumber pencemaran');
-  assert.deepEqual(after.log, before.log, 'Buku pembayaran');
-  assert.equal(after.job?.id, before.job?.id, 'ID kejadian');
-  assert.equal(restored.sim.story.objective().key, objective.key, 'Tujuan aktif');
+  assert.equal(restored.progress.story.day, s.progress.story.day, 'Hari');
+  assert.equal(restored.progress.story.cycle, s.progress.story.cycle, 'Siklus');
+  assert.equal(restored.progress.story.pierHp, s.progress.story.pierHp, 'HP Dermaga');
+  assert.equal(restored.progress.story.pirates.length, s.progress.story.pirates.length, 'Bajak laut aktif');
+  assert.equal(restored.progress.story.wavePlan.length, s.progress.story.wavePlan.length, 'Jadwal wave');
   return restored;
 }
 
-for (const style of STYLES) {
-  for (const seed of SEEDS) {
-    test(`cerita ${style}, seed ${seed}`, () => {
-      seedRandom(seed);
-      const start = style === 'sejuta' ? 1_000_000 : 0;
-      const s = new Session(new MemoryStore(), style, start);
-      assert.equal(s.progress.coins, start);
-      assert.equal(s.progress.story.pollution, 36);
-      assert.equal(s.progress.story.openingLeft, 6);
-      assert.equal(s.progress.story.arrivals.length, 6);
-      assert.equal(s.progress.shopUnlocked, false);
-      reach(s, 20 * 60, () => s.progress.story.flags.ending, 'Tamat');
-      invariant(s);
-      assert.deepEqual(s.chapters.map((chapter) => chapter.n), [2, 3, 4, 5, 6, 7, 8, 9]);
-      assert.equal(s.progress.story.pollution <= 30, true);
-      assert.ok(s.firstBlueprint >= 0 && s.workshop >= 0);
-      assert.equal(s.jobs().filter((job) => job.id.startsWith('ending-')).length, 1);
-      assert.equal(s.income.reduce((sum, payment) => sum + payment.amount, 0), s.progress.totalCoinsEarned);
-      if (style === 'tanpa') assert.deepEqual(s.bought, []);
-      if (style === 'sejuta') assert.ok(s.bought.some(({ id, level }) => id === 'wave_power' && level === 3));
-      assert.ok(s.progress.story.recoveries.length > 0, 'P pernah pulih ke 30 atau kurang');
-      console.log(JSON.stringify({
-        gaya: style, seed, bab: ['0:00', ...s.chapters.map(({ at }) => time(at))],
-        bengkel: time(s.workshop), cetakBiru: time(s.firstBlueprint),
-        pemasukanPerMenit: s.perMinute(), maksimum60Detik: s.bestMinute(), totalBaru: s.progress.totalCoinsEarned,
-        terburukP: s.worstP, pulihDetik: s.progress.story.recoveries, akhirP: s.progress.story.pollution,
-        jedaTersingkat: Math.min(...s.starts.map((j) => j.calm)).toFixed(1),
-      }));
-    });
-  }
-}
-
-test('simpanan awal tiap bab dapat dicapai dari awal', () => {
-  seedRandom(4);
-  const s = new Session(new MemoryStore(), 'biasa');
-  checkpoints.set(1, snapshot(s));
-  for (let chapter = 2; chapter <= 9; chapter++) {
-    reach(s, 240, () => s.progress.story.chapter === chapter, `Bab ${chapter}`);
-    checkpoints.set(chapter, snapshot(s));
-  }
-  invariant(s);
-});
-
-for (let chapter = 1; chapter <= 8; chapter++) {
-  test(`diam 240 dtk di bab ${chapter} · ${chapterTitle(chapter)}`, () => {
-    const s = at(chapter);
-    const before = s.jobs().length;
-    s.runFor(240);
-    assert.equal(s.progress.story.chapter, chapter);
-    assert.ok(s.jobs().slice(before).every((job) => job.pay === 0), 'Kejadian yang diabaikan tidak membayar');
-    assert.equal(s.progress.story.flags.ending, false);
-    invariant(s);
-  });
-}
-
-test('penjarahan gagal, jaring terbuka dan keranjang baru datang setelah jeda', () => {
-  const s = at(4);
-  reach(s, 120, () => s.sim.netClosed, 'Jaring ditutup penjarah');
-  const id = s.progress.story.job?.id;
-  reach(s, 50, () => s.jobs().some((j) => j.id === id && j.result === 'failed' && j.pay === 0), 'Dua keranjang hilang');
-  assert.equal(s.progress.story.baskets, 0);
-  assert.equal(s.sim.netClosed, false);
-  assert.equal(s.progress.story.chapter, 4);
-  assert.ok(s.radio.some((line) => line.includes('Dua-duanya dibawa lari')));
-  reach(s, 65, () => s.starts.some((j) => j.id !== id), 'Penjarahan berikutnya');
-  assert.equal(s.progress.story.baskets, 2);
-  invariant(s);
-  const retry = reload(s, 'tanpa');
-  reach(retry, 120, () => retry.progress.story.chapter === 5, 'Selamatkan keranjang percobaan berikutnya');
-  invariant(retry);
-});
-
-test('gelombang penjarah harus dihalau sebelum pukat cerita datang', () => {
-  const s = at(5);
-  assert.equal(s.progress.story.rounds, 2);
-  s.runFor(150);
-  assert.ok(s.starts.length > 0 && s.starts.every((j) => j.id.startsWith('raid-')), 'Hanya penjarah yang datang');
-  assert.equal(s.progress.story.rounds, 2, 'Penjarahan gagal tidak dihitung');
-  assert.equal(s.progress.story.chapter, 5);
-  const bot = reload(s, 'tanpa');
-  reach(bot, 200, () => bot.progress.story.rounds === 0, 'Dua gelombang dihalau');
-  reach(bot, 120, () => bot.progress.story.job?.kind === 'trawl', 'Pukat cerita datang');
-  invariant(bot);
-});
-
-test('pukat yang diabaikan meninggalkan jaring hantu dan dapat digagalkan lagi', () => {
-  const s = at(5);
-  s.progress.story.rounds = 0;
-  reach(s, 130, () => s.jobs().some((j) => j.kind === 'trawl' && j.result === 'failed'), 'Pukat lolos');
-  assert.equal(s.jobs().at(-1)?.pay, 0);
-  // the ghost net holds 6; pieces that strand meanwhile add their own 2 each
-  assert.ok((s.jobs().at(-1)?.dP ?? 0) >= 6);
-  assert.ok(s.progress.story.sources.some((q) => q.kind === 'ghost_net' && q.amount === 6));
-  assert.ok(s.sim.entities.some((entity) => entity.kind === 'ghost_net'));
-  assert.ok(s.sim.story.view.school.gone > 0);
-  const retry = reload(s, 'tanpa');
-  reach(retry, 150, () => retry.progress.story.chapter === 6, 'Pukat berikutnya gagal menangkap ikan');
-  invariant(s);
-  invariant(retry);
-});
-
-test('drum bocor, bantalan menyerap tumpahan dan upah turun menjadi 12', () => {
-  const s = at(6);
-  s.progress.story.rounds = 0;
-  const oldSpills = s.progress.story.sources.filter((q) => q.kind === 'spill').length;
-  reach(s, 130, () => s.progress.story.job?.phase === 'clean', 'Drum bocor');
-  assert.equal(s.progress.story.job?.leaked, true);
-  assert.equal(s.progress.story.sources.filter((q) => q.kind === 'spill').length, oldSpills + 1);
-  const retry = reload(s, 'tanpa');
-  reach(retry, 150, () => retry.progress.story.chapter === 7, 'Tumpahan terserap');
-  assert.equal(retry.jobs().at(-1)?.pay, 12);
-  assert.equal(retry.progress.story.sources.filter((q) => q.kind === 'spill').length, 0);
-  invariant(s);
-  invariant(retry);
-});
-
-test('simpan sebelum film selesai, sebelum peti tiba dan saat peti sudah lepas', () => {
-  const store = new MemoryStore();
-  assert.ok(saveGame(store, createInitialProgress()));
-  const opening = new Session(store, 'diam');
-  assert.equal(opening.sim.entities.filter((e) => e.opening).length, 6);
-  assert.equal(opening.progress.story.pollution, 36);
-  const s = at(1, 'tanpa');
-  reach(s, 80, () => s.progress.story.box === 'snagged', 'Enam sampah awal terangkat');
-  assert.equal(s.progress.coins, 28);
-  assert.equal(s.progress.shopUnlocked, false);
-  assert.equal(s.progress.story.openingLeft, 0);
-  const before = reload(s);
-  const box = before.sim.entities.find((e) => e.kind === 'toolbox');
-  assert.ok(box?.snagged);
-  const { from, to } = before.carry(box, PIER_END);
-  assert.ok(before.swipe(from, to));
-  reach(before, 2, () => before.progress.story.box === 'loose', 'Peti lepas');
-  const loose = reload(before, 'tanpa');
-  assert.deepEqual(loose.progress.story.boxAt, before.progress.story.boxAt);
-  assert.equal(loose.sim.entities.find((e) => e.kind === 'toolbox')?.snagged, false);
-  reach(loose, 60, () => loose.progress.shopUnlocked, 'Peti di tangan Bu Sari');
-  assert.equal(loose.progress.coins, 28);
-  invariant(loose);
-});
-
-test('ikuti panah dari sampah sampai perahu, dengan kunjungan bengkel tanpa pembelian', () => {
-  seedRandom(19);
-  let s = new Session(new MemoryStore(), 'diam');
-  const follow = (until: () => boolean) => {
-    for (let frame = 0; frame < 120 / DT && !until(); frame++) {
-      const { swipe } = s.sim.story.objective();
-      if (swipe && frame % 36 === 0 && s.sim.energy >= 18) s.swipe(swipe.from, swipe.to);
-      s.step(DT);
+test('alur penuh 5 hari (siang 150 dtk + malam 60 dtk) sampai kalahkan Kapal Induk Badai Muson', () => {
+  for (const seed of [1, 2]) {
+    seedRandom(seed);
+    const s = new Session(new MemoryStore(), 'biasa');
+    assert.equal(s.progress.story.cycle, 'prep');
+    assert.equal(s.progress.story.pierHp, BASE_PIER_HP);
+    reach(s, 90, () => s.progress.story.cycle === 'day', 'Bengkel buka & Hari 1 mulai');
+    assert.equal(s.progress.shopUnlocked, true);
+    reach(s, 24 * 60, () => s.progress.story.flags.ending || s.progress.story.defeated, 'Tamat Malam 5');
+    assert.equal(s.progress.story.defeated, false, 'Pemain aktif yang upgrade bertahan sampai Badai Muson');
+    assert.equal(s.progress.story.flags.boss, true, 'Kapal Induk dikalahkan');
+    assert.equal(s.progress.story.day, 6, 'Masuk Hari 6 Endless');
+    assert.equal(s.progress.story.nightsSurvived, 5, 'Lima malam dilewati');
+    assert.ok(s.bought.length >= 12, `Beli banyak upgrade incremental (${s.bought.length})`);
+    assert.ok(s.progress.story.piratesSunk >= 45, `Banyak bajak laut dihalau (${s.progress.story.piratesSunk})`);
+    for (const variant of SPECIAL_PIRATES) {
+      const spec = PIRATE_SPECS[variant];
+      assert.equal(s.radio.filter((line) => line === `BU SARI: ${spec.intro}`).length, 1, spec.name);
     }
-    assert.ok(until(), s.sim.story.objective().title);
-  };
-  follow(() => s.progress.shopUnlocked);
-  s = reload(s);
-  s.runFor(45);
-  const visit = s.sim.story.objective();
-  assert.equal(visit.key, 'workshop');
-  assert.equal(visit.at, undefined);
-  assert.equal(visit.swipe, undefined);
-  assert.equal(s.progress.story.job, null);
-  assert.equal(s.progress.coins >= getUpgradeCost('wave_width', 0), true);
-  assert.ok(s.sim.story.leaveWorkshop());
-  assert.equal(s.sim.story.leaveWorkshop(), false);
-  assert.equal(s.sim.story.objective().key, 'rope');
-  assert.equal(s.sim.story.objective().at, undefined);
-  s = reload(s);
-  const legacy = JSON.parse(snapshot(s)) as PlayerProgress;
-  delete legacy.story.marks.workshopVisit;
-  const oldVisit = resume(JSON.stringify(legacy));
-  assert.equal(oldVisit.sim.story.objective().key, 'workshop');
-  assert.ok(oldVisit.sim.story.leaveWorkshop());
-  follow(() => s.progress.story.job?.kind === 'dolphin' && s.progress.story.job.hp === 2);
-  s = reload(s);
-  assert.equal(s.sim.story.objective().progress, '1/3');
-  const midRescue = JSON.parse(snapshot(s)) as PlayerProgress;
-  delete midRescue.story.marks.workshopVisit;
-  assert.equal(resume(JSON.stringify(midRescue)).sim.story.objective().progress, '1/3');
-  follow(() => s.progress.story.flags.dolphin);
-  assert.equal(s.sim.story.objective().at, undefined);
-  follow(() => s.progress.story.flags.damar);
-  assert.equal(s.sim.story.objective().at, undefined);
-  assert.equal(s.progress.upgrades.wave_width, 0);
+    invariant(s);
+    console.log(JSON.stringify({
+      seed,
+      tamat: mm(s.clock),
+      koinTotal: s.progress.totalCoinsEarned,
+      upgrade: s.bought.length,
+      kapalDihalau: s.progress.story.piratesSunk,
+      resonansi: s.progress.totalResonances,
+      hpMin: s.minPierHp,
+      hpAkhir: `${s.progress.story.pierHp}/${s.progress.story.maxPierHp}`,
+    }));
+  }
 });
 
-test('transaksi Tenaga Pasang disimpan langsung tanpa biaya kedua', () => {
-  const s = at(4, 'biasa');
-  s.progress.coins = Math.max(s.progress.coins, getUpgradeCost('wave_power', 0));
-  const prior = s.progress.coins;
-  assert.equal(s.progress.upgrades.wave_power, 0);
+test('diam tidak bertahan: bajak laut menghancurkan dermaga -> kalah & tidak bisa dilanjutkan', () => {
+  seedRandom(7);
+  const store = new MemoryStore();
+  saveGame(store, createInitialProgress(true));
+  const s = new Session(store, 'diam');
+  assert.equal(s.progress.story.cycle, 'day');
+  // Natural day -> night progression (no early-night shortcut!)
+  reach(s, DAY_DURATION + 200, () => s.progress.story.defeated, 'HP Dermaga mencapai 0');
+  assert.equal(s.progress.story.pierHp, 0);
+  assert.ok(s.defeatedAt > 0);
+  s.save();
+  assert.equal(loadGame(s.store).hasSave, false, 'Run yang kalah tidak bisa di-resume (wajib ulang dari Hari 1)');
+  const best = updateBest(s.store, s.progress);
+  assert.equal(best.bestDay, 1);
+  assert.equal(loadBest(s.store).bestDay, 1);
+  invariant(s);
+});
+
+test('tanpa upgrade sama sekali kewalahan di gelombang malam yang makin kuat', () => {
+  seedRandom(11);
+  const store = new MemoryStore();
+  saveGame(store, createInitialProgress(true));
+  const s = new Session(store, 'tanpa');
+  reach(s, 18 * 60, () => s.progress.story.defeated || s.progress.story.flags.ending, 'Selesai atau kalah');
+  assert.equal(s.bought.length, 0);
+  assert.ok(s.progress.story.defeated || s.minPierHp < BASE_PIER_HP * 0.5, `Tanpa upgrade harus tertekan (defeated=${s.progress.story.defeated}, minPierHp=${s.minPierHp})`);
+  invariant(s);
+});
+
+test('pure incremental: seluruh pohon bengkel terbuka penuh tanpa level cap per bab', () => {
+  seedRandom(3);
+  const store = new MemoryStore();
+  const init = createInitialProgress(true);
+  init.coins = 1_000_000;
+  saveGame(store, init);
+  const s = new Session(store, 'sejuta');
   s.shop();
-  assert.equal(s.progress.upgrades.wave_power, 1);
-  assert.equal(s.progress.coins, prior - getUpgradeCost('wave_power', 0));
-  const saved = s.store.getItem(SAVE_KEY);
-  assert.ok(saved, 'Pembelian tersimpan tanpa menunggu autosave');
-  assert.equal(resume(saved).progress.upgrades.wave_power, 1);
-  const restored = reload(s);
-  assert.equal(restored.progress.coins, prior - getUpgradeCost('wave_power', 0));
+  for (const def of UPGRADE_DEFS) {
+    if (def.id === 'core') continue;
+    assert.equal(levelCap(def.id, s.progress), def.maxLevel, `Tidak ada cap buatan: ${def.id}`);
+    assert.equal(s.progress.upgrades[def.id], def.maxLevel, `Bisa maks di Hari 1: ${def.id}`);
+    assert.equal(isForSale(def.id, s.progress), false);
+  }
+  assert.equal(s.progress.story.maxPierHp, BASE_PIER_HP + 5 * 35);
+  assert.equal(s.progress.story.pierHp, s.progress.story.maxPierHp);
+  assert.ok(getUpgradeCost('wave_power', 0) > 0);
+  invariant(s);
 });
 
-test('muat saat satu keranjang dirampas, selamatkan sisanya dan bayar 12 sekali', () => {
-  const s = at(4);
-  reach(s, 140, () => s.progress.story.job?.baskets === 1, 'Satu keranjang dirampas');
-  const restored = reload(s, 'tanpa');
-  assert.equal(restored.progress.story.job?.baskets, 1);
-  assert.equal(restored.sim.netClosed, true);
-  const id = restored.progress.story.job?.id;
-  reach(restored, 90, () => restored.jobs().some((j) => j.id === id), 'Satu keranjang dipertahankan');
-  assert.equal(restored.jobs().at(-1)?.pay, 12);
-  const paid = reload(restored);
-  paid.runFor(10);
-  assert.equal(paid.jobs().filter((j) => j.id === id).length, 1);
-  assert.equal(paid.progress.coins - restored.progress.coins, paid.income.reduce((total, payment) => total + payment.amount, 0));
-  assert.deepEqual(paid.jobs(), restored.jobs());
+test('urutan Muatan sebelum Jaring, buff kapal 2x per hari, kunci bengkel malam, tambal dermaga, dan pulih fajar', () => {
+  assert.deepEqual(UPGRADE_MAP.trash_density.requires, ['core'], 'Muatan langsung dari Inti');
+  assert.deepEqual(UPGRADE_MAP.net_expand.requires, ['trash_density'], 'Jaring setelah Muatan');
+  assert.deepEqual(UPGRADE_MAP.trash_rarity.requires, ['net_expand'], 'Kelangkaan setelah Jaring');
+  assert.equal(pirateScale(1), 1);
+  assert.equal(pirateScale(2), 2);
+  assert.equal(pirateScale(3), 4);
+  assert.equal(pirateScale(4), 8);
+  assert.equal(pirateScale(5), 16);
+
+  seedRandom(5);
+  const store = new MemoryStore();
+  const init = createInitialProgress(true);
+  init.coins = 500;
+  saveGame(store, init);
+  const s = new Session(store, 'biasa');
+  assert.equal(DAY_DURATION, 150);
+  assert.equal(NIGHT_DURATION, 60);
+
+  // Damage pier and repair during Day
+  s.sim.story.damagePier(40, 440, 468);
+  assert.equal(s.progress.story.pierHp, 60);
+  const cost = pierRepairCost(1);
+  const beforeCoins = s.progress.coins;
+  assert.equal(s.sim.story.repairPier(), true);
+  assert.equal(s.progress.story.pierHp, 60 + REPAIR_HEAL);
+  assert.equal(s.progress.coins, beforeCoins - cost);
+
+  // Natural transition to Night 1 (no early-night trigger!)
+  reach(s, DAY_DURATION + 4, () => s.progress.story.cycle === 'night', 'Malam 1 mulai alami');
+  assert.equal(s.sim.story.waveHud().shopLocked, true, 'Bengkel terkunci saat malam');
+  assert.equal(s.sim.story.repairPier(), false, 'Tidak bisa tambal dermaga saat malam');
+  assert.ok(s.progress.story.hugeFlags.length >= 1, 'Ada penanda Gelombang Besar ala PvZ');
+
+  // Reload mid-night preserves active wave & pirates cleanly
+  s.runFor(6);
+  const restored = reload(s, 'biasa');
+  // Set clean beach & hurt pier slightly to verify free +25 dawn repair!
+  restored.progress.story.sources = [];
+  restored.progress.story.pollution = 0;
+  restored.progress.story.pierHp = Math.min(restored.progress.story.pierHp, restored.progress.story.maxPierHp - 30);
+  const hpBeforeDawn = restored.progress.story.pierHp;
+  reach(restored, 120, () => restored.progress.story.day === 2 && restored.progress.story.cycle === 'day', 'Menang Malam 1');
+  assert.ok(restored.progress.story.pierHp >= hpBeforeDawn + 20 || restored.progress.story.pierHp === restored.progress.story.maxPierHp, 'Pantai bersih menambal dermaga saat fajar');
   invariant(restored);
 });
 
-test('kapal induk dilanjutkan pada kesempatan hantam yang sama dan bayaran akhir hanya sekali', () => {
-  const s = at(8, 'tanpa');
-  reach(s, 200, () => s.progress.story.job?.phase === 'window' && s.progress.story.bossHp < BOSS_HP, 'Lambung sudah terkena');
-  const restored = reload(s, 'tanpa');
-  assert.equal(restored.progress.story.job?.hp, s.progress.story.job?.hp);
-  assert.equal(restored.progress.story.job?.phase, 'window');
-  assert.equal(restored.progress.story.job?.windowDamage, s.progress.story.job?.windowDamage);
-  reach(restored, 16, () => restored.progress.story.job?.phase === 'rest', 'Kapal menarik alat berikutnya');
-  assert.ok(restored.progress.story.bossHp >= BOSS_HP - 30, 'Muat ulang tetap membatasi 30 damage per giliran');
-  reach(restored, 240, () => restored.progress.story.flags.ending, 'Kapal induk pergi dan fajar');
-  const paid = reload(restored);
-  const atEnd = paid.progress.coins;
-  const ending = paid.jobs().filter((j) => j.id.startsWith('ending-'));
-  assert.equal(ending.length, 1);
-  assert.equal(ending[0].pay, 60);
-  paid.runFor(20);
-  // the tide may still carry a piece into the net; the dawn's 60 does not come again
-  assert.ok(paid.progress.coins - atEnd < PAY.ending, 'Bayaran fajar tidak terulang');
-  assert.deepEqual(paid.jobs().filter((j) => j.id.startsWith('ending-')), ending);
-  invariant(restored);
-  invariant(paid);
-});
-
-test('simpanan terpotong dan penyimpanan penuh ditangani', () => {
+test('simpanan v4, migrasi v2, dan mode Endless Hari 6+ berjalan mulus', () => {
   const store = new MemoryStore();
-  store.setItem(SAVE_KEY, '{"story":');
-  assert.equal(loadGame(store).hasSave, false);
-  assert.equal(new Session(store, 'diam').progress.coins, 0);
-  const progress = createInitialProgress();
-  assert.ok(saveGame(store, progress));
-  const previous = store.getItem(SAVE_KEY);
-  store.broken = true;
-  progress.coins = 20;
-  assert.equal(saveGame(store, progress), false);
-  assert.equal(store.getItem(SAVE_KEY), previous);
-  assert.equal(saveGame(null, progress), false);
-  clearGame(store);
-  assert.equal(loadGame(store).hasSave, false);
-});
-
-test('migrasi v2 menjaga saldo, alat, bengkel, penyelamatan dan akses yang sudah diperoleh', () => {
-  const store = new MemoryStore();
-  const v2 = { ...createInitialProgress(), story: undefined, coins: 1_000_000, totalCoinsEarned: 42, totalWaves: 5 };
+  const v2 = { ...createInitialProgress(), story: undefined, coins: 800, totalCoinsEarned: 800, totalWaves: 10, shopUnlocked: true, dolphinRescued: true };
   store.setItem(OLD_SAVE_KEY, JSON.stringify(v2));
-  let s = new Session(store, 'diam');
-  assert.equal(s.progress.coins, v2.coins);
-  assert.equal(s.progress.story.chapter, 1);
-  assert.equal(s.progress.shopUnlocked, false);
-  assert.equal(s.progress.story.flags.dolphin, false);
-  const legacy = { ...v2, shopUnlocked: true, dolphinRescued: true, upgrades: { ...v2.upgrades, wave_power: 3 } };
-  store.setItem(OLD_SAVE_KEY, JSON.stringify(legacy));
-  assert.equal(loadGame(store).migrated, true);
-  s = new Session(store, 'diam');
-  assert.equal(s.progress.upgrades.wave_power, 3);
-  assert.equal(s.progress.story.flags.dolphin, true);
-  assert.equal(s.progress.story.chapter, 3);
-  assert.equal(s.progress.shopUnlocked, true);
-  const withCall = { ...legacy, upgrades: { ...legacy.upgrades, unlock_boss: 1 } };
-  store.setItem(OLD_SAVE_KEY, JSON.stringify(withCall));
-  s = new Session(store, 'diam');
-  assert.equal(s.progress.story.flags.ops, true);
-  assert.equal(s.progress.story.chapter, 3, 'Tujuan pertama yang belum terbukti tetap muncul');
-  assert.ok(s.sim.story.answerCall());
-  reach(s, 50, () => s.progress.story.job?.kind === 'boss', 'Akses lama ke kapal induk');
+  const migrated = loadGame(store);
+  assert.equal(migrated.hasSave, true);
+  assert.equal(migrated.migrated, true);
+  assert.equal(migrated.progress.story.version, 4);
+  assert.equal(migrated.progress.story.cycle, 'day');
+
+  // Test Endless Day 6 -> Night 6 survival with strong incremental upgrades
+  seedRandom(9);
   clearGame(store);
-  store.setItem(OLD_SAVE_KEY, JSON.stringify({ ...withCall, victoryAchieved: true, endlessMode: true }));
-  s = new Session(store, 'diam');
-  assert.equal(s.progress.story.chapter, 9);
-  assert.equal(s.progress.endlessMode, true);
-  assert.equal(s.progress.coins, v2.coins);
-  assert.equal(s.progress.story.flags.ending, true);
-  s.runFor(5);
-  assert.equal(s.progress.coins, v2.coins);
+  const end = createInitialProgress(true);
+  end.coins = 50_000;
+  end.story.day = 6;
+  end.story.chapter = 6;
+  end.story.dayTime = DAY_DURATION - 2;
+  end.story.nightsSurvived = 5;
+  end.story.flags.boss = true;
+  end.story.flags.ending = true;
+  end.victoryAchieved = true;
+  end.endlessMode = true;
+  saveGame(store, end);
+  const s = new Session(store, 'sejuta');
+  s.shop();
+  reach(s, 8, () => s.progress.story.cycle === 'night', 'Malam 6 Endless mulai');
+  assert.ok(s.progress.story.waveTotal >= 17, `Endless Hari 6 punya wave padat (${s.progress.story.waveTotal})`);
+  reach(s, 140, () => s.progress.story.day === 7, 'Menang Endless Malam 6');
+  assert.equal(s.progress.story.nightsSurvived, 6);
   invariant(s);
 });
 
-test('cetak biru dan level membatasi saldo sejuta di setiap bab', () => {
-  const expected: UpgradeId[][] = [
-    [], ['wave_width', 'tidal_energy'], ['net_expand', 'ai_guide', 'energy_regen'],
-    ['wave_power', 'tidal_charge', 'unlock_boats'], ['ai_sonar', 'echo_wave'], [],
-    ['combo_flow', 'ai_buoy', 'resonance_burst'], [], ['trash_density', 'trash_rarity', 'unlock_forest'],
-  ];
-  const opened = new Set<UpgradeId>();
-  for (let chapter = 1; chapter <= 9; chapter++) {
-    const raw = checkpoints.get(chapter);
-    assert.ok(raw);
-    const saved: PlayerProgress = JSON.parse(raw);
-    saved.coins = 1_000_000;
-    saved.upgrades = createInitialProgress().upgrades;
-    const s = resume(JSON.stringify(saved), 'sejuta');
-    expected[chapter - 1].forEach((id) => opened.add(id));
-    if (s.progress.story.flags.planted) opened.add('unlock_mangrove');
-    s.shop();
-    for (const { id, maxLevel } of UPGRADE_DEFS) {
-      if (id === 'core') continue;
-      const cap = [0, 1, 1, 2, 2, 2, 3, 3, maxLevel][chapter - 1];
-      const canBuy = opened.has(id) && (id !== 'unlock_forest' || opened.has('unlock_mangrove'));
-      assert.equal(s.progress.upgrades[id], canBuy ? Math.min(cap, maxLevel) : 0, `Bab ${chapter} · ${id}`);
-      assert.equal(isForSale(id, s.progress), false, `Pembelian sudah mentok: ${id}`);
-      assert.equal(levelCap(id, s.progress), Math.min(cap, maxLevel));
+test('tiga kapal baru datang bertahap dengan jumlah kapal dan pengali HP yang sama', () => {
+  const sizes = [9, 13, 17, 21, 16, 25];
+  for (const [index, size] of sizes.entries()) {
+    const day = index + 1;
+    const { plan, hugeFlags } = buildNightWave(day);
+    assert.equal(plan.length, size, `Jumlah kapal Malam ${day}`);
+    assert.deepEqual(plan.filter((p) => p.huge).map((p) => p.at / NIGHT_DURATION), hugeFlags);
+    for (const [i, variant] of SPECIAL_PIRATES.entries()) {
+      assert.equal(plan.some((p) => p.variant === variant), day >= i + 2, `${PIRATE_SPECS[variant].name} Malam ${day}`);
+      assert.equal(pirateSpec(variant, day, true).hp, PIRATE_SPECS[variant].hp * pirateScale(day));
     }
-    assert.equal(s.progress.totalCoinsEarned, saved.totalCoinsEarned);
-  }
-  assert.deepEqual(Array.from({ length: 5 }, (_, i) => getUpgradeCost('wave_power', i)), [78, 144, 267, 494, 914]);
-});
-
-test('ombak tanpa charge mengubah 10 menjadi 14 damage, dari 3 hantaman menjadi 2', () => {
-  for (const level of [0, 1]) {
-    const s = at(4);
-    s.progress.upgrades.wave_power = level;
-    reach(s, 55, () => s.sim.entities.some((e) => e.kind === 'raider' && e.x < 1180), 'Kapal masuk jangkauan');
-    const raid = s.progress.story.job;
-    assert.equal(raid?.hp, 24);
-    const damage = level ? 14 : 10;
-    for (let hit = 1; hit <= (level ? 2 : 3); hit++) {
-      const ship = s.sim.entities.find((e) => e.kind === 'raider');
-      assert.ok(ship);
-      const { from, to } = s.carry(ship, { x: ship.x + 80, y: ship.y }, 80);
-      const before = raid?.hp;
-      assert.ok(s.swipe(from, to, 0));
-      reach(s, 2, () => raid?.hp !== before, 'Ombak menghantam lambung');
-      assert.equal(raid?.hp, 24 - hit * damage);
-    }
-    assert.equal(s.jobs().at(-1)?.pay, 24);
-    invariant(s);
   }
 });
 
-function withDeposits(p: number, style: Style): Session {
-  const raw = checkpoints.get(3);
-  assert.ok(raw);
-  const saved: PlayerProgress = JSON.parse(raw);
-  saved.story.sources = [];
-  saved.story.trash = [];
-  saved.story.pollution = p;
-  // Keep the first deposit a full four points even when P is odd.
-  for (let left = p; left > 0; left -= 4) addDeposit(saved.story, Math.min(4, left));
-  return resume(JSON.stringify(saved), style);
-}
-
-test('P 59 dan 60 menentukan upah perahu 20 dan 16 sebelum berangkat', () => {
-  for (const [p, pay] of [[59, 20], [60, 16]]) {
-    const s = withDeposits(p, 'diam');
-    assert.equal(computeStats(s.progress).ecoPercent, 100 - p);
-    reach(s, 70, () => s.progress.story.job?.kind === 'boat', 'Perahu berangkat');
-    assert.equal(s.progress.story.job?.p0, p);
-    assert.equal(s.progress.story.job?.pay, pay);
-    const help = reload(s, 'tanpa');
-    reach(help, 110, () => help.jobs().some((j) => j.kind === 'boat'), 'Perahu merapat');
-    assert.equal(help.jobs().at(-1)?.pay, pay);
-    invariant(help);
-  }
+test('haluan Kapal Perisai meredam kerusakan dan dorongan, lambung dan buritannya terbuka', () => {
+  seedRandom(12);
+  const s = new Session(new MemoryStore(), 'diam');
+  const story = s.sim.story;
+  const ship = story.spawnPirate(PIRATE_KIND.shield, 0, true);
+  Object.assign(ship, { x: 800, y: 400, rotation: Math.PI, hp: 100, maxHp: 100 });
+  const hit = (dx: number, dy: number): { damage: number; shove: number } => {
+    ship.hp = ship.maxHp;
+    ship.vx = ship.vy = 0;
+    s.sim.waves.length = 0;
+    s.sim.energy = s.sim.stats.maxEnergy;
+    assert.ok(s.swipe({ x: ship.x - dx * 88, y: ship.y - dy * 88 }, { x: ship.x + dx * 72, y: ship.y + dy * 72 }));
+    const wave = s.sim.waves[0];
+    assert.equal(wave.kind, 'directional');
+    story.hit(ship, wave, Math.cos(wave.angle), Math.sin(wave.angle));
+    const damage = ship.maxHp - ship.hp;
+    story.hit(ship, wave, Math.cos(wave.angle), Math.sin(wave.angle));
+    assert.equal(ship.maxHp - ship.hp, damage, 'Satu ombak hanya mengenai sekali');
+    return { damage, shove: Math.hypot(ship.vx, ship.vy) };
+  };
+  const bow = hit(1, 0);
+  const flank = hit(0, 1);
+  const stern = hit(-1, 0);
+  assert.ok(bow.damage > 0 && bow.damage < flank.damage / 2);
+  assert.ok(bow.shove > 0 && bow.shove < flank.shove / 2);
+  assert.deepEqual(stern, flank);
+  ship.rotation = 0;
+  assert.deepEqual(hit(-1, 0), bow);
 });
 
-test('endapan ditunjukkan pada P 31, disapu dengan ombak dasar, dan tetap tersembunyi pada P 30', () => {
-  const healthy = withDeposits(30, 'diam');
-  healthy.step();
-  assert.equal(healthy.sim.entities.some((e) => e.kind === 'deposit'), false);
-  const s = withDeposits(31, 'tanpa');
-  s.step();
-  assert.ok(s.sim.entities.some((e) => e.kind === 'deposit'));
-  reach(s, 27, () => s.progress.story.pollution === 27, 'Empat poin endapan terangkat');
+test('Kapal Isyarat mempercepat kapal yang mendekat dalam jangkauan', () => {
+  seedRandom(13);
+  const s = new Session(new MemoryStore(), 'diam');
+  const story = s.sim.story;
+  const ally = story.spawnPirate(PIRATE_KIND.raider, 0, true);
+  const signal = story.spawnPirate(PIRATE_KIND.signal, 0, true);
+  const speed = (): number => {
+    Object.assign(ally, { x: 800, y: 420, vx: 0, vy: 0 });
+    story.move(ally, DT);
+    return Math.hypot(ally.vx, ally.vy);
+  };
+  Object.assign(signal, { x: 935, y: 420 });
+  const boosted = speed();
+  signal.x = 1100;
+  const unboosted = speed();
+  assert.ok(boosted > unboosted * 1.2);
+  signal.x = 935;
+  story.sendOff(signal);
+  assert.equal(speed(), unboosted);
+});
+
+test('varian lama dan baru tetap utuh di simpanan, termasuk muatan Rongsok dan arah Perisai', () => {
+  seedRandom(14);
+  const store = new MemoryStore();
+  const init = createInitialProgress(true);
+  const oldKinds = [PIRATE_KIND.raider, PIRATE_KIND.skiff, PIRATE_KIND.heavy] as const;
+  init.story.day = init.story.chapter = 4;
+  init.story.cycle = 'night';
+  init.story.pirates = oldKinds.map((variant, i) => ({
+    variant, x: 1210, y: 170 + i * 150, hp: 24, maxHp: 48, anchorIdx: i,
+    tag: 'approach', attackWork: 0, speed: 50, dmg: 9, bounty: 18,
+  }));
+  saveGame(store, init);
+  const s = new Session(store, 'diam');
+  const story = s.sim.story;
+  assert.deepEqual(story.activePirates().map((e) => e.variant), oldKinds);
+  assert.ok(story.activePirates().every((e) => e.rotation === Math.PI && e.hp === 24));
+
+  s.progress.story.wavePlan = buildNightWave(4).plan;
+  const shield = story.spawnPirate(PIRATE_KIND.shield, 0, true);
+  Object.assign(shield, { x: 450, y: 469, rotation: 2.1, tag: 'attack', attackWork: 0.6, hp: 37 });
+  const dumper = story.spawnPirate(PIRATE_KIND.dumper, 1, true);
+  const signal = story.spawnPirate(PIRATE_KIND.signal, 2, true);
+  const pollution = s.progress.story.pollution;
+  Object.assign(dumper, { x: 1280, y: 380, rotation: Math.PI });
+  story.move(dumper, DT);
+  assert.equal(dumper.pirateDumpTime, undefined);
+  assert.equal(s.progress.story.pollution, pollution);
+  dumper.x = 1010;
+  for (let i = 0; i < 114; i++) story.move(dumper, DT);
+  assert.equal(s.progress.story.pollution, pollution + P_TRASH);
+
+  const restored = reload(s);
   invariant(s);
-});
+  const restoredStory = restored.sim.story;
+  assert.deepEqual(restoredStory.activePirates().map((e) => e.variant), [...oldKinds, ...SPECIAL_PIRATES]);
+  assert.deepEqual(restoredStory.s.wavePlan.map((p) => p.variant), story.s.wavePlan.map((p) => p.variant));
+  assert.equal(restoredStory.activePirates().find((e) => e.variant === PIRATE_KIND.signal)?.hp, signal.hp);
+  const savedShield = restoredStory.activePirates().find((e) => e.variant === PIRATE_KIND.shield)!;
+  assert.equal(savedShield.rotation, 2.1);
+  assert.equal(savedShield.attackWork, 0.6);
+  assert.equal(savedShield.hp, 37);
+  restoredStory.spawnPirate(PIRATE_KIND.shield, 5, true);
+  assert.ok(!restored.radio.some((line) => line.includes(PIRATE_SPECS[PIRATE_KIND.shield].intro!)));
+  const labels = platesFor(restored.sim).map((p) => p.text);
+  for (const variant of [...oldKinds, ...SPECIAL_PIRATES]) assert.ok(labels.includes(PIRATE_SPECS[variant].name));
 
-test('patroli bergiliran dan jatah rongsok tetap berlaku setelah muat', () => {
-  const s = at(9, 'diam');
-  reach(s, 1500, () => s.starts.length === 9, 'Sembilan giliran patroli');
-  assert.deepEqual(s.starts.map(({ id }) => id.replace(/-\d+$/, '')), ['calf', 'raid', 'boat', 'trawl', 'calf', 'raid', 'boat', 'waste', 'calf']);
-  assert.ok(s.jobs().slice(at(9).jobs().length).every((job) => job.pay === 0));
-  invariant(s);
-  const rich = resume(snapshot(at(9)), 'sejuta');
-  rich.progress.coins = 1_000_000;
-  rich.shop();
-  assert.ok(rich.progress.upgrades.trash_rarity > 0);
-  rich.runFor(180);
-  reach(rich, 200, () => !rich.progress.story.job, 'Simpanan saat jeda patroli');
-  invariant(rich);
-  const continued = reload(rich, 'sejuta');
-  continued.runFor(540);
-  invariant(continued);
-  const income = [...rich.income, ...continued.income];
-  const peak = Math.max(...income.map(({ at }) => income.reduce((total, payment) =>
-    payment.at > at - 60 && payment.at <= at ? total + payment.amount : total, 0)));
-  assert.ok(peak > 0 && peak <= 492, `Puncak pemasukan patroli ${peak}`);
-  console.log(`Patroli: puncak ${peak} koin baru/60 dtk, P terburuk ${Math.max(rich.worstP, continued.worstP)}`);
+  const savedDumper = restoredStory.activePirates().find((e) => e.variant === PIRATE_KIND.dumper)!;
+  assert.equal(savedDumper.pirateDumpTime, dumper.pirateDumpTime);
+  restoredStory.move(savedDumper, DT);
+  assert.equal(restoredStory.s.pollution, pollution + P_TRASH, 'Muatan pertama tidak diulang setelah memuat simpanan');
+  for (let i = 0; i < 150; i++) restoredStory.move(savedDumper, DT);
+  assert.equal(restoredStory.s.pollution, pollution + P_TRASH * 2);
+  const trash = restored.sim.entities.find((e) => e.kind === 'trash_bag' && e.pollution === P_TRASH);
+  assert.ok(trash);
+  Object.assign(trash, COLLECTOR_NET);
+  restored.step(DT);
+  assert.equal(restoredStory.s.pollution, pollution + P_TRASH, 'Jaring mengangkat kembali sampah yang dibuang');
+  invariant(restored);
 });
 
 console.log(`\n${passed} lulus, ${failed} gagal.`);

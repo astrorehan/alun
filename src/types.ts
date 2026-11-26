@@ -1,8 +1,8 @@
-export type GamePhase = 'title' | 'intro' | 'playing' | 'upgrade' | 'victory';
+export type GamePhase = 'title' | 'intro' | 'playing' | 'upgrade' | 'victory' | 'defeat';
 
 export type ShopTab = 'tree' | 'journal';
 
-export type TimeOfDay = 'morning' | 'noon' | 'sunset' | 'monsoon' | 'dawn';
+export type TimeOfDay = 'morning' | 'noon' | 'sunset' | 'night' | 'monsoon' | 'dawn';
 
 export type UpgradeBranch = 'core' | 'wave' | 'energy' | 'ai' | 'eco' | 'final';
 
@@ -27,7 +27,7 @@ export type UpgradeId =
   | 'unlock_mangrove'
   | 'unlock_boats'
   | 'unlock_forest'
-  | 'unlock_boss';
+  | 'pier_armor';
 
 export interface UpgradeDef {
   id: UpgradeId;
@@ -69,7 +69,8 @@ export interface UpgradeDef {
     | 'mangrove'
     | 'boat'
     | 'fire'
-    | 'boss';
+    | 'boss'
+    | 'shield';
 }
 
 export type WaveKind = 'directional' | 'ripple' | 'echo' | 'resonance' | 'buoy_pulse';
@@ -163,6 +164,13 @@ export interface Entity {
   source?: number;
   /** Where it belongs, for things on a line. */
   home?: Point;
+  /** Pirate wave unit stats (only on pirate raider entities). */
+  pirateSpeed?: number;
+  pirateDmg?: number;
+  pirateBounty?: number;
+  pirateDumpTime?: number;
+  anchorIdx?: number;
+  attackWork?: number;
 }
 
 export interface Point {
@@ -351,14 +359,54 @@ export interface SavedTrash {
   pollution?: number;
 }
 
+export type CyclePhase = 'prep' | 'day' | 'night';
+
+/** Stable IDs for pirate variants in saves and wave plans. */
+export const PIRATE_KIND = { raider: 0, skiff: 1, heavy: 2, shield: 3, dumper: 4, signal: 5 } as const;
+export type PirateKind = (typeof PIRATE_KIND)[keyof typeof PIRATE_KIND];
+
+export interface SavedPirate {
+  variant: PirateKind;
+  x: number;
+  y: number;
+  hp: number;
+  maxHp: number;
+  anchorIdx: number;
+  tag: 'approach' | 'attack';
+  attackWork: number;
+  speed: number;
+  dmg: number;
+  bounty: number;
+  rotation?: number;
+  dumpTime?: number;
+}
+
+export interface WaveSpawn {
+  at: number;
+  variant: PirateKind;
+  lane: number;
+  huge?: boolean;
+  /** Optional support ship launched with this sub-wave. */
+  support?: 'trawl' | 'waste';
+}
+
 export interface StoryState {
-  version: 3;
-  /** 1..8, and 9 for Patroli Laguna. */
+  version: 4;
+  /** Current day (1..5 for story climax, 6+ for endless). */
+  day: number;
+  /** Legacy chapter mirror (1..9) kept for journal/renderer compatibility. */
   chapter: number;
+  cycle: CyclePhase;
+  /** Elapsed seconds inside the current day (0..DAY_DURATION) or night (0..NIGHT_DURATION). */
+  dayTime: number;
+  nightTime: number;
+  /** Pier structural integrity. Reaches 0 => Defeat & restart from Day 1. */
+  pierHp: number;
+  maxPierHp: number;
   flags: Record<StoryFlag, boolean>;
   /** Seconds played. Nothing in the story looks at the clock on the wall. */
   clock: number;
-  /** Where the chapter stands, for the objective. */
+  /** Where the opening/story stands, for the objective. */
   step: string;
   pollution: number;
   sources: PollutionSource[];
@@ -368,31 +416,42 @@ export interface StoryState {
   boxAt: { x: number; y: number };
   job: JobState | null;
   jobSeq: number;
-  /** No paid job may begin before this moment on the play clock. */
+  /** No side job may begin before this moment on the play clock. */
   calmUntil: number;
-  /** Turn of the repeating four: dolphin, threat, boat, threat. */
   turn: number;
-  /** Ships still to be seen off before the chapter's own event, see `roundsFor`. */
   rounds: number;
   threat: number;
   callAnswered: boolean;
   bossHp: number;
-  /** Fish baskets on the pier right now. */
   baskets: number;
   beacon: boolean;
   log: JobRecord[];
-  /** Moments on the play clock at which valued salvage arrived, the last minute of them. */
   arrivals: number[];
   trash: SavedTrash[];
+  /** Active pirates in the lagoon right now (multiple can attack at once). */
+  pirates: SavedPirate[];
+  /** Remaining spawns scheduled for the active night wave. */
+  wavePlan: WaveSpawn[];
+  waveTotal: number;
+  waveSpawned: number;
+  waveDefeated: number;
+  /** Normalized 0..1 positions along the night wave bar where huge waves strike. */
+  hugeFlags: number[];
+  hugeAnnounced: number;
+  /** Countdown to next daytime skirmish pirate. */
+  skirmishTimer: number;
+  /** Countdown to next daytime village/story side event. */
+  sideEventTimer: number;
   supplyTimer: number;
   seedTimer: number;
   padTimer: number;
-  /** When each chapter began and other firsts, for the journal and for the playtests. */
   marks: Record<string, number>;
   worstP: number;
-  /** Play-clock moment the pollution last went above 30, or -1. */
   aboveSince: number;
   recoveries: number[];
+  piratesSunk: number;
+  nightsSurvived: number;
+  defeated: boolean;
   saved: { dolphins: number; baskets: number; raids: number; trawls: number; spills: number; deposits: number; ghosts: number };
 }
 
@@ -411,19 +470,26 @@ export interface ComputedStats {
   comboEnergyReturn: number;
   aiGuideStrength: number;
   aiSonarLevel: number;
+  /** Extra hull damage multiplier from Sonar prediction targeting. */
+  critBonus: number;
   aiBuoyCount: number;
   netRadius: number;
   netPull: number;
-  /** Seconds between arrivals of salvage, and how many arrive together. The tide's quota caps both. */
+  /** Seconds between arrivals of salvage, and how many arrive together. */
   supplyInterval: number;
   supplyClusterMin: number;
   supplyClusterMax: number;
+  maxSalvage: number;
+  salvagePerMinute: number;
   rarityLevel: number;
   mangroveLevel: number;
   /** How much of the cross-current the fishers can steer against on their own, 0..1. */
   steering: number;
   boatLevel: number;
   forestLevel: number;
+  /** Pier armor upgrades: max HP and damage reduction fraction (0..0.40). */
+  maxPierHp: number;
+  pierArmor: number;
   /** Coastal health shown in the HUD: 100 - pollution. */
   ecoPercent: number;
   pollution: number;

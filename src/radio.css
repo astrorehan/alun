@@ -1,0 +1,466 @@
+/* ==========================================================================
+   RADIO CARD: who is talking, their face, and the line as it is said.
+   The face's mouth and the level bars follow --talk (0..1), set every frame
+   from the voice's loudness.
+   ========================================================================== */
+
+.hud-messages {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.radio-card {
+  --who-top: #6ff2e6;
+  --who-bot: #0f9bb4;
+  --who-glow: rgba(40, 214, 230, 0.5);
+  --face: 76px;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  pointer-events: none;
+}
+
+.hud-messages > .radio-card {
+  width: fit-content;
+  max-width: min(100%, 580px);
+}
+
+.radio-card[data-who='sari'] {
+  --who-top: #ffc048;
+  --who-bot: #ef6114;
+  --who-glow: rgba(255, 150, 54, 0.55);
+}
+
+.radio-card[data-who='damar'] {
+  --who-top: #6fbcff;
+  --who-bot: #2a62de;
+  --who-glow: rgba(90, 170, 255, 0.55);
+}
+
+.radio-card[data-who='rimba'] {
+  --who-top: #8af274;
+  --who-bot: #1d9f3c;
+  --who-glow: rgba(110, 230, 96, 0.5);
+}
+
+/* ---------------------------------------------------------------- the face */
+.radio-portrait {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  width: var(--face);
+  height: var(--face);
+  margin: 0 -16px 2px 0;
+  border-radius: 50%;
+  border: var(--border-xl) solid var(--ink);
+  background: radial-gradient(circle at 50% 30%, var(--who-top) 0%, var(--who-bot) 100%);
+  box-shadow:
+    inset 0 3px 0 rgba(255, 255, 255, 0.45),
+    0 4px 0 var(--ink),
+    0 0 0 calc(var(--talk, 0) * 7px) var(--who-glow);
+  overflow: hidden;
+}
+
+.radio-portrait-art {
+  position: absolute;
+  inset: -3px;
+  transform: translateY(calc(var(--talk, 0) * -1.5px));
+}
+
+.radio-portrait-art svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.radio-card .pt-mouth {
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+  transform: scaleY(calc(0.26 + var(--talk, 0) * 0.8));
+}
+
+.radio-card .pt-grille rect {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  transform: scaleY(calc(0.34 + var(--talk, 0) * var(--k, 1)));
+}
+
+.radio-card .pt-grille rect:nth-child(1) { --k: 0.55; }
+.radio-card .pt-grille rect:nth-child(2) { --k: 0.95; }
+.radio-card .pt-grille rect:nth-child(3) { --k: 1.3; }
+.radio-card .pt-grille rect:nth-child(4) { --k: 0.85; }
+.radio-card .pt-grille rect:nth-child(5) { --k: 0.5; }
+
+.radio-card .pt-eyes {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: radioBlink 4.6s infinite;
+}
+
+.radio-card[data-who='damar'] .pt-eyes { animation-delay: -1.9s; }
+.radio-card[data-who='alun'] .pt-eyes { animation-duration: 5.4s; animation-delay: -3.1s; }
+.radio-card[data-who='rimba'] .pt-eyes { animation-delay: -0.8s; }
+
+.radio-card .pt-led {
+  animation: radioLed 1.1s steps(1) infinite;
+}
+
+/* ---------------------------------------------------------------- the line */
+.radio-bubble {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  padding: 19px 20px 15px 28px;
+  border-radius: 20px;
+  border: var(--border-xl) solid var(--ink);
+  background-color: #ffffff;
+  background-image:
+    var(--pattern-checker-paper),
+    linear-gradient(180deg, #ffffff 0%, #eef4fb 100%);
+  background-size: 22px 22px, 100% 100%;
+  box-shadow:
+    inset 0 2.5px 0 #ffffff,
+    inset 0 -4px 0 rgba(162, 180, 206, 0.5),
+    var(--shadow-pill);
+}
+
+.radio-head {
+  position: absolute;
+  top: -15px;
+  left: 24px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.radio-name {
+  padding: 2px 12px 3px;
+  border-radius: var(--radius-pill);
+  border: var(--border-sm) solid var(--ink);
+  background: linear-gradient(180deg, var(--who-top) 0%, var(--who-bot) 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.4), 0 2.5px 0 var(--ink);
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  color: #ffffff;
+}
+
+.radio-eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 18px;
+  padding: 3px 5px;
+  border-radius: 8px;
+  border: var(--border-sm) solid var(--ink);
+  background: #13203a;
+  box-shadow: 0 2.5px 0 var(--ink);
+}
+
+.radio-eq i {
+  display: block;
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--who-top);
+  transform-origin: 50% 100%;
+  transform: scaleY(calc(0.18 + var(--talk, 0) * var(--k, 0.8)));
+}
+
+.radio-eq i:nth-child(1) { --k: 0.5; }
+.radio-eq i:nth-child(2) { --k: 0.85; }
+.radio-eq i:nth-child(3) { --k: 0.68; }
+.radio-eq i:nth-child(4) { --k: 0.95; }
+.radio-eq i:nth-child(5) { --k: 0.42; }
+
+.radio-line {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.32;
+  color: #151c2e;
+  overflow-wrap: anywhere;
+}
+
+/* laid out from the start so the card keeps its size while the line appears */
+.radio-unsaid {
+  color: transparent;
+}
+
+.radio-timer {
+  position: absolute;
+  left: 26px;
+  right: 18px;
+  bottom: 6px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(13, 18, 29, 0.1);
+  overflow: hidden;
+}
+
+.radio-timer i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--who-top), var(--who-bot));
+  transform-origin: 0 50%;
+}
+
+.radio-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- coming and going */
+.radio-card.is-in .radio-bubble {
+  animation: radioBubbleIn 0.36s var(--ease-snappy) both;
+}
+
+.radio-card.is-in .radio-portrait {
+  animation: radioFaceIn 0.48s var(--ease-bounce) both;
+}
+
+.radio-card.is-in .radio-head {
+  animation: radioTagIn 0.42s var(--ease-bounce) 0.08s both;
+}
+
+.radio-card.is-leaving {
+  animation: radioOut 0.2s ease-in forwards;
+}
+
+@keyframes radioBubbleIn {
+  0% { opacity: 0; transform: translateX(-18px) scale(0.94); }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes radioFaceIn {
+  0% { opacity: 0; transform: scale(0.35) rotate(-16deg); }
+  65% { opacity: 1; transform: scale(1.08) rotate(4deg); }
+  100% { transform: none; }
+}
+
+@keyframes radioTagIn {
+  0% { opacity: 0; transform: translateY(8px) scale(0.8); }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes radioOut {
+  to { opacity: 0; transform: translateY(12px) scale(0.97); }
+}
+
+@keyframes radioBlink {
+  0%, 93%, 100% { transform: scaleY(1); }
+  95.5% { transform: scaleY(0.12); }
+}
+
+@keyframes radioLed {
+  0% { fill: #ffd23f; }
+  50% { fill: #ff7a3c; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .radio-card.is-in .radio-bubble,
+  .radio-card.is-in .radio-portrait,
+  .radio-card.is-in .radio-head,
+  .radio-card.is-leaving,
+  .radio-card .pt-eyes,
+  .radio-card .pt-led {
+    animation: none;
+  }
+  .radio-portrait-art {
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------- smaller screens */
+@media (max-height: 640px), (max-width: 920px) {
+  .radio-card { --face: 62px; }
+  .hud-messages > .radio-card { max-width: min(100%, 460px); }
+  .radio-bubble { padding: 16px 15px 13px 24px; border-radius: 17px; }
+  .radio-line { font-size: 15px; line-height: 1.28; }
+  .radio-name { font-size: 11.5px; padding: 1px 10px 2px; }
+  .radio-eq { height: 16px; }
+  .radio-head { top: -13px; left: 20px; }
+}
+
+@media (max-height: 500px) {
+  .radio-card { --face: 46px; }
+  .hud-messages > .radio-card { max-width: min(100%, 62vw); }
+  .radio-portrait { margin: 0 -12px 0 0; border-width: var(--border-md); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45), 0 3px 0 var(--ink), 0 0 0 calc(var(--talk, 0) * 5px) var(--who-glow); }
+  .radio-bubble { padding: 12px 11px 9px 18px; border-radius: 14px; border-width: var(--border-md); }
+  .radio-line { font-size: 13px; line-height: 1.22; }
+  .radio-name { font-size: 10px; padding: 0 8px 1px; border-width: 2px; }
+  .radio-eq { height: 13px; padding: 2px 4px; border-width: 2px; }
+  .radio-eq i { width: 2px; }
+  .radio-head { top: -11px; left: 15px; gap: 4px; }
+  .radio-timer { left: 18px; right: 12px; bottom: 4px; height: 2px; }
+}
+
+@media (max-height: 500px) and (max-width: 640px) {
+  .hud-messages > .radio-card { max-width: min(100%, 66vw); }
+}
+
+/* ==========================================================================
+   BU SARI'S SCENE: the lagoon waits, dimmed at the bottom, while she talks.
+   The card is the radio card at a larger size; a click anywhere goes on.
+   ========================================================================== */
+
+.radio-next {
+  display: none;
+}
+
+.talk-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 22;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 max(16px, env(safe-area-inset-right)) max(22px, calc(env(safe-area-inset-bottom) + 14px)) max(16px, env(safe-area-inset-left));
+  background: linear-gradient(0deg, rgba(5, 10, 24, 0.68) 0%, rgba(5, 10, 24, 0.32) 34%, rgba(5, 10, 24, 0) 62%);
+  cursor: pointer;
+  animation: talkDim 0.35s ease both;
+}
+
+.talk-card {
+  --face: 124px;
+  width: min(900px, 100%);
+  animation: talkIn 0.42s var(--ease-snappy) both;
+}
+
+/* one entrance per scene, not one per line */
+.talk-card.is-in .radio-bubble,
+.talk-card.is-in .radio-portrait,
+.talk-card.is-in .radio-head {
+  animation: none;
+}
+
+.talk-card .radio-portrait {
+  margin: 0 -22px 6px 0;
+}
+
+.talk-card .radio-bubble {
+  flex: 1;
+  padding: 26px 28px 32px 40px;
+  border-radius: 24px;
+}
+
+.talk-card .radio-line {
+  font-size: 22px;
+  line-height: 1.36;
+  /* three lines are always there, so the card keeps its size from one line to the next */
+  min-height: calc(3 * 1.36em);
+}
+
+.talk-card .radio-head {
+  top: -16px;
+  left: 30px;
+}
+
+.talk-card .radio-name {
+  font-size: 15px;
+  padding: 3px 14px 4px;
+}
+
+.talk-card .radio-eq {
+  height: 20px;
+}
+
+.talk-card .radio-timer {
+  display: none;
+}
+
+.talk-card .radio-next {
+  position: absolute;
+  right: 18px;
+  bottom: 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #66779b;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.talk-card .radio-next i {
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 6px 0 6px 10px;
+  border-color: transparent transparent transparent var(--who-bot);
+}
+
+.talk-card.is-waiting .radio-next {
+  opacity: 1;
+  animation: talkNext 0.9s ease-in-out infinite;
+}
+
+@keyframes talkDim {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes talkIn {
+  0% { opacity: 0; transform: translateY(26px) scale(0.96); }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes talkNext {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .talk-layer,
+  .talk-card,
+  .talk-card.is-waiting .radio-next {
+    animation: none;
+  }
+}
+
+@media (max-height: 640px), (max-width: 920px) {
+  .talk-card { --face: 96px; }
+  .talk-card .radio-portrait { margin: 0 -18px 4px 0; }
+  .talk-card .radio-bubble { padding: 21px 20px 28px 32px; border-radius: 20px; }
+  .talk-card .radio-line { font-size: 18px; }
+  .talk-card .radio-head { top: -14px; left: 26px; }
+  .talk-card .radio-name { font-size: 13px; padding: 2px 11px 3px; }
+  .talk-card .radio-eq { height: 17px; }
+  .talk-card .radio-next { font-size: 12px; bottom: 7px; right: 14px; }
+}
+
+@media (max-width: 520px) {
+  .talk-layer { padding-bottom: max(16px, calc(env(safe-area-inset-bottom) + 10px)); }
+  .talk-card { --face: 78px; }
+  .talk-card .radio-portrait { margin: 0 -16px 2px 0; }
+  .talk-card .radio-bubble { padding: 19px 16px 26px 26px; }
+  .talk-card .radio-line { font-size: 16.5px; line-height: 1.32; min-height: calc(4 * 1.32em); }
+}
+
+@media (max-height: 500px) {
+  .talk-layer { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+  .talk-card { --face: 64px; width: min(760px, 100%); }
+  .talk-card .radio-portrait {
+    margin: 0 -14px 2px 0;
+    border-width: var(--border-md);
+    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45), 0 3px 0 var(--ink), 0 0 0 calc(var(--talk, 0) * 5px) var(--who-glow);
+  }
+  .talk-card .radio-bubble { padding: 14px 14px 20px 22px; border-radius: 16px; border-width: var(--border-md); }
+  .talk-card .radio-line { font-size: 14.5px; line-height: 1.3; min-height: calc(3 * 1.3em); }
+  .talk-card .radio-head { top: -12px; left: 18px; gap: 4px; }
+  .talk-card .radio-name { font-size: 11px; padding: 0 9px 1px; border-width: 2px; }
+  .talk-card .radio-eq { height: 14px; padding: 2px 4px; border-width: 2px; }
+  .talk-card .radio-next { font-size: 10.5px; bottom: 4px; right: 11px; gap: 4px; }
+  .talk-card .radio-next i { border-width: 4.5px 0 4.5px 8px; }
+}

@@ -3,9 +3,9 @@ import { GameSimulation } from './simulation';
 import { INTRO } from './scene/director';
 import type { Tier } from './scene/quality';
 import { SceneRenderer } from './scene/SceneRenderer';
-import { createStory, whereAt } from './story/state';
+import { createStory } from './story/state';
 import { computeStats, createInitialProgress } from './upgrades';
-import type { Entity, EntityKind, PlayerProgress, StoryFlag, TimeOfDay, UpgradeId } from './types';
+import type { Entity, EntityKind, PlayerProgress, TimeOfDay, UpgradeId } from './types';
 
 /** Scene lab: the real simulation inside the 3D renderer, with knobs. Dev only, not part of the build. */
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -22,8 +22,11 @@ const sim = new GameSimulation(audio, {
   radio: (who, text) => console.log(`[${who}] ${text}`),
   coins: () => {},
   save: () => {},
-  chapter: (n) => console.log(`bab ${n}`),
+  chapter: (n) => console.log(`hari ${n}`),
   celebrate: () => {},
+  banner: (title, sub) => console.log(`[BANNER] ${title} — ${sub}`),
+  pierHurt: (hp, max) => console.log(`[PIER] ${hp}/${max}`),
+  defeat: () => console.log('[DEFEAT] Dermaga runtuh!'),
   dolphin: (e) => rescue(e),
   filming: () => filming,
   worsen: () => {},
@@ -71,18 +74,14 @@ function ending(): void {
   renderer.playEnding(sim, { caption: say }, () => stage.classList.remove('film'));
 }
 
-/** Everything before a chapter is done; its own event is about to begin. */
-const PROOFS: StoryFlag[][] = [[], [], ['toolbox'], ['dolphin', 'seedling'], ['damar'], ['cargo'], ['trawl'], ['waste'], ['calf', 'night', 'ops'], ['boss', 'ending']];
 const chapter = (n: number): void => {
-  const s = createStory();
-  for (let i = 0; i <= n; i++) for (const f of PROOFS[i]) s.flags[f] = true;
-  s.openingLeft = n > 1 ? 0 : 6;
-  if (n > 1) {
-    s.box = 'home';
-    s.pollution -= 12;
+  const s = createStory(n > 1);
+  s.day = Math.max(1, n);
+  s.chapter = s.day;
+  if (n === 5) {
+    s.cycle = 'night';
+    s.beacon = true;
   }
-  if (n === 8) s.beacon = s.callAnswered = true;
-  Object.assign(s, whereAt(s.flags, s.openingLeft));
   progress.story = s;
   progress.shopUnlocked = n > 1;
   renderer.cancelRescue();

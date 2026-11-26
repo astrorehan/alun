@@ -3,10 +3,7 @@ import { Build, hex, matrixOf, type Vec } from './build';
 import { clamp, lerp, noise3, smooth } from './space';
 import { person } from './village';
 
-/**
- * The story's own models. The three ships of the fleet are one hull with different things bolted onto
- * it, so what each of them does is readable from its outline: a torn sail, trawl booms, yellow drums.
- */
+/** The story's ships and their gear, with silhouettes built to read from the play camera. */
 
 const _c = new THREE.Color();
 const CREAM = '#fff6e4';
@@ -62,23 +59,25 @@ interface Paint {
 }
 
 const L = 6.6;
+const STANDARD_HULL: Vec = [1, 1, 1];
 
-function sect(t: number): { x: number; w: number; keel: number; gun: number } {
+function sect(t: number, [length, beam, height]: Vec = STANDARD_HULL): { x: number; w: number; keel: number; gun: number } {
   const u = t * 2 - 1;
   const bow = Math.max(0, u);
   return {
-    x: (u * L) / 2 + bow * bow * 0.55,
-    w: 1.28 * Math.pow(1 - Math.pow(bow, 2.5), 0.75) * lerp(0.84, 1, smooth(-1, -0.4, u)) + 0.03,
-    keel: -0.72 + bow * bow * 0.62,
-    gun: 0.86 + bow * bow * 0.95 + Math.pow(Math.max(0, -u), 3) * 0.26,
+    x: ((u * L) / 2 + bow * bow * 0.55) * length,
+    w: (1.28 * Math.pow(1 - Math.pow(bow, 2.5), 0.75) * lerp(0.84, 1, smooth(-1, -0.4, u)) + 0.03) * beam,
+    keel: (-0.72 + bow * bow * 0.62) * height,
+    gun: (0.86 + bow * bow * 0.95 + Math.pow(Math.max(0, -u), 3) * 0.26) * height,
   };
 }
 
 /** Bow points +X. Everything above the rail is the trade's own. */
-function hull(b: Build, o: Paint): void {
+function hull(b: Build, o: Paint, shape = STANDARD_HULL): void {
+  const [length, beam, height] = shape;
   const n = 18;
   const ringAt = (t: number): Vec[] => {
-    const p = sect(t);
+    const p = sect(t, shape);
     const yy = (q: number): number => lerp(p.keel, p.gun, q);
     return [
       [p.x, p.gun, -p.w],
@@ -104,36 +103,48 @@ function hull(b: Build, o: Paint): void {
   const rust = hex('#8a4423');
   b.add(g, {
     color: (p) => {
-      const top = 0.86 + Math.pow(Math.max(0, (p.x / L) * 2), 2) * 0.95;
+      const top = (0.86 + Math.pow(Math.max(0, (p.x / (L * length)) * 2), 2) * 0.95) * height;
       if (p.y < 0.06) _c.set(o.bottom);
-      else if (p.y > top - 0.34) _c.set(o.band);
+      else if (p.y > top - 0.34 * height) _c.set(o.band);
       else _c.set(o.side);
       const k = noise3(p.x * 1.1, p.y * 0.5, p.z * 1.1) * 0.5 + noise3(p.x * 3.1, p.y * 0.9, p.z) * 0.3;
       return _c.lerp(rust, smooth(0.08, 0.42, k) * o.rust);
     },
     gloss: 0.14,
   });
-  const dk: number[] = [];
-  for (let i = 0; i < n; i++) {
-    const p = sect(i / n);
-    const q = sect((i + 1) / n);
-    const y0 = p.gun - 0.3;
-    const y1 = q.gun - 0.3;
-    dk.push(p.x, y0, -p.w * 0.95, p.x, y0, p.w * 0.95, q.x, y1, q.w * 0.95, p.x, y0, -p.w * 0.95, q.x, y1, q.w * 0.95, q.x, y1, -q.w * 0.95);
+  const planks = shape === STANDARD_HULL ? [-0.95, 0.95] : [-0.95, -0.69, -0.33, -0.02, 0.25, 0.60, 0.95];
+  for (let j = 0; j < planks.length - 1; j++) {
+    const left = planks[j];
+    const right = planks[j + 1];
+    const dk: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const p = sect(i / n, shape);
+      const q = sect((i + 1) / n, shape);
+      const y0 = p.gun - 0.3 * height;
+      const y1 = q.gun - 0.3 * height;
+      dk.push(p.x, y0, p.w * left, p.x, y0, p.w * right, q.x, y1, q.w * right,
+        p.x, y0, p.w * left, q.x, y1, q.w * right, q.x, y1, q.w * left);
+    }
+    const dg = new THREE.BufferGeometry();
+    dg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(dk), 3));
+    dg.computeVertexNormals();
+    b.add(dg, {
+      color: (p) => {
+        const seam = Math.abs(((p.x * 2.4) % 1) - 0.5) < 0.08;
+        const plank = 0.88 + (j % 2) * 0.19 + noise3(p.x * 0.7, j, 0) * 0.12;
+        return _c.set(o.deck).multiplyScalar(planks.length === 2 ? 1 - Number(seam) * 0.28 : plank);
+      },
+    });
   }
-  const dg = new THREE.BufferGeometry();
-  dg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(dk), 3));
-  dg.computeVertexNormals();
-  b.add(dg, { color: (p) => _c.set(o.deck).multiplyScalar(Math.abs(((p.x * 2.4) % 1) - 0.5) < 0.08 ? 0.72 : 1) });
   for (const s of [-1, 1]) {
     const rail: Vec[] = [];
     for (let i = 0; i <= 12; i++) {
-      const p = sect(lerp(0.0, 0.985, i / 12));
+      const p = sect(lerp(0.0, 0.985, i / 12), shape);
       rail.push([p.x, p.gun + 0.02, s * p.w]);
     }
-    b.tube(rail, () => 0.1, { color: o.rail, seg: 5, rings: 22 });
+    b.tube(rail, () => 0.1 * Math.min(1, height), { color: o.rail, seg: 5, rings: 22 });
   }
-  b.box(0.16, 0.22, 2.1, { color: o.rail, pos: [-L / 2 - 0.02, 1.02, 0], r: 0.04 });
+  b.box(0.16, 0.22 * height, 2.1 * beam, { color: o.rail, pos: [(-L / 2 - 0.02) * length, 1.02 * height, 0], r: 0.04 });
 }
 
 /** A small wheelhouse aft, with its windows looking over the bow. */
@@ -203,6 +214,226 @@ export function raider(): THREE.BufferGeometry {
   crew(-1.6, 0.35, 1.4);
   crew(1.7, -0.3, 1.9);
   b.box(0.9, 0.6, 0.8, { color: '#5a4030', pos: [-0.6, 0.9, -0.5], rot: [0, 0.3, 0], r: 0.05 });
+  return b.geo(true);
+}
+
+/* ================================================================== pirate boats */
+
+/** A low, narrow boat. The outrigger and exposed motor keep the profile clear of sails. */
+export function skiff(): THREE.BufferGeometry {
+  const b = new Build(421);
+  hull(b, { side: '#d45522', band: '#fff0c9', bottom: '#502a24', rail: '#d39244', deck: '#aa7843', rust: 0.38 }, [1, 0.55, 0.52]);
+  const float: Vec[] = [[-2.78, 0.28, -2.08], [-2.0, 0.08, -2.16], [0.4, 0.06, -2.17], [2.15, 0.12, -2.14], [2.88, 0.48, -2.03]];
+  b.tube(float, (t) => 0.08 + 0.19 * Math.pow(Math.sin(Math.PI * t), 0.4), { color: '#e6a746', top: '#f6d18a', seg: 7, rings: 14 });
+  for (const x of [-1.56, 1.42]) {
+    b.bar([x, 0.44, 0.55], [x - 0.09, 0.32, -2.18], 0.10, 0.08, { color: '#a8763f' });
+    for (const dx of [-0.10, 0.11]) {
+      b.bar([x + dx, 0.31, -2.13], [x + dx, 0.06, -2.17], 0.07, 0.07, { color: '#50352b', seg: 5 });
+    }
+  }
+  for (const x of [-1.72, 1.75]) {
+    b.box(0.45, 0.14, 1.14, { color: '#e8ba72', pos: [x, 0.41, 0], r: 0.02 });
+  }
+  b.merge(person({ shirt: '#96503b', sarong: '#39383d', hat: 'caping', scale: 0.74 }), matrixOf([-0.92, 0.24, 0.12], [0, 1.35, 0]));
+  b.bar([-1.2, 0.73, 0.37], [-3.58, 0.86, 0.26], 0.06, 0.10, { color: BLACK });
+  b.box(0.72, 0.8, 0.64, { color: '#273c42', top: '#58686a', pos: [-3.57, 0.58, 0], rot: [0, 0, -0.1], r: 0.12 });
+  b.box(0.74, 0.27, 0.66, { color: '#f3ddae', pos: [-3.62, 0.93, 0], rot: [0, 0, -0.1], r: 0.08 });
+  b.box(0.75, 0.09, 0.67, { color: '#d65d32', pos: [-3.60, 0.77, 0], r: 0.02 });
+  b.bar([-3.66, 0.35, 0], [-3.88, -0.55, 0], 0.13, 0.08, { color: '#343c42' });
+  b.cyl(0.15, 0.15, 0.26, { color: '#746450', pos: [-3.97, -0.54, 0], rot: [0, 0, Math.PI / 2], seg: 8 });
+  b.box(0.47, 0.37, 0.48, { color: '#a84232', pos: [-2.48, 0.44, -0.12], rot: [0, -0.19, 0], r: 0.06 });
+  b.bar([-2.58, 0.67, -0.14], [-2.38, 0.67, -0.16], 0.038, 0.038, { color: '#e4ab75' });
+  return b.geo(true);
+}
+
+/** Multiple cloth panels curve between the wood battens of a lug sail. */
+function lugSail(b: Build, x: number, height: number, width: number): void {
+  const wood = '#513044';
+  const n = 5;
+  const point = (u: number, v: number): Vec => {
+    const billow = Math.sin(Math.PI * u) * Math.sin(Math.PI * v) * 0.85;
+    return [x + (u - 0.5) * width * lerp(0.82, 1, v) - v * 0.32, lerp(height, 1.5, v) - (u - 0.5) * (0.92 - v * 0.8), (u - 0.5) * width * 0.32 + billow];
+  };
+  const canvas = ['#af7190', '#dca681', '#956080', '#bd848f', '#704666'];
+  b.bar([x, 0.72, 0], [x + 0.22, height + 0.33, 0], 0.15, 0.095, { color: wood });
+  for (let j = 0; j < canvas.length; j++) {
+    const top = j / canvas.length;
+    const bottom = (j + 1) / canvas.length;
+    for (let i = 0; i < n; i++) {
+      const a = i / n;
+      const d = (i + 1) / n;
+      b.quad(point(a, top), point(a, bottom), point(d, bottom), point(d, top), { color: canvas[j], glow: j === 1 ? 0.09 : 0, vary: 0.045 });
+    }
+    b.bar(point(0, top), point(1, top), 0.055, 0.055, { color: wood, seg: 5 });
+  }
+  b.bar([x + 0.22, height + 0.24, 0], [x - width * 0.48, 0.93, -0.8], 0.035, 0.035, { color: '#372733' });
+}
+
+/** The heavy raider rides high on plated flanks, with twin lugs over a metal ram. */
+export function heavyRaider(): THREE.BufferGeometry {
+  const b = new Build(422);
+  const shape: Vec = [1.04, 1.28, 1.02];
+  hull(b, { side: '#382c48', band: '#7c4e69', bottom: '#282630', rail: '#b28976', deck: '#805344', rust: 0.35 }, shape);
+  const edge = '#b99182';
+  for (const s of [-1, 1]) {
+    for (let i = 0; i < 6; i++) {
+      const p = sect(0.045 + i * 0.145, shape);
+      const q = sect(0.174 + i * 0.145, shape);
+      const a: Vec = [p.x, p.gun + 0.10, s * (p.w + 0.13)];
+      const d: Vec = [q.x, q.gun + 0.10, s * (q.w + 0.13)];
+      b.quad(a, [p.x + 0.12, 0.07, s * p.w * 0.91], [q.x - 0.06, 0.12, s * q.w * 0.91], d, {
+        color: i % 2 ? '#715575' : '#594760', gloss: 0.38,
+      });
+      b.bar(a, d, 0.065, 0.055, { color: edge, seg: 5 });
+      b.cyl(0.09, 0.09, 0.07, { color: '#dfb090', pos: [lerp(p.x, q.x, 0.48), lerp(p.gun, q.gun, 0.48) - 0.12, s * lerp(p.w + 0.17, q.w + 0.17, 0.48)], rot: [Math.PI / 2, 0, 0], seg: 6 });
+    }
+    const root: Vec = [2.92, 1.09, s * 0.80];
+    const tip: Vec = [5.33, 0.82, s * 0.10];
+    b.quad(root, [3.10, 0.14, s * 0.63], [4.84, 0.39, s * 0.09], tip, { color: '#a76652', top: '#e9af83', gloss: 0.45 });
+    b.quad(root, tip, [5.33, 0.82, 0], [3.20, 1.45, 0], { color: '#dbaf8b', gloss: 0.48 });
+  }
+  lugSail(b, 1.0, 5.38, 2.8);
+  lugSail(b, -1.86, 4.2, 2.0);
+  b.add(new THREE.TorusGeometry(0.43, 0.10, 5, 13), { color: '#9a7157', pos: [2.39, 0.9, -0.32], rot: [Math.PI / 2, 0.10, 0] });
+  b.merge(person({ shirt: '#783f45', sarong: '#302639', hat: 'peci', scale: 0.82 }), matrixOf([-0.45, 0.65, -1.00], [0, 1.24, 0]));
+  return b.geo(true);
+}
+
+/** Riveted plates form a wide, sloping shield that wraps around the bow. */
+export function shieldShip(): THREE.BufferGeometry {
+  const b = new Build(423);
+  hull(b, { side: '#294b51', band: '#598083', bottom: '#312d33', rail: '#a4795b', deck: '#8d7050', rust: 0.42 }, [0.96, 1.18, 0.82]);
+  const edge = '#aa714e';
+  const plate = (a: number, v: number): Vec => {
+    const c = Math.cos(a);
+    return [2.14 + (2.32 - v * 0.79) * c, lerp(0.46 + c * 0.20, 2.05 + c * 0.81, v), Math.sin(a) * (1.47 + v * 0.52)];
+  };
+  const crown: Vec[] = [];
+  const foot: Vec[] = [];
+  const panels = 8;
+  for (let i = 0; i <= panels; i++) {
+    const a = lerp(-1.57, 1.57, i / panels);
+    crown.push(plate(a, 1));
+    foot.push(plate(a, 0));
+    if (i === panels) break;
+    const next = lerp(-1.57, 1.57, (i + 1) / panels);
+    b.quad(plate(a, 0), plate(a, 0.62), plate(next, 0.62), plate(next, 0), {
+      color: i % 2 ? '#bd8157' : '#b36b4c', gloss: 0.28,
+    });
+    b.quad(plate(a, 0.62), plate(a, 1), plate(next, 1), plate(next, 0.62), {
+      color: i % 2 ? '#f2dbab' : '#dec292', gloss: 0.34, glow: 0.07,
+    });
+    b.bar(foot[i], crown[i], 0.055, 0.043, { color: edge, seg: 5 });
+    const [x, y, z] = plate((a + next) / 2, 0.8);
+    b.ball(0.092, { color: '#805337', pos: [x + Math.cos(a) * 0.07, y, z + Math.sin(a) * 0.07], seg: 6 });
+  }
+  b.tube(crown, () => 0.10, { color: edge, top: '#d99e6c', seg: 6, rings: 12 });
+  b.tube(foot, () => 0.13, { color: '#64483b', seg: 5, rings: 12 });
+  b.ball(0.47, { color: '#dba669', pos: [4.03, 1.87, 0], scale: [0.43, 1.02, 1.13], seg: 10, gloss: 0.52 });
+  for (const s of [-1, 1]) {
+    b.bar([0.92, 0.64, s * 1.28], [2.13, 2.08, s * 1.91], 0.12, 0.08, { color: '#604943' });
+    b.bar([1.26, 0.64, s * 0.52], [3.46, 2.62, s * 0.69], 0.09, 0.073, { color: '#755342' });
+    b.bar([-2.43, 0.62, s * 0.72], [-2.36, 2.45, s * 0.82], 0.075, 0.065, { color: '#61473a' });
+    b.bar([-0.87, 0.60, s * 0.74], [-0.72, 2.47, s * 0.82], 0.075, 0.065, { color: '#61473a' });
+  }
+  for (let i = 0; i < 6; i++) {
+    const p = lerp(-1.0, 1.0, i / 6);
+    const q = lerp(-1.0, 1.0, (i + 1) / 6);
+    const arch = (z: number): number => 2.45 + 0.24 * (1 - z * z);
+    b.quad([-2.65, arch(p) - 0.08, p], [-0.43, arch(p), p], [-0.43, arch(q), q], [-2.65, arch(q) - 0.08, q], {
+      color: i % 2 ? '#3f6c6a' : '#527b76',
+    });
+  }
+  b.merge(person({ shirt: '#395962', sarong: '#543d35', hat: 'peci', scale: 0.9 }), matrixOf([-1.46, 0.48, -0.24], [0, 1.42, 0]));
+  return b.geo(true);
+}
+
+/** A junk scow piled with sacks and scrap, with a slatted chute over one side. */
+export function dumperShip(): THREE.BufferGeometry {
+  const b = new Build(424);
+  hull(b, { side: '#435d36', band: '#97a65b', bottom: '#463229', rail: '#514837', deck: '#76624a', rust: 0.65 }, [1.08, 1.18, 0.74]);
+  const beams = '#7a563c';
+  const chuteTop = -1.13;
+  const chuteEnd = -3.04;
+  for (let i = 0; i < 7; i++) {
+    const t = i / 6;
+    b.box(2.14 + Math.sin(i * 1.2) * 0.16, 0.12, 0.26, {
+      color: i % 3 === 0 ? '#b99567' : '#8d704d',
+      pos: [-0.59, lerp(1.15, 0.29, t), lerp(chuteTop, chuteEnd, t)], rot: [-0.42, 0, 0], r: 0,
+    });
+  }
+  for (const x of [-1.67, 0.46]) {
+    b.bar([x, 1.33, chuteTop + 0.05], [x, 0.39, chuteEnd - 0.09], 0.096, 0.075, { color: beams, seg: 5 });
+    b.bar([x, 0.44, -1.30], [x, 0.43, -2.65], 0.072, 0.064, { color: '#564139', seg: 5 });
+  }
+  const hoist: Vec = [-2.54, 3.05, -0.94];
+  for (const z of [-1.25, 1.10]) b.bar([-2.64, 0.65, z], hoist, 0.11, 0.083, { color: beams });
+  b.bar(hoist, [-1.40, 2.74, -1.65], 0.095, 0.069, { color: '#a18555' });
+  b.bar([-1.40, 2.74, -1.65], [-1.32, 1.46, -2.37], 0.028, 0.028, { color: '#4c3b2e' });
+  b.cyl(0.17, 0.17, 0.14, { color: '#67503c', pos: [-1.40, 2.74, -1.65], rot: [0, 0, Math.PI / 2], seg: 8 });
+  const sacks: [Vec, number, string][] = [
+    [[-1.55, 0.92, 0.39], 0.69, '#c4a679'],
+    [[-1.06, 1.04, -0.52], 0.65, '#8c9b6c'],
+    [[-1.86, 1.25, -0.28], 0.53, '#b79b70'],
+    [[-0.92, 1.57, 0.31], 0.55, '#abb681'],
+    [[-0.30, 0.95, 0.71], 0.52, '#939586'],
+  ];
+  for (const [pos, r, color] of sacks) {
+    b.ball(r, { color, pos, scale: [1.1, 0.83, 0.9], rot: [0.18, b.r() * 5, 0.24], seg: 8, rough: 0.10 });
+    b.cyl(0.095, 0.14, 0.13, { color: '#68553d', pos: [pos[0] - 0.13, pos[1] + r * 0.79, pos[2]], rot: [0.25, 0, 0.32], seg: 6 });
+  }
+  b.add(new THREE.TorusGeometry(0.41, 0.14, 6, 12), { color: '#383a32', pos: [0.15, 1.31, -0.27], rot: [0.52, 0.42, 0.16] });
+  for (const z of [0.65, 1.0]) {
+    b.box(2.1, 0.15, 0.26, { color: '#9d7050', pos: [-0.39, 0.83 + z * 0.21, z], rot: [0, -0.16, 0.18], r: 0 });
+  }
+  for (const x of [-2.41, -1.48, -0.37]) b.bar([x, 0.58, 1.22], [x, 1.36, 1.30], 0.072, 0.063, { color: beams });
+  b.bar([-2.48, 1.25, 1.29], [-0.33, 1.30, 1.30], 0.095, 0.065, { color: '#9b7d58' });
+  b.merge(person({ shirt: '#8b623a', sarong: '#3c4f3b', hat: 'caping', scale: 0.83 }), matrixOf([1.88, 0.56, 0.15], [0, 1.5, 0]));
+  return b.geo(true);
+}
+
+/** A curved swallowtail and a string of signal flags over a lookout's platform. */
+export function signalShip(): THREE.BufferGeometry {
+  const b = new Build(425);
+  hull(b, { side: '#644339', band: '#dc9250', bottom: '#382738', rail: '#ce9b6a', deck: '#98715a', rust: 0.36 }, [1.04, 1.10, 0.94]);
+  const mast: Vec = [0.68, 6.68, 0];
+  const rope = '#6a513a';
+  b.bar([0.45, 0.59, 0], mast, 0.16, 0.08, { color: '#654839' });
+  b.cyl(0.73, 0.46, 0.40, { color: '#8f5c42', pos: [0.59, 4.02, 0], seg: 11 });
+  b.cyl(0.78, 0.76, 0.09, { color: '#d19d5e', pos: [0.59, 4.23, 0], seg: 11 });
+  b.ball(0.18, { color: '#ffd587', pos: mast, seg: 8, glow: 0.24 });
+  for (const s of [-1, 1]) {
+    b.bar([0.63, 4.25, 0], [-2.92, 1.03, s * 1.01], 0.045, 0.04, { color: rope });
+    b.bar([0.63, 4.25, 0], [1.55, 0.96, s * 1.14], 0.045, 0.04, { color: rope });
+    b.cyl(0.14, 0.21, 0.34, { color: '#ffbc59', pos: [-2.27, 1.52, s * 1.12], seg: 8, glow: 0.72 });
+    b.cyl(0.23, 0.16, 0.13, { color: '#7f5438', pos: [-2.27, 1.73, s * 1.12], seg: 8 });
+  }
+  const flag = (u: number, v: number): Vec => {
+    const cut = 0.72 * Math.pow(u, 4) * (1 - Math.abs(2 * v - 1));
+    return [0.65 - 3.82 * u + cut, 6.46 - (1.62 - u * 0.46) * v + 0.34 * Math.sin(u * Math.PI), u * 0.86 + 0.26 * Math.sin(u * 7 + v)];
+  };
+  const colors = ['#e59b32', '#fff0be', '#cf7133'];
+  const rows = [0, 0.43, 0.62, 1];
+  for (let i = 0; i < 8; i++) {
+    const u = i / 8;
+    const v = (i + 1) / 8;
+    for (let j = 0; j < colors.length; j++) {
+      const lo = rows[j];
+      const hi = rows[j + 1];
+      b.quad(flag(u, lo), flag(u, hi), flag(v, hi), flag(v, lo), { color: colors[j], glow: 0.13, vary: 0.06 });
+    }
+  }
+  const pennant = (t: number): Vec => [lerp(0.69, 3.55, t), lerp(5.76, 1.53, t) - Math.sin(t * Math.PI) * 0.42, lerp(0, -0.63, t)];
+  b.tube([pennant(0), pennant(0.5), pennant(1)], () => 0.037, { color: rope, seg: 5, rings: 6 });
+  for (let i = 0; i < 5; i++) {
+    const a = pennant(0.16 + i * 0.146);
+    const d = pennant(0.27 + i * 0.146);
+    b.quad(a, [a[0] - 0.56, a[1] - 0.79, a[2] - 0.57], [a[0] - 0.38, a[1] - 0.85, a[2] - 0.59], d, {
+      color: i % 2 ? '#db7950' : '#fff1c3', glow: 0.10,
+    });
+  }
+  b.merge(person({ shirt: '#a46942', sarong: '#5f3641', hat: 'none', scale: 0.9 }), matrixOf([0.63, 4.22, -0.17], [0, 1.12, 0]));
+  b.merge(person({ shirt: '#5e414e', sarong: '#573e33', hat: 'peci', scale: 0.76 }), matrixOf([2.05, 0.76, 0.12], [0, 1.6, 0]));
   return b.geo(true);
 }
 

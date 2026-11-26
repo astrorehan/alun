@@ -3,9 +3,12 @@ import { LandscapeMode } from './landscape';
 import type { Entity, GamePhase, PlayerProgress, ShopTab, UpgradeId } from './types';
 import { TropicalAudio } from './audio';
 import { markRead } from './journal';
-import { browserStore, clearGame, loadGame, saveGame } from './save';
+import { browserStore, clearGame, loadBest, loadGame, saveGame, updateBest } from './save';
+import { loadSettings, saveSettings, skipFilms, type GameSettings, type VolumeChannel } from './settings';
 import { GameSimulation } from './simulation';
-import { chapterTitle, PATROL, whereAt } from './story/state';
+import { RadioVoice } from './voice';
+import { dayTitle } from './story/state';
+import { SCENES, type Scene } from './story/talk';
 import { GameUI } from './ui';
 import type { EndingHooks } from './scene/ending';
 import type { OpeningHooks } from './scene/opening';
@@ -60,10 +63,17 @@ class AlunApp {
   private saveFailed = false;
   /** Birdsong the opening asks for while it runs. */
   private introBirds = 0.8;
+  private settings: GameSettings;
+  private voice: RadioVoice;
 
   constructor(makeRenderer: (canvas: HTMLCanvasElement) => GameRenderer) {
     this.canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
     this.audio = new TropicalAudio();
+    this.settings = loadSettings();
+    this.audio.setVolumes(this.settings.volume);
+    this.audio.setMuted(this.settings.muted);
+    this.voice = new RadioVoice(this.audio);
+    this.voice.load();
     this.renderer = makeRenderer(this.canvas);
 
     const loaded = loadGame(this.store);
@@ -93,7 +103,11 @@ class AlunApp {
         this.enterLagoon(true);
       },
       onOpenShop: (tab?: ShopTab) => {
-        if (this.phase === 'playing' && this.progress.shopUnlocked && !this.ui.isSettingsOpen() && !this.ending) {
+        if (this.phase === 'playing' && this.progress.shopUnlocked && !this.ui.isSettingsOpen() && !this.ending && !this.ui.isTalking()) {
+          if (this.sim.story.s.cycle === 'night' && tab !== 'journal') {
+            this.ui.explainNightShop();
+            return;
+          }
           this.openShop(tab);
         }
       },
@@ -105,25 +119,43 @@ class AlunApp {
       onBuyUpgrade: (id: UpgradeId, originEl?: HTMLElement | null) => {
         this.buyUpgrade(id, originEl);
       },
-      onAnswerCall: (originEl?: HTMLElement | null) => {
-        if (!this.sim.story.answerCall()) return;
+      onRepairPier: (originEl?: HTMLElement | null) => {
+        if (!this.sim.story.repairPier()) {
+          this.audio.playUiError();
+          return;
+        }
         this.save();
-        this.audio.playShopUnlock();
-        this.ui.celebrate('Panggilan dijawab. Kembali ke laguna!', 'red', originEl);
-        this.ui.renderUpgradeScreen(this.progress, computeStats(this.progress), this.sim.story.headline());
+        const stats = computeStats(this.progress);
+        this.ui.celebrate(`Dermaga ditambal! (${Math.round(this.progress.story.pierHp)}/${Math.round(this.progress.story.maxPierHp)})`, 'green', originEl);
+        this.ui.renderUpgradeScreen(this.progress, stats, this.sim.story.headline(), undefined, this.sim.story.waveHud());
+      },
+      onRetryFromDay1: () => {
+        void this.landscape.request();
+        this.audio.unlock();
+        this.retryFromDay1();
+      },
+      onDefeatTitle: () => {
+        clearGame(this.store);
+        this.progress = createInitialProgress();
+        this.hasSave = false;
+        this.cancelRescue();
+        this.sim.initLagoon(this.progress, computeStats(this.progress), true);
+        this.sim.lagoonInitialized = false;
+        this.phase = 'title';
+        this.audio.setShopDuck(false);
+        this.ui.forgetProgress();
+        this.showTitle();
       },
       onReadJournal: (part) => {
         markRead(this.progress, part);
         this.save();
       },
-      onToggleMute: () => {
-        const muted = this.audio.toggleMute();
-        this.ui.setMutedVisual(muted);
-      },
       onResetSave: () => {
         this.ui.confirm(
           'Hapus simpanan?',
-          `Cerita (${this.savedPlace()}), koin dan alat dihapus dari browser ini.`,
+          this.hasSave
+            ? `Cerita (${this.savedPlace()}), koin dan alat dihapus dari browser ini. Pengaturan tetap disimpan.`
+            : 'Belum ada cerita yang tersimpan. Pengaturan tetap disimpan.',
           'Hapus',
           () => {
             clearGame(this.store);
@@ -135,10 +167,30 @@ class AlunApp {
             this.sim.lagoonInitialized = false;
             this.phase = 'title';
             this.audio.setShopDuck(false);
+            this.ui.closeSettings();
             this.ui.forgetProgress();
             this.showTitle();
           }
         );
+      },
+      onSettingsChange: (s, what) => this.changeSettings(s, what),
+      onSampleVolume: (channel) => this.sampleVolume(channel),
+      voice: {
+        start: (sender, mood) => this.voice.start(sender, mood, this.settings.voiceMode),
+        speaking: () => this.voice.speaking(),
+        level: () => this.audio.voiceLevel(),
+        blip: (sender) => {
+          if (this.settings.voiceMode !== 'off') this.voice.blip(sender);
+        },
+        stop: (click) => this.voice.stop(click),
+        prefetch: (sender, mood) => this.voice.prefetch(sender, mood),
+      },
+      onTalk: (on) => {
+        // the lagoon holds still while Bu Sari talks: no half-made swipe carries over
+        if (!on) return;
+        this.sim.drag.active = false;
+        this.sim.drag.pointerId = -1;
+        this.audio.setWaveCharge(0);
       },
       onStartEndless: () => {
         this.progress.endlessMode = true;
@@ -203,13 +255,24 @@ class AlunApp {
     };
     const initialQuality = this.renderer.getQualityState?.();
     if (initialQuality) this.ui.updateQualityUI(initialQuality);
+    this.ui.initSettings(this.settings);
 
     this.sim = new GameSimulation(this.audio, {
-      radio: (sender, text) => this.ui.showRadio(sender, text, this.progress.story.chapter <= 4),
+      radio: (sender, text) => this.ui.showRadio(sender, text),
+      talk: (id) => {
+        const scene: Scene = SCENES[id];
+        this.ui.startTalk(scene.lines, scene.hold !== false);
+      },
       coins: () => {},
       save: () => this.save(),
-      chapter: (n) => this.ui.showChapter(n),
+      chapter: (n) => {
+        updateBest(this.store, this.progress);
+        this.ui.showChapter(n);
+      },
       celebrate: (text, swatch) => this.ui.celebrate(text, swatch),
+      banner: (title, sub, swatch) => this.ui.showWaveBanner(title, sub, swatch),
+      pierHurt: () => this.ui.pulsePier(),
+      defeat: () => this.handleDefeat(),
       dolphin: (e) => this.startRescue(e),
       filming: () => this.rescue !== null,
       worsen: (kind) => {
@@ -230,26 +293,49 @@ class AlunApp {
     requestAnimationFrame((t) => this.loop(t));
   }
 
-  /** The chapter the save will land in, also for one from before the story. */
-  private savedChapter(): number {
-    const s = this.progress.story;
-    return s.step === 'migrated' ? whereAt(s.flags, s.openingLeft).chapter : s.chapter;
+  private savedPlace(): string {
+    const d = this.progress.story.day;
+    return `Hari ${d} · ${dayTitle(d)}`;
   }
 
-  /** The same, the way a player would say it. */
-  private savedPlace(): string {
-    const n = this.savedChapter();
-    return n >= PATROL ? chapterTitle(n) : `bab ${n}, ${chapterTitle(n)}`;
+  /* ---------------------------------------------------------------- settings */
+
+  private changeSettings(next: GameSettings, what: string): void {
+    const voiceWas = this.settings.voiceMode;
+    this.settings = next;
+    saveSettings(next);
+    this.audio.setVolumes(next.volume);
+    this.audio.setMuted(next.muted);
+    if (next.voiceMode !== voiceWas || next.muted) this.voice.stop(false);
+    this.ui.applySettings(next);
+    if (what === 'muted' && !next.muted) this.audio.playUiClick();
+  }
+
+  private toggleMute(): void {
+    this.changeSettings({ ...this.settings, muted: !this.settings.muted }, 'muted');
+  }
+
+  /** A slider was let go: something on that channel, so the player hears what they set. */
+  private sampleVolume(channel: VolumeChannel): void {
+    this.audio.unlock();
+    if (channel === 'voice') {
+      // one of Bu Sari's exclamations, or her babble when voices are set to babble
+      this.voice.sample(this.settings.voiceMode === 'off' ? 'babble' : this.settings.voiceMode);
+    } else if (channel === 'music' || channel === 'ambience') {
+      // both play all the time; the change is heard as it is made
+    } else if (channel === 'ui') this.audio.playUiOpen();
+    else this.audio.playWaveLaunch(0.55);
   }
 
   private showTitle(): void {
-    this.ui.setTitleSave(this.hasSave ? chapterTitle(this.savedChapter()) : null);
+    this.ui.setTitleSave(this.hasSave ? this.savedPlace() : null);
+    this.ui.setTitleBest(loadBest(this.store));
     this.ui.showPhase('title');
   }
 
   /** Everything of one moment, written in one go. Says so when the browser will not keep it. */
   private save(): void {
-    // under the opening the water holds the film's own rubbish, and none of it belongs in a save
+    if (this.progress.story.defeated) return;
     const live = this.phase !== 'intro' && this.sim.lagoonInitialized && this.sim.progress === this.progress;
     if (live) this.sim.story.snapshot();
     const ok = saveGame(this.store, this.progress);
@@ -262,13 +348,26 @@ class AlunApp {
 
   private newGame(): void {
     clearGame(this.store);
-    this.progress = createInitialProgress();
+    this.progress = createInitialProgress(false);
     this.hasSave = false;
     this.ui.forgetProgress();
     this.cancelRescue();
     this.sim.lagoonInitialized = false;
     this.save();
     this.startOpening();
+  }
+
+  /** Fast arcade restart from Day 1 after Pier defeat: jumps straight into Day 1 with Workshop open! */
+  private retryFromDay1(): void {
+    clearGame(this.store);
+    this.progress = createInitialProgress(true);
+    this.hasSave = false;
+    this.ui.forgetProgress();
+    this.cancelRescue();
+    this.sim.lagoonInitialized = false;
+    this.audio.setShopDuck(false);
+    this.enterLagoon(true);
+    this.ui.showWaveBanner('HARI 1 · MULAI ULANG!', 'Bengkel sudah terbuka — sapu sampah & perkuat pertahanan!', 'green');
   }
 
   private enterLagoon(reinit: boolean): void {
@@ -278,8 +377,7 @@ class AlunApp {
     }
     this.phase = 'playing';
     this.ui.showPhase('playing');
-    // a story that stopped in the middle of the dolphin's film picks it up again
-    this.ui.showChapter(this.progress.story.chapter);
+    this.ui.showChapter(this.progress.story.day);
     if (this.rescue === 'film') this.ui.setFilm(true);
     this.save();
   }
@@ -289,8 +387,8 @@ class AlunApp {
    * waking up. The trash they throw is the trash the player starts with.
    */
   private startOpening(): void {
-    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-    if (!this.renderer.playOpening || reduceMotion) {
+    const noFilm = skipFilms(this.settings);
+    if (!this.renderer.playOpening || noFilm) {
       this.enterLagoon(true);
       return;
     }
@@ -343,8 +441,8 @@ class AlunApp {
 
   /** The mother dolphin's film. False when there is none to show, and the story goes on without it. */
   private startRescue(e: Entity): boolean {
-    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-    if (!this.renderer.playRescue || reduceMotion) return false;
+    const noFilm = skipFilms(this.settings);
+    if (!this.renderer.playRescue || noFilm) return false;
     this.rescue = 'film';
     this.sim.drag.active = false;
     this.sim.drag.pointerId = -1;
@@ -363,11 +461,7 @@ class AlunApp {
       help: () => {
         this.rescue = 'help';
         this.ui.setFilm(false);
-        this.ui.showRadio(
-          'A.L.U.N.',
-          'Jaringnya melilit tubuh induk. Kirim ombak mengikuti panah sampai ia bebas.',
-          true
-        );
+        if (!this.sim.story.talk('dolphin')) this.ui.showRadio('A.L.U.N.', 'Jaring melilit induk. Kirim ombak ikut panah.');
       },
       freed: () => {
         this.rescue = 'free';
@@ -390,10 +484,10 @@ class AlunApp {
   /** The story is over: dawn, Pak Damar at the pier, the dolphins beside him. */
   private startEnding(): void {
     this.save();
-    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    const noFilm = skipFilms(this.settings);
     this.sim.drag.active = false;
     this.sim.drag.pointerId = -1;
-    if (!this.renderer.playEnding || reduceMotion) {
+    if (!this.renderer.playEnding || noFilm) {
       this.handleVictory();
       return;
     }
@@ -433,9 +527,9 @@ class AlunApp {
     if (this.phase === 'victory') return { level: 1, gulls: 0.4 };
     const tod = this.sim.getTimeOfDay(this.progress);
     if (tod === 'monsoon') return { level: 0, gulls: 0 };
+    if (tod === 'night') return { level: 0.03, gulls: 0.05 };
     const eco = stats.ecoPercent / 100;
     let level = tod === 'dawn' ? 0.95 : tod === 'sunset' ? 0.1 + 0.4 * eco : 0.15 + 0.85 * eco;
-    // the whole lagoon holds its breath while the dolphin is in trouble
     if (this.rescue === 'film') level *= 0.25;
     if (this.phase === 'upgrade') level *= 0.6;
     return { level, gulls: tod === 'sunset' ? 0.2 : 0.45 };
@@ -449,7 +543,7 @@ class AlunApp {
     this.phase = 'upgrade';
     this.audio.playUiOpen();
     const stats = computeStats(this.progress);
-    this.ui.renderUpgradeScreen(this.progress, stats, this.sim.story.headline(), tab);
+    this.ui.renderUpgradeScreen(this.progress, stats, this.sim.story.headline(), tab, this.sim.story.waveHud());
     this.ui.showPhase('upgrade');
   }
 
@@ -462,6 +556,7 @@ class AlunApp {
   }
 
   private handleVictory(): void {
+    updateBest(this.store, this.progress);
     this.save();
     this.phase = 'victory';
     this.audio.playVictory();
@@ -470,6 +565,20 @@ class AlunApp {
     this.audio.setShopDuck(false);
     this.audio.setWaveCharge(0);
     this.audio.setWeather('dawn', false);
+  }
+
+  private handleDefeat(): void {
+    const best = updateBest(this.store, this.progress);
+    clearGame(this.store);
+    this.hasSave = false;
+    this.sim.drag.active = false;
+    this.sim.drag.pointerId = -1;
+    this.phase = 'defeat';
+    this.audio.playDefeat();
+    this.audio.setShopDuck(true);
+    this.audio.setWaveCharge(0);
+    this.ui.renderDefeat(this.progress, best);
+    this.ui.showPhase('defeat');
   }
 
   private buyUpgrade(id: UpgradeId, originEl?: HTMLElement | null): void {
@@ -482,13 +591,13 @@ class AlunApp {
 
     this.progress.coins -= cost;
     this.progress.upgrades[id] = lv + 1;
+    const stats = computeStats(this.progress);
+    this.sim.onUpgradePurchased(id, stats);
     this.save();
 
     this.audio.playUpgradeBuy();
-    const stats = computeStats(this.progress);
-    this.sim.onUpgradePurchased(id, stats);
     this.ui.celebrate(`${UPGRADE_MAP[id].name} Lv ${lv + 1}!`, 'green', originEl);
-    this.ui.renderUpgradeScreen(this.progress, stats, this.sim.story.headline());
+    this.ui.renderUpgradeScreen(this.progress, stats, this.sim.story.headline(), undefined, this.sim.story.waveHud());
   }
 
   private bindInputs(): void {
@@ -498,8 +607,9 @@ class AlunApp {
       if (state) this.ui.updateQualityUI(state);
     });
 
-    // the opening pauses with the tab, and so should its boat's engine
+    // the opening pauses with the tab, and so should its boat's engine & music scheduler
     document.addEventListener('visibilitychange', () => {
+      this.audio.setPaused(document.hidden);
       if (document.hidden) {
         this.audio.setMotor(0);
         this.audio.setWaveCharge(0);
@@ -518,13 +628,30 @@ class AlunApp {
 
     window.addEventListener('keydown', (e) => {
       if (document.querySelector('dialog[open]')) return;
+      // Bu Sari is talking: Space or Enter goes on, Escape ends her scene; M and G still work
+      if (this.ui.isTalking() && !this.ui.isSettingsOpen() && !this.ui.isConfirmOpen()) {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          if (!e.repeat) this.ui.advanceTalk();
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          this.ui.skipTalk();
+          return;
+        }
+        if (e.key === 'Tab' || e.key === 'e' || e.key === 'E' || e.key === '1' || e.key === '2') {
+          e.preventDefault();
+          return;
+        }
+      }
       // during a film the only keys that do anything are skip and mute
       if (this.phase === 'intro' || this.ending || this.rescue === 'film' || this.rescue === 'free') {
         if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           this.skipFilm();
         } else if (e.key === 'm' || e.key === 'M') {
-          this.ui.setMutedVisual(this.audio.toggleMute());
+          this.toggleMute();
         } else if (e.key === 'Tab') {
           e.preventDefault();
         }
@@ -568,15 +695,15 @@ class AlunApp {
       if (this.ui.isSettingsOpen() || this.ui.isConfirmOpen()) return;
 
       if (e.key === 'm' || e.key === 'M') {
-        const muted = this.audio.toggleMute();
-        this.ui.setMutedVisual(muted);
+        this.toggleMute();
       } else if (e.key === 'Tab' || e.key === 'e' || e.key === 'E') {
         if (e.repeat) return;
         if (this.phase === 'playing') {
           if (e.key === 'Tab' && !this.progress.shopUnlocked) return;
           e.preventDefault();
-          if (this.progress.shopUnlocked) this.openShop();
-          else this.ui.explainClosedShop();
+          if (!this.progress.shopUnlocked) this.ui.explainClosedShop();
+          else if (this.sim.story.s.cycle === 'night') this.ui.explainNightShop();
+          else this.openShop();
         } else if (this.phase === 'upgrade' && e.key !== 'Tab') {
           e.preventDefault();
           this.closeShop();
@@ -588,9 +715,20 @@ class AlunApp {
       }
     });
 
+    // a soft tick when the mouse comes onto something that can be pressed (not when moving inside it)
+    const pressable = 'button, [role="tab"], [role="radio"], [role="switch"], a[href], summary, input[type="range"]';
+    document.addEventListener('pointerover', (e) => {
+      if (e.pointerType !== 'mouse' || !this.settings.hoverSounds || this.settings.muted) return;
+      const el = e.target instanceof Element ? e.target.closest(pressable) : null;
+      if (!el) return;
+      const from = e.relatedTarget instanceof Element ? e.relatedTarget.closest(pressable) : null;
+      if (from === el || el.matches(':disabled, [aria-disabled="true"], .is-locked')) return;
+      this.audio.playUiHover();
+    });
+
     this.canvas.addEventListener('pointerdown', (e) => {
       this.audio.unlock();
-      if (this.phase !== 'playing' || this.ui.isSettingsOpen() || this.ending) return;
+      if (this.phase !== 'playing' || this.ui.isSettingsOpen() || this.ending || this.ui.isTalking()) return;
       if (this.rescue === 'film' || this.rescue === 'free') return;
       if (e.button !== 0 && e.pointerType === 'mouse') return;
 
@@ -670,7 +808,8 @@ class AlunApp {
 
     const stats = computeStats(this.progress);
     const filming = this.ending || this.rescue === 'film' || this.rescue === 'free';
-    const activePlay = this.phase === 'playing' && !this.ui.isSettingsOpen() && !this.ending;
+    // the lagoon waits while a window is open, the ending plays, or Bu Sari is talking
+    const activePlay = this.phase === 'playing' && !this.ui.isSettingsOpen() && !this.ending && !this.ui.isTalking();
     let guideObjective: Objective | null = null;
 
     if (activePlay) {
@@ -687,7 +826,8 @@ class AlunApp {
           this.sim.maxEnergy,
           this.sim.comboCount,
           bossRatio,
-          obj
+          obj,
+          this.sim.story.waveHud()
         );
         guideObjective = obj;
       }
@@ -708,6 +848,8 @@ class AlunApp {
       this.audio.updateBirds(dt, birds.level, birds.gulls);
     }
 
+    // the player can turn the camera's jolt off; everything else about a hit stays
+    if (!this.settings.shake) this.sim.screenShake = 0;
     this.renderer.setPhase?.(this.phase);
     this.renderer.render(this.sim, this.progress, stats, activePlay);
     this.updateGuides(guideObjective);

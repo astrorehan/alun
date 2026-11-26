@@ -1,8 +1,11 @@
 import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js';
-import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
+const run = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.resolve(__dirname, '..', 'public', 'audio');
 
@@ -157,12 +160,22 @@ export const SFX_MANIFEST = [
   },
 
   // === 5. UI & PROGRESSION (UI) ===
+  // trim: [start s, length s, fade-out s, gain dB], cut with ffmpeg after generation
   {
     id: 'ui-click',
-    text: 'Crisp minimal hollow tropical bamboo wood click with a tiny soft water droplet pop, clean cozy game UI button tap, very short',
+    text: 'A clean wooden button tap for a cozy island game menu, short bright knock with a soft pop, dry, nothing else.',
     durationSeconds: 0.5,
-    promptInfluence: 0.8,
+    promptInfluence: 0.95,
     loop: false,
+    trim: [0, 0.14, 0.06, 0],
+  },
+  {
+    id: 'ui-hover',
+    text: 'One gentle soft bubble pop blip, very small and quiet, short and clean, like a cursor touching a cute game menu button. Dry, nothing else.',
+    durationSeconds: 0.5,
+    promptInfluence: 0.95,
+    loop: false,
+    trim: [0, 0.12, 0.05, 0],
   },
   {
     id: 'ui-tab',
@@ -173,17 +186,35 @@ export const SFX_MANIFEST = [
   },
   {
     id: 'ui-open',
-    text: 'Soft airy tropical palm breeze whoosh with a warm ascending wooden bamboo chime, pleasant cozy game UI menu opening sound',
-    durationSeconds: 0.75,
-    promptInfluence: 0.75,
+    text: 'Snappy cartoon game UI window pop-up sound, round bubbly pop with a tiny bright sparkle on top. Very short, clean, dry, no background.',
+    durationSeconds: 0.5,
+    promptInfluence: 0.85,
     loop: false,
+    trim: [0, 0.32, 0.14, 0],
   },
   {
     id: 'ui-close',
-    text: 'Gentle settling hollow bamboo tap with a brief soft downward air puff, clean cozy game UI menu closing sound',
-    durationSeconds: 0.65,
-    promptInfluence: 0.75,
+    text: 'Clean game UI panel close sound: a quick soft downward swish ending in a gentle muted click. Short, dry, no ambience, no music.',
+    durationSeconds: 0.5,
+    promptInfluence: 0.85,
     loop: false,
+    trim: [0.03, 0.36, 0.12, 3],
+  },
+  {
+    id: 'radio-in',
+    text: 'Short handheld two-way radio push-to-talk squelch: a crisp click with a brief burst of radio static that cuts off cleanly. Very short, no voice.',
+    durationSeconds: 0.5,
+    promptInfluence: 0.85,
+    loop: false,
+    trim: [0.37, 0.1, 0.012, -2],
+  },
+  {
+    id: 'radio-out',
+    text: 'A walkie-talkie release: soft click with a tiny static tail, very short, no voice.',
+    durationSeconds: 0.5,
+    promptInfluence: 0.85,
+    loop: false,
+    trim: [0.36, 0.1, 0.02, 2],
   },
   {
     id: 'ui-error',
@@ -321,7 +352,17 @@ async function generateOne(client, item, force) {
   });
 
   const buffer = await streamToBuffer(audioStream);
-  await writeFile(outPath, buffer);
+  if (item.trim) {
+    // UI sounds keep only their hit: cut, fade and level with ffmpeg
+    const [start, length, fade, gainDb] = item.trim;
+    const rawPath = `${outPath}.raw.mp3`;
+    await writeFile(rawPath, buffer);
+    const af = `afade=t=in:d=0.003,afade=t=out:st=${Math.max(0, length - fade).toFixed(3)}:d=${fade},volume=${gainDb}dB`;
+    await run(process.env.FFMPEG ?? 'ffmpeg', ['-v', 'error', '-y', '-ss', String(start), '-t', String(length), '-i', rawPath, '-af', af, '-ac', '1', '-ar', '44100', '-c:a', 'libmp3lame', '-b:a', '128k', outPath]);
+    await rm(rawPath);
+  } else {
+    await writeFile(outPath, buffer);
+  }
   const kb = (buffer.length / 1024).toFixed(1);
   console.log(`[ok]   ${item.id}.mp3 (${kb} KB)`);
   return { id: item.id, status: 'generated', bytes: buffer.length };

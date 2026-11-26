@@ -145,10 +145,23 @@ export const DEPOSIT_SPOTS: Point[] = [252, 292, 568, 612, 206, 650, 160, 540].m
   y,
 }));
 
-/** Where the raiders drop anchor: across the mouth of the net, between it and the pier. */
+/** Where the raiders drop anchor: spread along the pier & net so multiple pirates attack cleanly. */
 export const RAID_ANCHORS: Point[] = [
-  { x: 452, y: 414 },
-  { x: 446, y: 318 },
+  { x: 448, y: 468 },
+  { x: 454, y: 406 },
+  { x: 438, y: 526 },
+  { x: 446, y: 334 },
+  { x: 462, y: 582 },
+];
+
+/** Entry lanes around the outer lagoon for multi-ship pirate waves. */
+export const PIRATE_LANES: { x: number; y: number; rot: number }[] = [
+  { x: WORLD_W + 64, y: 410, rot: Math.PI },
+  { x: WORLD_W + 64, y: 268, rot: Math.PI * 0.94 },
+  { x: WORLD_W + 64, y: 556, rot: -Math.PI * 0.92 },
+  { x: 960, y: WORLD_H + 64, rot: -Math.PI * 0.64 },
+  { x: 740, y: WORLD_H + 64, rot: -Math.PI * 0.62 },
+  { x: WORLD_W + 64, y: 158, rot: Math.PI * 0.88 },
 ];
 
 /** Strategic lagoon coordinates for Autonomous AI Buoys */

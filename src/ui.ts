@@ -8,8 +8,11 @@ import type {
   UpgradeId,
 } from './types';
 import { isWritten, JOURNAL, unreadPages, type JournalEntry } from './journal';
+import { browserStore, loadBest, type BestRecord } from './save';
+import type { WaveHudState } from './story/director';
 import type { Objective } from './story/jobs';
-import { chapterTitle, nextSupply, P_DIRTY, P_HEALTHY, PATROL } from './story/state';
+import type { Mood, TalkLine } from './story/talk';
+import { dayTitle, nextSupply, P_DIRTY, P_HEALTHY, REPAIR_HEAL } from './story/state';
 import {
   countAffordableUpgrades,
   getUpgradeCost,
@@ -21,8 +24,12 @@ import {
 import { getUiIconSvg, type UiIconName } from './ui-kit/icons';
 import type { QualitySetting, Tier } from './scene/quality';
 import type { QualityState } from './scene/SceneRenderer';
+import { TEXT_CPS, type GameSettings, type VolumeChannel } from './settings';
+import { RadioCard, Speech, type VoiceLink } from './ui-radio';
+import { SettingsPanel } from './ui-settings';
 import {
-  renderJournalCard,
+  renderJournalEntry,
+  renderJournalRecord,
   renderStatTile,
   spawnUiConfetti,
   type UiSwatch,
@@ -32,7 +39,8 @@ const TIME_META: Record<TimeOfDay, { label: string; swatch: UiSwatch; icon: UiIc
   morning: { label: 'PAGI CERAH', swatch: 'blue', icon: 'sun' },
   noon: { label: 'SIANG BERKILAU', swatch: 'blue', icon: 'sun' },
   sunset: { label: 'SENJA PESISIR', swatch: 'orange', icon: 'sunset' },
-  monsoon: { label: 'BADAI MUSON', swatch: 'purple', icon: 'storm' },
+  night: { label: 'MALAM SERBUAN', swatch: 'purple', icon: 'moon' },
+  monsoon: { label: 'BADAI MUSON', swatch: 'red', icon: 'storm' },
   dawn: { label: 'FAJAR HARMONI', swatch: 'gold', icon: 'dawn' },
 };
 
@@ -42,7 +50,7 @@ const BRANCH_LABELS: Record<UpgradeBranch, string> = {
   energy: 'CABANG ENERGI',
   ai: 'MODUL AI A.L.U.N.',
   eco: 'DESA & PESISIR',
-  final: 'RADIO BENGKEL',
+  final: 'PERTAHANAN DERMAGA',
 };
 
 const BRANCH_SWATCH: Record<UpgradeBranch, UiSwatch> = {
@@ -72,9 +80,6 @@ const NODE_MIN_FONT = 9.5;
 /** Room between tools as parts of a tool's height: least, then most when the map has space to spare. */
 const GAP_X: [number, number] = [0.42, 1.1];
 const GAP_Y: [number, number] = [0.4, 0.9];
-
-/** Type sizes the journal may step down through, as in the `data-fit` levels of the stylesheet. */
-const JOURNAL_FIT = [1, 0.9, 0.81, 0.73, 0.66];
 
 /** Screen pixels per layout pixel: below 1 while a modal zooms in, and measurements must not follow it. */
 function layoutScale(node: HTMLElement): number {
@@ -118,15 +123,14 @@ function fitLine(btn: HTMLElement, wrap = false): void {
   }
 }
 
-const CLOSED_SHOP = 'Bengkel masih tutup: peti perkakas Bu Sari belum kembali.';
+const CLOSED_SHOP = 'Bengkel masih tutup: dorong peti perkakas Bu Sari ke ujung dermaga.';
+const NIGHT_SHOP = 'Bu Sari berjaga di suar! Bengkel buka kembali saat fajar.';
 const SAVE_FAILED = 'Browser menolak menyimpan. Progres hilang kalau halaman ditutup.';
 
-/** Keep longer radio lines on screen long enough to read. */
-const radioTime = (text: string): number => Math.min(6.8, Math.max(2.8, 2 + text.length * 0.045));
-type HudMessage = { text: string; seconds: number } & (
-  | { kind: 'radio'; sender: string }
-  | { kind: 'notice'; swatch: UiSwatch }
-);
+/** How long a written radio line stays once it is all there: long enough to read again. */
+const radioHold = (text: string): number => Math.min(4.5, 1.4 + text.length * 0.022);
+type HudMessage = { text: string; seconds: number; swatch: UiSwatch };
+type RadioLine = { sender: string; text: string; mood?: Mood };
 
 export interface UIHandlers {
   onStartNew: () => void;
@@ -134,10 +138,19 @@ export interface UIHandlers {
   onOpenShop: (tab?: ShopTab) => void;
   onCloseShop: () => void;
   onBuyUpgrade: (id: UpgradeId, originEl?: HTMLElement | null) => void;
-  onAnswerCall: (originEl?: HTMLElement | null) => void;
+  onRepairPier: (originEl?: HTMLElement | null) => void;
+  onRetryFromDay1: () => void;
+  onDefeatTitle: () => void;
   onReadJournal: (part: JournalEntry['part']) => void;
-  onToggleMute: () => void;
   onResetSave: () => void;
+  /** A setting was changed in the settings window. */
+  onSettingsChange?: (s: GameSettings, what: string) => void;
+  /** A volume slider was let go: play something on that channel. */
+  onSampleVolume?: (channel: VolumeChannel) => void;
+  /** The voices behind the radio card and Bu Sari's scenes. */
+  voice?: VoiceLink;
+  /** Bu Sari started (true) or finished (false) a scene the lagoon waits for. */
+  onTalk?: (on: boolean) => void;
   onStartEndless: () => void;
   onOpenShopFromVictory: () => void;
   onSelectQuality: (setting: QualitySetting) => void;
@@ -168,6 +181,10 @@ export class GameUI {
   private pointerArrow = el('target-pointer-arrow');
   private upgradeScreen = el('upgrade-screen');
   private victoryScreen = el('victory-screen');
+  private defeatScreen = el('defeat-screen');
+  private defeatSub = el('defeat-sub');
+  private defeatStats = el('defeat-stats');
+  private titleBest = el('title-best');
   private creditsModal = el('credits-modal');
   private confirmModal = el('confirm-modal');
   private confirmTitle = el('confirm-title');
@@ -199,6 +216,19 @@ export class GameUI {
   private hudTimePill = el('hud-time-pill');
   private hudTimeIcon = el('hud-time-icon');
   private hudDayLabel = el('hud-day-label');
+  private hudWaveWrap = el('hud-wave-wrap');
+  private hudWaveTitle = el('hud-wave-title');
+  private hudWaveSub = el('hud-wave-sub');
+  private hudWaveFill = el('hud-wave-fill');
+  private hudWaveFlags = el('hud-wave-flags');
+  private waveBanner = el('wave-banner');
+  private waveBannerTitle = el('wave-banner-title');
+  private waveBannerSub = el('wave-banner-sub');
+  private bannerTimer = 0;
+  private hudPierWrap = el('hud-pier-wrap');
+  private hudPierBar = el('hud-pier-bar');
+  private hudPierVal = el('hud-pier-val');
+  private hudPierIcon = el('hud-pier-icon');
   private hudEcoWrap = el('hud-eco-wrap');
   private hudEcoBar = el('hud-eco-bar');
   private hudEcoPct = el('hud-eco-pct');
@@ -206,8 +236,9 @@ export class GameUI {
   private hudBossPill = el('hud-boss-pill');
   private hudBossBar = el('hud-boss-bar');
   private hudBossVal = el('hud-boss-val');
+  private btnRepairPier = el('btn-repair-pier') as HTMLButtonElement;
+  private repairPierLabel = el('repair-pier-label');
 
-  private btnMute = el('btn-mute') as HTMLButtonElement;
   private btnOpenShop = el('btn-open-shop') as HTMLButtonElement;
   private shopBtnIcon = el('shop-btn-icon');
   private shopBtnLabel = el('shop-btn-label');
@@ -223,9 +254,21 @@ export class GameUI {
   private hudObjProgress = el('hud-obj-progress');
   private hudObjSub = el('hud-obj-sub');
 
-  private radioToast = el('radio-toast');
-  private radioSender = el('radio-sender');
-  private radioText = el('radio-text');
+  private textCps = TEXT_CPS.normal;
+  private radio = new RadioCard(el('radio-toast'));
+  private radioSpeech = new Speech(this.radio, () => this.handlers.voice, () => this.textCps);
+  /** Written lines waiting their turn, the one on screen, and how long it stays once said. */
+  private radioQueue: RadioLine[] = [];
+  private radioOn: RadioLine | null = null;
+  private radioLeft = 0;
+  private radioTotal = 0;
+  /** Bu Sari's scene: the lagoon waits while she talks, and a click goes on. */
+  private talkLayer = el('talk-layer');
+  private talkCard = new RadioCard(el('talk-card'));
+  private talkSpeech = new Speech(this.talkCard, () => this.handlers.voice, () => this.textCps);
+  private talkQueue: RadioLine[] = [];
+  private talkActive = false;
+  private settingsPanel: SettingsPanel | null = null;
 
   private btnPlay = el('btn-play') as HTMLButtonElement;
   private btnContinue = el('btn-continue') as HTMLButtonElement;
@@ -276,17 +319,13 @@ export class GameUI {
   private journalPart2 = el('journal-part-2') as HTMLButtonElement;
   private journalBadge1 = el('journal-badge-1');
   private journalBadge2 = el('journal-badge-2');
-  private journalCount = el('journal-count');
-  private journalBar = el('journal-bar');
   private journalBook = el('journal-book');
-  private journalGrid = el('journal-grid');
-  private journalMeasure = el('journal-measure');
+  private journalSpread = el('journal-spread');
   private journalPrev = el('journal-prev') as HTMLButtonElement;
   private journalNext = el('journal-next') as HTMLButtonElement;
   private journalPageLabel = el('journal-page');
-  /** Cards of the open part, as last rendered; the pager only cuts them into pages. */
-  private journalCards: string[] = [];
-  /** The first page entry shown, per part; a resize keeps it on screen. Null: pick where the news is. */
+  private journalLeaves: string[] = [];
+  /** Keep this leaf in view if the book changes from one page to two. */
   private journalAnchor: Record<JournalEntry['part'], number | null> = { cerita: null, patroli: null };
   private journalPerPage = 1;
   private journalPages = 1;
@@ -312,6 +351,9 @@ export class GameUI {
   private lastEnergyWidth = '';
   private lastEnergySwatch = '';
   private lastEcoPct = -1;
+  private lastPierSig = '';
+  private lastWaveSig = '';
+  private lastFlagsSig = '';
   private lastBossShown: boolean | null = null;
   private lastBossPct = -1;
   private lastShopSig = '';
@@ -319,6 +361,7 @@ export class GameUI {
   private lastObjectiveKey = '';
   private currentProgress: PlayerProgress | null = null;
   private currentStats: ComputedStats | null = null;
+  private currentWave: WaveHudState | null = null;
   private headline = '';
   private handlers: UIHandlers;
 
@@ -326,6 +369,8 @@ export class GameUI {
     this.handlers = handlers;
     this.mountStaticIcons();
     this.bindStaticEvents();
+    // anywhere on the lagoon goes on with Bu Sari's scene
+    this.talkLayer.addEventListener('click', () => this.advanceTalk());
     const observer = new ResizeObserver(() => {
       this.guideBounds = this.playfield.getBoundingClientRect();
     });
@@ -338,6 +383,8 @@ export class GameUI {
       'hud-coin-icon': 'coin',
       'shop-coin-icon': 'coin',
       'hud-energy-icon': 'wave',
+      'hud-pier-icon': 'shield',
+      'repair-pier-icon': 'shield',
       'hud-eco-icon': 'eco',
       'hud-boss-icon': 'boss',
       'hud-save-icon': 'warn',
@@ -350,18 +397,15 @@ export class GameUI {
       'title-info-icon': 'info',
       'tab-icon-tree': 'tree',
       'tab-icon-journal': 'journal',
-      'journal-sum-icon': 'journal',
       'confirm-icon': 'warn',
       'btn-close-shop': 'close',
       'btn-close-credits': 'close',
       'btn-close-settings': 'close',
       'journal-prev': 'arrow_right',
       'journal-next': 'arrow_right',
-      'journal-reset-icon': 'warn',
       'tool-return-icon': 'wave',
     };
     for (const id in icons) el(id).innerHTML = getUiIconSvg(icons[id]);
-    this.setMutedVisual(false);
   }
 
   private bindStaticEvents(): void {
@@ -451,12 +495,6 @@ export class GameUI {
     });
     this.bindWorkshopEvents();
 
-    this.btnMute.addEventListener('click', () => this.handlers.onToggleMute());
-    click('btn-reset-save', () => {
-      this.handlers.onUiClick?.();
-      this.handlers.onResetSave();
-    });
-
     this.btnConfirmNo.addEventListener('click', () => {
       this.handlers.onUiClick?.();
       this.closeConfirm();
@@ -493,13 +531,23 @@ export class GameUI {
       this.handlers.onUiClick?.();
       this.handlers.onOpenShopFromVictory();
     });
+    click('btn-retry-run', () => {
+      this.handlers.onUiClick?.();
+      this.handlers.onRetryFromDay1();
+    });
+    click('btn-defeat-title', () => {
+      this.handlers.onUiClick?.();
+      this.handlers.onDefeatTitle();
+    });
+    this.btnRepairPier.addEventListener('click', () => {
+      this.handlers.onRepairPier(this.btnRepairPier);
+    });
     this.btnBuyNode.addEventListener('click', () => {
       if (this.btnBuyNode.disabled) {
         this.handlers.onUiError?.();
         return;
       }
-      if (this.selectedNode === 'unlock_boss') this.handlers.onAnswerCall(this.btnBuyNode);
-      else this.handlers.onBuyUpgrade(this.selectedNode, this.btnBuyNode);
+      this.handlers.onBuyUpgrade(this.selectedNode, this.btnBuyNode);
     });
   }
 
@@ -509,9 +557,27 @@ export class GameUI {
     this.queueNotice(CLOSED_SHOP, 'red', 3);
   }
 
-  public setMutedVisual(muted: boolean): void {
-    this.btnMute.innerHTML = getUiIconSvg(muted ? 'sound_off' : 'sound_on');
-    this.btnMute.dataset.swatch = muted ? 'red' : 'dark';
+  public explainNightShop(): void {
+    this.handlers.onUiError?.();
+    this.queueNotice(NIGHT_SHOP, 'purple', 3);
+  }
+
+  /** The settings window beyond graphics: built once, with what the player chose last time. */
+  public initSettings(settings: GameSettings): void {
+    this.settingsPanel = new SettingsPanel(this.settingsModal, settings, {
+      change: (s, what) => this.handlers.onSettingsChange?.(s, what),
+      tab: () => this.handlers.onTabSwitch?.(),
+      click: () => this.handlers.onUiClick?.(),
+      sample: (ch) => this.handlers.onSampleVolume?.(ch),
+      resetSave: () => this.handlers.onResetSave(),
+    });
+    this.applySettings(settings);
+  }
+
+  /** Settings changed somewhere (a key, a reset): the window and the radio follow. */
+  public applySettings(settings: GameSettings): void {
+    this.settingsPanel?.set(settings);
+    this.textCps = TEXT_CPS[settings.textSpeed];
   }
 
   /* ================================================================ windows */
@@ -557,6 +623,10 @@ export class GameUI {
     this.settingsReturnFocus = returnFocus ?? (document.activeElement as HTMLElement | null);
     this.settingsModal.classList.remove('hidden');
     this.handlers.onSettingsToggle?.(true);
+    if (this.settingsPanel && this.settingsPanel.activePane !== 'graphics') {
+      this.settingsPanel.focusTarget().focus();
+      return;
+    }
     const active =
       this.graphicsOptions.querySelector<HTMLButtonElement>('.graphics-opt.is-selected') ??
       this.graphicsOptions.querySelector<HTMLButtonElement>('[data-quality]');
@@ -619,11 +689,19 @@ export class GameUI {
     this.syncHudVisibility();
     this.upgradeScreen.classList.toggle('hidden', phase !== 'upgrade');
     this.victoryScreen.classList.toggle('hidden', phase !== 'victory');
+    this.defeatScreen.classList.toggle('hidden', phase !== 'defeat');
     if (phase === 'upgrade') {
-      // laid out now that it has a size, so the first frame is already the finished one
       this.layoutShop();
       (this.activeTab === 'tree' ? this.tabTree : this.tabJournal).focus({ preventScroll: true });
     } else this.hideShopToast();
+  }
+
+  public setTitleBest(best: BestRecord): void {
+    const show = best.bestDay > 0 || best.bestNights > 0;
+    this.titleBest.classList.toggle('hidden', !show);
+    if (show) {
+      this.titleBest.textContent = `Rekor Terbaik · Hari ${best.bestDay} (${best.bestNights} malam · ${best.bestPirates} kapal)`;
+    }
   }
 
   /** With a story to continue, continuing is the big button; without one, starting is. */
@@ -643,12 +721,23 @@ export class GameUI {
     this.lastHudCoinsText = '';
     this.lastShopSig = '';
     this.lastEcoPct = -1;
+    this.lastPierSig = '';
+    this.lastWaveSig = '';
+    this.lastFlagsSig = '';
     this.lastObjectiveKey = '';
     this.messages.length = 0;
     this.messageLeft = 0;
+    this.radioQueue.length = 0;
+    if (this.radioOn) this.radioSpeech.stop(false);
+    this.radioOn = null;
+    this.radioLeft = 0;
+    this.radio.hideNow();
+    this.talkQueue.length = 0;
+    if (this.talkActive) this.endTalk(false);
+    this.bannerTimer = 0;
+    this.waveBanner.classList.add('hidden');
     this.hud.removeAttribute('data-ready');
     this.notice.classList.add('hidden');
-    this.radioToast.classList.add('hidden');
     this.hudObjective.open = false;
     this.activeTab = 'tree';
     this.activePart = 'cerita';
@@ -686,10 +775,25 @@ export class GameUI {
   }
 
   public showChapter(n: number): void {
-    this.hudObjective.open = n <= 4;
-    this.missionChapterTitle.hidden = n <= 4;
-    this.hudObjKicker.textContent = n >= PATROL ? 'Patroli' : `Bab ${n}`;
-    this.missionChapterTitle.textContent = chapterTitle(n);
+    this.hudObjective.open = n <= 1;
+    this.missionChapterTitle.hidden = n <= 1;
+    this.hudObjKicker.textContent = `Hari ${n}`;
+    this.missionChapterTitle.textContent = dayTitle(n);
+  }
+
+  public showWaveBanner(title: string, sub: string, swatch: UiSwatch = 'orange'): void {
+    this.waveBanner.dataset.swatch = swatch;
+    this.waveBannerTitle.textContent = title;
+    this.waveBannerSub.textContent = sub;
+    this.waveBanner.classList.remove('hidden');
+    void this.waveBanner.offsetWidth;
+    this.bannerTimer = 3.2;
+  }
+
+  public pulsePier(): void {
+    this.hudPierWrap.classList.remove('is-hurt');
+    void this.hudPierWrap.offsetWidth;
+    this.hudPierWrap.classList.add('is-hurt');
   }
 
   /** Mark the start of the gesture and its direction on the same plane the input uses. */
@@ -731,46 +835,149 @@ export class GameUI {
 
   /* ================================================================ radio */
 
+  /**
+   * Two queues side by side: people on the radio take their time to talk, so rewards and
+   * warnings do not wait behind them; they show above the radio card instead.
+   */
   private enqueue(message: HudMessage): void {
     if (this.messages.some((queued) => queued.text === message.text)) return;
-    if (this.messageLeft > 0 && message.text ===
-      (this.notice.classList.contains('hidden') ? this.radioText.textContent : this.notice.textContent)) return;
-    // Keep the latest events relevant when several rewards arrive during one conversation.
+    if (this.messageLeft > 0 && message.text === this.notice.textContent) return;
+    // Keep the latest events relevant when several rewards arrive at once.
     if (this.messages.length === 4) this.messages.shift();
     this.messages.push(message);
   }
 
-  public showRadio(sender: string, text: string, tutorial = false): void {
-    const message: HudMessage = { kind: 'radio', sender, text, seconds: radioTime(text) };
-    if (tutorial) {
-      // A player who has returned the chest should already hear the invitation to the workshop.
-      this.messages = this.messages.filter((m) => m.kind !== 'radio');
-      if (!this.radioToast.classList.contains('hidden')) this.messageLeft = 0;
-      this.messages.unshift(message);
-    } else this.enqueue(message);
+  /** A written line over the radio. Lines take turns: none is cut off by the next. */
+  public showRadio(sender: string, text: string, mood?: Mood): void {
+    if (this.radioQueue.some((q) => q.text === text) || this.radioOn?.text === text) return;
+    // a burst of news keeps the latest: the oldest waiting line gives way, never the one being said
+    if (this.radioQueue.length === 4) this.radioQueue.shift();
+    this.radioQueue.push({ sender, text, mood });
+    if (mood) this.handlers.voice?.prefetch(sender, mood);
+  }
+
+  /**
+   * Bu Sari says something. With `hold` the lagoon waits on her scene until the player clicks
+   * through it; without, the lines go over the radio while play goes on.
+   */
+  public startTalk(lines: TalkLine[], hold: boolean): void {
+    for (const line of lines) {
+      if (hold) this.talkQueue.push({ sender: line.who, text: line.text, mood: line.mood ?? 'ngobrol' });
+      else this.showRadio(line.who, line.text, line.mood ?? 'ngobrol');
+      this.handlers.voice?.prefetch(line.who, line.mood);
+    }
+  }
+
+  public isTalking(): boolean {
+    return this.talkActive;
+  }
+
+  /** A click, a tap, Space or Enter: the rest of the line at once, or the next line. */
+  public advanceTalk(): void {
+    if (!this.talkActive) return;
+    if (this.talkSpeech.typing) {
+      this.talkSpeech.finish();
+      return;
+    }
+    this.talkSpeech.stop(false);
+    this.handlers.onUiClick?.();
+    this.nextTalkLine();
+  }
+
+  /** Escape: the whole scene is over. */
+  public skipTalk(): void {
+    if (!this.talkActive) return;
+    this.talkQueue.length = 0;
+    this.handlers.onUiClick?.();
+    this.endTalk(true);
+  }
+
+  private nextTalkLine(): void {
+    const line = this.talkQueue.shift();
+    if (!line) {
+      this.endTalk(true);
+      return;
+    }
+    this.talkSpeech.start(line.sender, line.text, line.mood);
+  }
+
+  private endTalk(click: boolean): void {
+    this.talkSpeech.stop(click);
+    this.talkActive = false;
+    this.talkCard.hideNow();
+    this.talkLayer.classList.add('hidden');
+    this.handlers.onTalk?.(false);
+  }
+
+  private tickTalk(dt: number): void {
+    if (!this.talkActive) {
+      if (this.talkQueue.length === 0) return;
+      // a line on the small radio steps aside and comes back after the scene
+      if (this.radioOn) {
+        this.radioSpeech.stop(false);
+        this.radioQueue.unshift(this.radioOn);
+        this.radioOn = null;
+      }
+      this.radio.hideNow();
+      this.talkActive = true;
+      this.talkLayer.classList.remove('hidden');
+      this.handlers.onTalk?.(true);
+      this.nextTalkLine();
+      return;
+    }
+    this.talkSpeech.tick(dt);
+    this.talkCard.waiting(!this.talkSpeech.busy);
   }
 
   private queueNotice(text: string, swatch: UiSwatch, seconds: number): void {
-    this.enqueue({ kind: 'notice', swatch, text, seconds });
+    this.enqueue({ swatch, text, seconds });
   }
 
   public tick(dt: number): void {
+    // in a menu or another tab, lines wait where they are and go on when the player is back
     if (document.hidden || this.hud.classList.contains('hidden')) return;
+    this.tickTalk(dt);
+    if (this.bannerTimer > 0) {
+      this.bannerTimer -= dt;
+      if (this.bannerTimer <= 0) this.waveBanner.classList.add('hidden');
+    }
+    this.tickNotices(dt);
+    this.tickRadio(dt);
+  }
+
+  private tickNotices(dt: number): void {
     this.messageLeft = Math.max(0, this.messageLeft - dt);
     if (this.messageLeft > 0) return;
     const next = this.messages.shift();
-    this.radioToast.classList.toggle('hidden', next?.kind !== 'radio');
-    this.notice.classList.toggle('hidden', next?.kind !== 'notice');
-    if (!next) return;
-    this.messageLeft = next.seconds;
-    if (next.kind === 'radio') {
-      this.radioSender.textContent = next.sender;
-      this.radioSender.dataset.who = next.sender === 'A.L.U.N.' ? 'alun' : next.sender === 'BU SARI' ? 'sari' : 'warga';
-      this.radioText.textContent = next.text;
-    } else {
-      this.notice.dataset.swatch = next.swatch;
-      this.notice.textContent = next.text;
+    this.notice.classList.toggle('hidden', !next);
+    if (!next) {
+      this.notice.textContent = '';
+      return;
     }
+    this.messageLeft = next.seconds;
+    this.notice.dataset.swatch = next.swatch;
+    this.notice.textContent = next.text;
+  }
+
+  private tickRadio(dt: number): void {
+    // Bu Sari's scene has the floor; the radio waits
+    if (this.talkActive) return;
+    if (this.radioOn) {
+      this.radioSpeech.tick(dt);
+      if (this.radioSpeech.busy) return;
+      this.radioLeft -= dt;
+      this.radio.progress(this.radioLeft / this.radioTotal);
+      if (this.radioLeft > 0) return;
+      this.radioSpeech.stop(true);
+      this.radioOn = null;
+      this.radio.leave();
+    }
+    if (this.radio.leaving) return;
+    const next = this.radioQueue.shift();
+    if (!next) return;
+    this.radioSpeech.start(next.sender, next.text, next.mood);
+    this.radioOn = next;
+    this.radioLeft = this.radioTotal = radioHold(next.text);
   }
 
   public celebrate(text: string, swatch: UiSwatch = 'green', originEl?: HTMLElement | null): void {
@@ -802,16 +1009,19 @@ export class GameUI {
     maxEnergy: number,
     comboCount: number,
     bossHpRatio: number | null,
-    objective: Objective
+    objective: Objective,
+    wave: WaveHudState
   ): void {
+    this.currentWave = wave;
+    const inRun = wave.cycle !== 'prep';
     const wallet = progress.totalCoinsEarned > 0 || progress.coins > 0 || progress.shopUnlocked;
     const waves = progress.totalWaves > 0 || progress.shopUnlocked;
-    const coast = progress.story.chapter >= 3 && bossHpRatio === null;
-    const weather = progress.story.chapter >= 6 && bossHpRatio === null;
     this.hudCoinPill.classList.toggle('hidden', !wallet);
     this.hudEnergy.classList.toggle('hidden', !waves);
-    this.hudEcoWrap.classList.toggle('hidden', !coast);
-    this.hudTimePill.classList.toggle('hidden', !weather);
+    this.hudWaveWrap.classList.toggle('hidden', !inRun);
+    this.hudPierWrap.classList.toggle('hidden', !inRun);
+    this.hudEcoWrap.classList.toggle('hidden', !inRun);
+    this.hudTimePill.classList.toggle('hidden', !inRun);
     if (!this.hud.hasAttribute('data-ready')) this.hud.dataset.ready = 'true';
     const exactCoins = Math.floor(progress.coins);
     if (this.displayedCoins < 0 || exactCoins < this.displayedCoins) {
@@ -835,7 +1045,61 @@ export class GameUI {
       this.hudDayLabel.textContent = meta.label;
     }
 
-    // Combo chip: how many in a row, nothing more
+    // Day/Night PvZ Wave Bar
+    if (inRun) {
+      const pct = Math.max(0, Math.min(100, Math.round(wave.progress * 100)));
+      const remSec = wave.cycle === 'day'
+        ? Math.max(0, Math.ceil(wave.dayDuration - wave.dayTime))
+        : Math.max(0, Math.ceil(wave.nightDuration - wave.nightTime));
+      const mm = `${Math.floor(remSec / 60)}:${String(remSec % 60).padStart(2, '0')}`;
+      const title =
+        wave.cycle === 'day'
+          ? `HARI ${wave.day} · SIANG`
+          : wave.isBossNight
+            ? `MALAM ${wave.day} · BADAI MUSON`
+            : `MALAM ${wave.day} · SERBUAN`;
+      const sub =
+        wave.cycle === 'day'
+          ? mm
+          : wave.isBossNight
+            ? `Kapal Induk + ${wave.activePirates} pengawal`
+            : `Sisa ${wave.remainingPirates}/${wave.waveTotal} kapal`;
+      const swatch: UiSwatch = wave.cycle === 'night' ? (wave.isBossNight ? 'red' : 'purple') : 'blue';
+      const fillSwatch: UiSwatch = wave.cycle === 'night' ? 'red' : remSec <= 25 ? 'orange' : 'gold';
+      const waveSig = `${title}|${sub}|${pct}|${swatch}|${fillSwatch}`;
+      if (waveSig !== this.lastWaveSig) {
+        this.lastWaveSig = waveSig;
+        this.hudWaveWrap.dataset.swatch = swatch;
+        this.hudWaveTitle.textContent = title;
+        this.hudWaveSub.textContent = sub;
+        this.hudWaveFill.style.width = `${pct}%`;
+        this.hudWaveFill.dataset.swatch = fillSwatch;
+      }
+      const flagsSig = wave.cycle === 'night' ? wave.hugeFlags.map((f) => Math.round(f * 100)).join(',') : '';
+      if (flagsSig !== this.lastFlagsSig) {
+        this.lastFlagsSig = flagsSig;
+        this.hudWaveFlags.innerHTML =
+          wave.cycle === 'night'
+            ? wave.hugeFlags.map((f) => `<span class="wave-flag" style="left:${Math.min(96, Math.max(8, Math.round(f * 100)))}%"></span>`).join('')
+            : '';
+      }
+    }
+
+    // Pier HP bar
+    if (inRun) {
+      const pierPct = Math.max(0, Math.min(100, Math.round((wave.pierHp / Math.max(1, wave.maxPierHp)) * 100)));
+      const pierSwatch: UiSwatch = pierPct <= 30 ? 'red' : pierPct <= 60 ? 'orange' : 'green';
+      const pierSig = `${wave.pierHp}/${wave.maxPierHp}:${pierSwatch}`;
+      if (pierSig !== this.lastPierSig) {
+        this.lastPierSig = pierSig;
+        this.hudPierBar.style.width = `${pierPct}%`;
+        this.hudPierBar.dataset.swatch = pierSwatch;
+        this.hudPierIcon.dataset.swatch = pierSwatch;
+        this.hudPierVal.textContent = `Dermaga ${wave.pierHp}/${wave.maxPierHp}`;
+      }
+    }
+
+    // Combo chip
     const comboText = comboCount >= 2 ? `${comboCount}` : '';
     if (comboText !== this.lastComboText) {
       this.lastComboText = comboText;
@@ -843,7 +1107,7 @@ export class GameUI {
       this.hudComboVal.textContent = comboText;
     }
 
-    // Energy meter pill (compositor-only transform avoids per-frame layout/paint during wave regeneration)
+    // Energy meter pill
     const energyText = `${Math.round(energy)}/${Math.round(maxEnergy)}`;
     if (energyText !== this.lastEnergyText) {
       this.lastEnergyText = energyText;
@@ -882,37 +1146,38 @@ export class GameUI {
       const pct = Math.max(0, Math.min(100, Math.round(bossHpRatio * 100)));
       if (pct !== this.lastBossPct) {
         this.lastBossPct = pct;
-        this.hudBossVal.textContent = `Kapal induk ${pct}%`;
+        this.hudBossVal.textContent = `Kapal Induk ${pct}%`;
         this.hudBossBar.style.width = `${pct}%`;
       }
     }
 
-    this.updateShopButton(progress);
+    this.updateShopButton(progress, wave);
     this.updateObjectiveBanner(objective);
   }
 
-  private updateShopButton(progress: PlayerProgress): void {
+  private updateShopButton(progress: PlayerProgress, wave: WaveHudState): void {
     const open = progress.shopUnlocked;
-    const call = open && progress.story.step === 'call' && !progress.story.callAnswered;
-    const visit = progress.story.step === 'workshop';
-    const affordable = open ? countAffordableUpgrades(progress) : 0;
+    const locked = wave.shopLocked;
+    const guided = open && wave.cycle === 'prep';
+    const affordable = open && !locked ? countAffordableUpgrades(progress) : 0;
     const unread = open ? unreadPages(progress).length : 0;
-    const sig = `${open}:${visit}:${call}:${affordable}:${unread}`;
+    const sig = `${open}:${locked}:${guided}:${affordable}:${unread}:${wave.canRepair}`;
     if (sig === this.lastShopSig) return;
     this.lastShopSig = sig;
 
     this.actionStack.classList.toggle('hidden', !open);
     if (!open) return;
-    this.btnOpenShop.classList.toggle('is-guided', visit);
-    this.btnOpenShop.dataset.swatch = call ? 'red' : visit || affordable > 0 ? 'gold' : 'purple';
-    this.shopBtnIcon.innerHTML = getUiIconSvg(call ? 'radio' : 'shop');
-    this.shopBtnLabel.textContent = call ? 'Jawab radio' : 'Bengkel';
-    this.btnOpenShop.setAttribute('aria-label', call ? 'Jawab radio di bengkel' : 'Bengkel');
-    this.btnOpenShop.title = call ? 'Jawab radio (E)' : 'Bengkel (E)';
-    this.shopBadge.classList.toggle('hidden', affordable === 0);
-    if (affordable > 0) this.shopBadge.textContent = String(affordable);
+    this.btnOpenShop.classList.toggle('is-guided', guided);
+    this.btnOpenShop.dataset.swatch = locked ? 'slate' : guided || affordable > 0 || wave.canRepair ? 'gold' : 'purple';
+    this.shopBtnIcon.innerHTML = getUiIconSvg(locked ? 'lock' : 'shop');
+    this.shopBtnLabel.textContent = locked ? 'Siaga Malam' : 'Bengkel';
+    this.btnOpenShop.setAttribute('aria-label', locked ? 'Bengkel tutup saat malam' : 'Bengkel');
+    this.btnOpenShop.title = locked ? 'Bengkel buka saat fajar' : 'Bengkel (E)';
+    const badgeCount = affordable + (wave.canRepair ? 1 : 0);
+    this.shopBadge.classList.toggle('hidden', locked || badgeCount === 0);
+    if (!locked && badgeCount > 0) this.shopBadge.textContent = String(badgeCount);
 
-    this.btnOpenJournal.classList.toggle('hidden', visit);
+    this.btnOpenJournal.classList.toggle('hidden', false);
     this.journalBadge.classList.toggle('hidden', unread === 0);
     if (unread > 0) this.journalBadge.textContent = String(unread);
   }
@@ -955,10 +1220,11 @@ export class GameUI {
     this.shopRibbon.dataset.swatch = this.activeTab === 'tree' ? 'teal' : 'blue';
   }
 
-  public renderUpgradeScreen(progress: PlayerProgress, stats: ComputedStats, headline: string, forceTab?: ShopTab): void {
+  public renderUpgradeScreen(progress: PlayerProgress, stats: ComputedStats, headline: string, forceTab?: ShopTab, wave?: WaveHudState): void {
     const entering = this.upgradeScreen.classList.contains('hidden');
     this.currentProgress = progress;
     this.currentStats = stats;
+    if (wave) this.currentWave = wave;
     this.headline = headline;
     if (entering) this.activeTab = forceTab ?? 'tree';
     else if (forceTab) this.activeTab = forceTab;
@@ -978,12 +1244,26 @@ export class GameUI {
   private renderShopTop(): void {
     const progress = this.currentProgress!;
     const stats = this.currentStats!;
+    const s = progress.story;
     this.upgradeCoins.textContent = Math.floor(progress.coins).toLocaleString('id-ID');
+    const pierPct = Math.round((s.pierHp / Math.max(1, s.maxPierHp)) * 100);
+    const pierChipSwatch = pierPct <= 35 ? 'red' : pierPct <= 65 ? 'orange' : 'green';
     this.runSummaryChips.innerHTML = [
       `<span class="shop-chip t-stroke-xs">${this.headline}</span>`,
+      `<span class="shop-chip chip-${pierChipSwatch} t-stroke-xs num">Dermaga ${Math.round(s.pierHp)}/${Math.round(s.maxPierHp)}</span>`,
       `<span class="shop-chip chip-${healthSwatch(stats.pollution)} t-stroke-xs num">Pesisir ${stats.ecoPercent}%</span>`,
     ].join('');
     this.fitChips();
+
+    const hurt = s.pierHp < s.maxPierHp && s.cycle !== 'night';
+    const cost = this.currentWave?.repairCost ?? Math.round(24 + Math.max(0, s.day - 1) * 8);
+    const canRepair = hurt && progress.coins >= cost;
+    this.btnRepairPier.classList.toggle('hidden', !hurt);
+    if (hurt) {
+      this.btnRepairPier.disabled = !canRepair;
+      this.btnRepairPier.dataset.swatch = canRepair ? 'green' : 'slate';
+      this.repairPierLabel.textContent = `Tambal +${REPAIR_HEAL} · ${cost}`;
+    }
 
     const affordable = countAffordableUpgrades(progress);
     this.tabBadgeTree.classList.toggle('hidden', affordable === 0);
@@ -1159,12 +1439,10 @@ export class GameUI {
   }
 
   private isIntro(progress: PlayerProgress): boolean {
-    return progress.story.marks.workshopVisit === undefined && progress.story.step !== 'call';
+    return progress.story.marks.workshopVisit === undefined;
   }
 
-  /** The tool the panel opens on: the radio when it calls, Bentang on the first visit, else the last one picked. */
   private pickTool(progress: PlayerProgress): UpgradeId {
-    if (progress.story.step === 'call' && !progress.story.callAnswered && this.nodeShown('unlock_boss', progress)) return 'unlock_boss';
     if (this.isIntro(progress) && this.nodeShown('wave_width', progress)) return 'wave_width';
     if (this.selectedNode !== 'core' && this.nodeShown(this.selectedNode, progress)) return this.selectedNode;
     const shown = UPGRADE_DEFS.filter((d) => d.id !== 'core' && this.nodeShown(d.id, progress));
@@ -1173,18 +1451,12 @@ export class GameUI {
 
   private nodeShown(id: UpgradeId, progress: PlayerProgress): boolean {
     if (id === 'core') return true;
-    if (id === 'unlock_boss') return progress.story.flags.ops;
     return isUpgradeShown(id, progress);
   }
 
-  /** Shared availability for the map node and its detail panel. */
   private nodeState(id: UpgradeId, progress: PlayerProgress) {
     const def = UPGRADE_MAP[id];
     const lv = progress.upgrades[id] ?? 0;
-    if (id === 'unlock_boss') {
-      const open = progress.story.flags.ops && !progress.story.flags.boss && !progress.story.callAnswered;
-      return { def, lv: 0, cost: 0, maxed: progress.story.flags.boss, forSale: open, canBuy: open };
-    }
     const cost = getUpgradeCost(id, lv);
     const forSale = isForSale(id, progress);
     return { def, lv, cost, maxed: lv >= def.maxLevel, forSale, canBuy: forSale && progress.coins >= cost };
@@ -1195,6 +1467,7 @@ export class GameUI {
     this.sawWorkshopTools = true;
     if (!this.nodeShown(this.selectedNode, progress)) this.selectedNode = this.pickTool(progress);
     const intro = this.isIntro(progress);
+    const boughtAny = UPGRADE_DEFS.some((d) => d.id !== 'core' && (progress.upgrades[d.id] ?? 0) > 0);
     const shown = new Set(UPGRADE_DEFS.filter((d) => this.nodeShown(d.id, progress)).map((d) => d.id));
     for (const [id, btn] of this.nodeEls) {
       if (shown.has(id)) continue;
@@ -1224,20 +1497,16 @@ export class GameUI {
       const badge =
         def.id === 'core'
           ? 'INTI'
-          : def.id === 'unlock_boss'
-            ? st.maxed
-              ? 'SELESAI'
-              : progress.story.callAnswered ? 'DIJAWAB' : 'GRATIS'
-            : st.maxed
-              ? 'MAKS'
-              : `${st.lv}/${def.maxLevel}`;
+          : st.maxed
+            ? 'MAKS'
+            : `${st.lv}/${def.maxLevel}`;
       const selected = def.id === this.selectedNode;
       btn.classList.toggle('tree-node', true);
       btn.classList.toggle('owned', st.lv > 0);
       btn.classList.toggle('maxed', st.maxed);
       btn.classList.toggle('affordable', st.canBuy);
       btn.classList.toggle('is-selected', selected);
-      btn.classList.toggle('is-guided', intro && def.id === 'wave_width' && st.lv === 0);
+      btn.classList.toggle('is-guided', intro && !boughtAny && (def.id === 'wave_width' || def.id === 'trash_density'));
       btn.setAttribute('aria-pressed', String(selected));
       btn.setAttribute('aria-label', `${def.name}, ${badge}`);
       btn.querySelector('.tree-node-lv')!.textContent = st.maxed ? '✓' : badge;
@@ -1439,7 +1708,7 @@ export class GameUI {
         if (!this.nodeEls.has(reqId)) continue;
         const d = this.linkPath(reqId, id, radius);
         const st = this.nodeState(id, progress);
-        const on = st.lv > 0 || st.maxed || (id === 'unlock_boss' && progress.story.callAnswered);
+        const on = st.lv > 0 || st.maxed;
         const branch = reqId === 'core' ? 'core' : UPGRADE_MAP[id].branch;
         outlines.push(`<path class="tree-link-outline" d="${d}"/>`);
         (on ? lit : quiet).push(`<path class="tree-link ${on ? 'link-on' : 'link-open'} branch-${branch}" d="${d}"/>`);
@@ -1529,19 +1798,23 @@ export class GameUI {
 
   /** The first visit's guidance, in the words of the workshop tutorial. */
   private introNote(progress: PlayerProgress): string {
-    const cost = getUpgradeCost('wave_width', 0);
-    return progress.upgrades.wave_width > 0
-      ? 'Bentang sudah terpasang. Kamu bisa kembali ke laguna dan mencoba ombak yang lebih lebar.'
-      : progress.coins >= cost
-        ? `Pilih Bentang, lalu Pasang (${cost} koin) untuk memperlebar ombak. Kamu juga bisa menyimpan koinmu.`
-        : `Bentang memperlebar ombak. Kumpulkan ${Math.ceil(cost - progress.coins)} koin lagi dengan menyapu sampah ke jaring.`;
+    const boughtAny = UPGRADE_DEFS.some((d) => d.id !== 'core' && (progress.upgrades[d.id] ?? 0) > 0);
+    if (boughtAny) {
+      return progress.story.cycle === 'prep'
+        ? 'Alat pertamamu sudah terpasang! Tekan "Mulai Hari 1" di bawah untuk kembali ke laguna.'
+        : 'Alat sudah terpasang. Kamu bisa kembali ke laguna dan mencoba kekuatannya!';
+    }
+    const widthCost = getUpgradeCost('wave_width', 0);
+    const densityCost = getUpgradeCost('trash_density', 0);
+    return progress.coins >= Math.min(widthCost, densityCost)
+      ? `Pasang alat pertamamu — Bentang (${widthCost}) untuk ombak lebar atau Muatan (${densityCost}) agar rongsok makin melimpah!`
+      : `Kumpulkan koin di laguna untuk memasang Bentang (${widthCost}) atau Muatan (${densityCost}).`;
   }
 
   /** The picked tool. Its button sits at the foot of the panel whatever the tool, the text above it fits itself. */
   private renderInspector(progress: PlayerProgress): void {
     const st = this.nodeState(this.selectedNode, progress);
     const def = st.def;
-    const boss = def.id === 'unlock_boss';
     const core = def.id === 'core';
 
     this.inspHeaderCard.dataset.swatch = BRANCH_SWATCH[def.branch];
@@ -1549,41 +1822,37 @@ export class GameUI {
     this.inspIcon.innerHTML = getUiIconSvg(def.icon);
     this.inspTitle.textContent = def.name;
     this.inspDesc.textContent = def.description;
-    // one star per level, filled as far as it is installed
-    this.inspPips.innerHTML = core || boss
+    this.inspPips.innerHTML = core
       ? ''
       : Array.from({ length: def.maxLevel }, (_, i) => getUiIconSvg(i < st.lv ? 'star_on' : 'star_off', 'insp-pip')).join('');
-    this.inspPips.hidden = core || boss;
+    this.inspPips.hidden = core;
 
-    const row =(label: string, value: string, warn = false): string =>
+    const row = (label: string, value: string, warn = false): string =>
       `<div class="insp-row${warn ? ' req-warn' : ''}"><span>${label}</span><strong class="num">${value}</strong></div>`;
     let rows: string;
-    if (boss) {
-      rows = row('Panggilan', st.maxed ? 'Selesai' : progress.story.callAnswered ? 'Sudah dijawab' : 'Menunggu') + row('Biaya', 'Gratis');
-    } else if (core) {
+    if (core) {
       rows = row(def.statLabel, def.statBefore(1)) + row('Efek', def.effectText(1));
     } else {
-      // the stars above already count the levels
       const delta = st.maxed || !st.forSale ? def.statBefore(st.lv) : `${def.statBefore(st.lv)} ➜ ${def.statAfter(st.lv)}`;
       rows = row(def.statLabel, delta) + row('Efek', def.effectText(st.lv));
-      // an affordable price is on the button itself; a price out of reach is spelled out in red
       if (st.forSale && !st.canBuy) rows += row('Harga', `${st.cost.toLocaleString('id-ID')} koin`, true);
     }
     this.inspStats.innerHTML = rows;
 
-    // what to know before pressing: the first visit's guidance, or why a tool has to wait
     const intro = this.isIntro(progress);
     const supply = nextSupply(progress.story.flags);
     const note = intro
       ? this.introNote(progress)
-      : supply && !boss && !st.maxed && !st.forSale
-        ? core
-          ? `Pasokan berikutnya: ${supply}`
-          : `Tingkat berikutnya menunggu pasokan. ${supply}`
+      : supply && !st.maxed && !st.forSale
+        ? supply
         : '';
     this.toolNote.textContent = note;
     this.toolNote.hidden = note === '';
     this.btnReturn.classList.toggle('hidden', !intro);
+    const returnLabel = this.btnReturn.querySelector('span:last-child');
+    if (returnLabel) {
+      returnLabel.textContent = progress.story.cycle === 'prep' ? 'Mulai Hari 1' : 'Kembali ke laguna';
+    }
 
     let swatch: UiSwatch = 'slate';
     let icon: UiIconName = 'coin';
@@ -1596,15 +1865,10 @@ export class GameUI {
     } else if (st.maxed) {
       swatch = 'gold';
       icon = 'check';
-      label = boss ? 'Armada sudah pulang' : 'Sudah maksimal';
-    } else if (boss) {
-      swatch = st.canBuy ? 'green' : 'slate';
-      icon = 'radio';
-      label = st.canBuy ? 'Jawab · gratis' : 'Sudah dijawab';
-      enabled = st.canBuy;
+      label = 'Sudah maksimal';
     } else if (!st.forSale) {
       icon = 'lock';
-      label = 'Tunggu pasokan';
+      label = 'Buka cabang dulu';
     } else if (st.canBuy) {
       swatch = 'green';
       label = `${st.lv === 0 ? 'Pasang' : 'Tingkatkan'} · ${st.cost.toLocaleString('id-ID')}`;
@@ -1649,9 +1913,10 @@ export class GameUI {
   }
 
   private renderJournal(progress: PlayerProgress): void {
-    for (const e of unreadPages(progress, this.activePart)) this.freshPages.add(e.id);
-    // the part on screen counts as read: its pages keep their BARU mark, its count goes
-    this.handlers.onReadJournal(this.activePart);
+    const unread = unreadPages(progress, this.activePart);
+    for (const e of unread) this.freshPages.add(e.id);
+    // The open section's badges clear while its stamps stay visible for this visit.
+    if (unread.length > 0) this.handlers.onReadJournal(this.activePart);
     const badge = (node: HTMLElement, part: JournalEntry['part']): void => {
       const n = unreadPages(progress, part).length;
       node.classList.toggle('hidden', n === 0);
@@ -1661,96 +1926,67 @@ export class GameUI {
     badge(this.journalBadge2, 'patroli');
 
     const story = this.activePart === 'cerita';
-    this.journalPart1.classList.toggle('is-active', story);
-    this.journalPart2.classList.toggle('is-active', !story);
     this.journalPart1.setAttribute('aria-selected', String(story));
     this.journalPart2.setAttribute('aria-selected', String(!story));
     this.journalPart1.tabIndex = story ? 0 : -1;
     this.journalPart2.tabIndex = story ? -1 : 0;
-    this.journalPart1.dataset.swatch = story ? 'orange' : 'slate';
-    this.journalPart2.dataset.swatch = story ? 'slate' : 'orange';
+    this.journalBook.setAttribute('aria-labelledby', story ? this.journalPart1.id : this.journalPart2.id);
 
     const list = JOURNAL.filter((e) => e.part === this.activePart);
-    const written = list.filter((e) => isWritten(e, progress)).length;
-    this.journalCount.textContent = `${written} / ${list.length}`;
-    this.journalBar.style.width = `${Math.round((written / Math.max(1, list.length)) * 100)}%`;
-
-    // open on the news, else on the page that is still being written
     if (this.journalAnchor[this.activePart] === null) {
       const fresh = list.findIndex((e) => this.freshPages.has(e.id));
       const open = list.findIndex((e) => !isWritten(e, progress));
-      this.journalAnchor[this.activePart] = fresh >= 0 ? fresh : Math.max(0, open);
+      // The lagoon section opens at its ledger when there is no new entry.
+      this.journalAnchor[this.activePart] = story ? Math.max(0, fresh >= 0 ? fresh : open) : fresh + 1;
     }
-    this.journalCards = list.map((e) => {
-      const done = isWritten(e, progress);
-      return renderJournalCard({
+
+    this.journalLeaves = list.map((e) => {
+      const written = isWritten(e, progress);
+      return renderJournalEntry({
+        date: e.date,
         title: e.title,
-        text: done ? e.note : e.hint,
+        text: written ? e.note : e.hint,
         swatch: e.swatch,
         icon: e.icon,
-        current: e.value(progress),
-        target: e.target,
-        written: done,
+        written,
         fresh: this.freshPages.has(e.id),
+        tally: e.tally && { ...e.tally, current: e.value(progress), target: e.target },
       });
     });
+    if (!story) {
+      const s = progress.story;
+      const bestDay = Math.max(s.day, loadBest(browserStore()).bestDay);
+      this.journalLeaves.unshift(renderJournalRecord(s.day, [
+        { label: 'Malam terlewati', value: s.nightsSurvived.toLocaleString('id-ID') },
+        { label: 'Kapal dihalau', value: s.piratesSunk.toLocaleString('id-ID') },
+        { label: 'Rongsok terangkat', value: progress.totalTrash.toLocaleString('id-ID') },
+        { label: 'Hari terjauh', value: `Hari ${bestDay.toLocaleString('id-ID')}` },
+      ]));
+    }
     this.layoutJournal();
     this.refreshJournalBadge(progress);
   }
 
-  /** Cuts the open part into pages that fit the book at this size: nothing scrolls and no card is cut. */
+  /** Turn one leaf on small screens and a spread on wide screens. */
   private layoutJournal(): void {
     const book = this.journalBook;
-    const W = book.clientWidth;
-    const H = book.clientHeight;
-    if (W < 40 || H < 40 || !this.journalCards.length) return;
-    const css = getComputedStyle(this.journalGrid);
-    const gap = parseFloat(css.rowGap) || 0;
-    const colGap = parseFloat(css.columnGap) || 0;
-    const padX = (parseFloat(css.paddingLeft) || 0) + (parseFloat(css.paddingRight) || 0);
-    const padY = (parseFloat(css.paddingTop) || 0) + (parseFloat(css.paddingBottom) || 0);
-    const kb = parseFloat(getComputedStyle(book).getPropertyValue('--kb')) || 1;
-    const scale = layoutScale(book);
-    const measure = this.journalMeasure;
-    const n = this.journalCards.length;
-    // as many columns as leave a card wide enough to read
-    const maxCols = Math.max(1, Math.min(3, Math.floor((W - padX + colGap) / (270 * kb + colGap))));
-    // the fewest pages in type of 11.5px or more; smaller type only when not even one card would fit
-    let best = { level: 0, cols: 1, rows: 0, cardH: 0, pages: Infinity };
-    for (let level = 0; level < JOURNAL_FIT.length; level++) {
-      if (level > 0 && best.rows >= 1 && 14 * kb * JOURNAL_FIT[level] < 11.5) break;
-      book.dataset.fit = String(level);
-      for (let cols = 1; cols <= maxCols; cols++) {
-        measure.style.setProperty('--cols', String(cols));
-        measure.innerHTML = this.journalCards.join('');
-        const tallest = Math.max(...Array.from(measure.children, (c) => (c as HTMLElement).getBoundingClientRect().height));
-        const cardH = Math.ceil(tallest / scale - 0.01);
-        const rows = Math.floor((H - padY + gap) / (cardH + gap));
-        const pages = rows >= 1 ? Math.ceil(n / (rows * cols)) : Infinity;
-        const take = rows >= 1
-          ? best.rows < 1 || pages < best.pages
-          : best.rows < 1 && (best.cardH === 0 || cardH < best.cardH);
-        if (take) best = { level, cols, rows, cardH, pages };
-      }
-      if (best.pages === 1) break;
-    }
-    measure.innerHTML = '';
-    book.dataset.fit = String(best.level);
-    const cols = best.cols;
-    const rows = Math.max(1, best.rows);
-    const cardH = best.cardH;
-    const perPage = rows * cols;
-    const pages = Math.max(1, Math.ceil(n / perPage));
+    const total = this.journalLeaves.length;
+    if (!book.clientWidth || !total) return;
+    const perPage = getComputedStyle(book).getPropertyValue('--journal-leaves').trim() === '2' ? 2 : 1;
+    const pages = Math.ceil(total / perPage);
     const page = Math.min(pages - 1, Math.floor((this.journalAnchor[this.activePart] ?? 0) / perPage));
     this.journalPerPage = perPage;
     this.journalPages = pages;
     this.journalPageIndex = page;
 
-    const grid = this.journalGrid;
-    grid.style.setProperty('--cols', String(cols));
-    grid.style.setProperty('--card-h', `${cardH}px`);
-    grid.innerHTML = this.journalCards.slice(page * perPage, (page + 1) * perPage).join('');
-    this.journalPageLabel.textContent = `${page + 1} / ${pages}`;
+    const first = page * perPage;
+    const end = Math.min(first + perPage, total);
+    const leaves = this.journalLeaves.slice(first, end);
+    const range = leaves.length === 1 ? String(first + 1) : `${first + 1}–${end}`;
+    if (leaves.length < perPage) leaves.push('<div class="journal-leaf journal-empty" aria-hidden="true"></div>');
+    this.journalSpread.innerHTML = leaves.join('');
+    const label = `${range} / ${total}`;
+    if (this.journalPageLabel.textContent !== label) this.journalPageLabel.textContent = label;
     this.journalPrev.disabled = page === 0;
     this.journalNext.disabled = page >= pages - 1;
   }
@@ -1771,14 +2007,28 @@ export class GameUI {
     const minutes = Math.floor(s.clock / 60);
     const seconds = Math.floor(s.clock % 60);
     this.victoryStats.innerHTML = [
-      renderStatTile('Waktu cerita', `${minutes}:${String(seconds).padStart(2, '0')}`, 'sun', 'blue'),
+      renderStatTile('Waktu bermain', `${minutes}:${String(seconds).padStart(2, '0')}`, 'sun', 'blue'),
+      renderStatTile('Bajak laut dihalau', s.piratesSunk.toLocaleString('id-ID'), 'raider', 'red'),
       renderStatTile('Rongsok terangkat', progress.totalTrash.toLocaleString('id-ID'), 'net', 'green'),
-      renderStatTile('Keranjang selamat', s.saved.baskets.toLocaleString('id-ID'), 'basket', 'orange'),
-      renderStatTile('Lumba-lumba dibantu', s.saved.dolphins.toLocaleString('id-ID'), 'dolphin', 'teal'),
-      renderStatTile('Kesehatan pesisir', `${Math.round(100 - s.pollution)}%`, 'eco', healthSwatch(s.pollution)),
+      renderStatTile('Resonansi terpicu', progress.totalResonances.toLocaleString('id-ID'), 'resonance', 'purple'),
+      renderStatTile('HP Dermaga', `${Math.round(s.pierHp)}/${Math.round(s.maxPierHp)}`, 'shield', 'teal'),
       renderStatTile('Koin terkumpul', progress.totalCoinsEarned.toLocaleString('id-ID'), 'coin', 'gold'),
     ].join('');
     spawnUiConfetti(null, 42);
+  }
+
+  public renderDefeat(progress: PlayerProgress, best: BestRecord): void {
+    const s = progress.story;
+    const when = s.cycle === 'night' ? `MALAM ${s.day}` : `HARI ${s.day}`;
+    this.defeatSub.textContent = `${when} · ${dayTitle(s.day).toUpperCase()} — REKOR TERBAIK: HARI ${best.bestDay}`;
+    this.defeatStats.innerHTML = [
+      renderStatTile('Bertahan hingga', `Hari ${s.day}`, 'moon', 'purple'),
+      renderStatTile('Malam dilewati', `${s.nightsSurvived} malam`, 'trophy', 'gold'),
+      renderStatTile('Bajak laut dihalau', s.piratesSunk.toLocaleString('id-ID'), 'raider', 'red'),
+      renderStatTile('Rongsok terangkat', progress.totalTrash.toLocaleString('id-ID'), 'net', 'green'),
+      renderStatTile('Resonansi terpicu', progress.totalResonances.toLocaleString('id-ID'), 'resonance', 'teal'),
+      renderStatTile('Total koin', progress.totalCoinsEarned.toLocaleString('id-ID'), 'coin', 'orange'),
+    ].join('');
   }
 }
 

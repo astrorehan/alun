@@ -19,19 +19,31 @@ Klik atau sentuh air, geser ke sasaran, lalu lepas untuk mengirim ombak. Ketuk t
 | Tab / E | Buka bengkel saat bermain |
 | 1 / 2 | Pilih pohon alat atau jurnal di bengkel |
 | Esc | Kembali dari bengkel |
-| G | Pengaturan grafis |
-| M | Matikan atau nyalakan suara |
+| G | Pengaturan (grafis, suara, permainan) |
+| M | Bisukan atau nyalakan semua suara |
 | Esc / Enter / Spasi | Lewati film |
+| Klik / Spasi / Enter | Lanjutkan omongan Bu Sari (Esc melewati adegannya) |
 
 Sapu enam sampah pertama ke Jaring Desa, lalu dorong peti perkakas ke ujung dermaga. Bu Sari membuka Bengkel Kalibrasi dan menawarkan Bentang Ombak serta Kapasitas Energi. Pilih simpul di pohon alat untuk melihat efek dan harga. Koin membayar pemasangan, sedangkan cetak biru dan batas tingkat mengikuti kemajuan cerita. Semua bab bisa ditamatkan dengan ombak dasar.
 
 Setelah jaga malam selesai dan pencemaran turun ke 30 atau kurang, jawab panggilan Operasi Badai Muson di bengkel saat siap. Sesudah fajar, Patroli Laguna melanjutkan permainan dengan saldo, peralatan, dan keadaan pesisir yang sama. Jurnal menyimpan riwayat pekerjaan desa.
 
-Progres tersimpan otomatis di browser. Pilih **Lanjutkan** pada layar judul untuk kembali ke bab yang sedang dimainkan. Pengaturan kurangi gerakan pada perangkat melewati film dan langsung menampilkan tujuan permainan.
+Progres tersimpan otomatis di browser. Pilih **Lanjutkan** pada layar judul untuk kembali ke bab yang sedang dimainkan. Film cerita bisa dilewati lewat **Pengaturan → Permainan**. Perangkat dengan pengaturan kurangi gerakan juga melewatinya dan langsung menampilkan tujuan permainan.
 
 ## Audio
 
 Efek suara dan sampel suasana dimuat sebagai MP3 lokal dari `public/audio/`. Web Audio mencampur sampel sesuai cuaca dan posisi di laguna. Suara prosedural tetap tersedia saat sampel belum siap.
+
+Bu Sari memandu lewat adegan bicara. Di langkah pertama dan saat cerita bergerak, laguna berhenti sampai pemain mengeklik atau menekan Spasi untuk lanjut (Esc melewati adegan). Bu Sari tidak membacakan dialognya. Setiap barisnya dibuka dengan seruan pendek dengan suaranya sendiri sesuai suasana baris itu ("Aduh, aduh...", "Eh! Eh, eh... alamak!", "Hoi! Hoi!"), lalu tulisannya diketik pelan seperti orang bicara. Pak Damar, A.L.U.N., dan Penjaga Rimba bicara lewat kartu radio dengan gumam pendek, dan A.L.U.N. hanya berbunyi bip. Dialog adegan dan suasananya ada di `src/story/talk.ts`, jadi teksnya bisa diubah tanpa merekam ulang. Di **Pengaturan → Permainan**, suara tokoh bisa diatur ke Asli, Gumam, atau Diam.
+
+```bash
+node --env-file=.env.local scripts/design-voice.mjs              # tiga contoh suara Bu Sari untuk dipilih
+node --env-file=.env.local scripts/design-voice.mjs --keep <id>  # simpan pilihan ke scripts/voice-cast.json
+npm run generate:voice -- --dry                                   # seruan yang belum direkam, tanpa biaya
+npm run generate:voice                                            # rekam seruan baru (butuh ELEVENLABS_API_KEY)
+```
+
+Daftar seruan per suasana ada di `scripts/generate-voice.mjs`. Klipnya disimpan di `public/audio/voice/` bersama `manifest.json`.
 
 ## Menjalankan
 
@@ -47,9 +59,15 @@ npm run uji      # uji alur, ekonomi, dan simpanan tanpa browser
 
 Game memerlukan browser dengan WebGL2. Buka `/lab.html` di server pengembangan untuk mencoba bab 1–9, film pembuka dan penutup, waktu hari, serta kondisi pesisir.
 
-## Pengaturan grafis
+## Pengaturan
 
-Otomatis, Rendah, Sedang, Tinggi, dan Ultra, bisa diganti saat bermain. Rendah dan Sedang menyimpan latar statis di resolusi asli dan hanya menggambar ulang air serta objek bergerak, jadi tetap tajam di GPU terintegrasi.
+Tekan **G** atau tombol roda gigi. Ada tiga tab:
+
+- **Grafis**: Otomatis, Rendah, Sedang, Tinggi, dan Ultra, bisa diganti saat bermain. Rendah dan Sedang menyimpan latar statis di resolusi asli dan hanya menggambar ulang air serta objek bergerak, jadi tetap tajam di GPU terintegrasi.
+- **Suara**: bisukan semua, bunyi saat menyorot tombol, dan volume terpisah untuk semua suara, musik, ombak dan efek, laut dan cuaca, suara tokoh, serta tombol dan menu.
+- **Permainan**: suara tokoh, kecepatan teks radio, film cerita, guncangan layar, layar penuh, dan hapus simpanan.
+
+Pengaturan disimpan terpisah dari cerita, jadi tetap ada setelah simpanan dihapus.
 
 ## Struktur
 
@@ -58,9 +76,12 @@ Otomatis, Rendah, Sedang, Tinggi, dan Ultra, bisa diganti saat bermain. Rendah d
 | `src/simulation.ts`, `src/world.ts` | Simulasi ombak dan peta laguna |
 | `src/story/` | Bab, kejadian patroli, pasokan rongsok, pencemaran, dan pembayaran |
 | `src/upgrades.ts`, `src/journal.ts` | Cetak biru bengkel, tingkat alat, dan catatan desa |
-| `src/save.ts` | Simpanan lokal v3 dan migrasi v2 |
-| `src/audio.ts`, `public/audio/` | Pencampuran Web Audio dan sampel MP3 |
-| `src/ui.ts`, `src/ui-kit/` | Antarmuka |
+| `src/save.ts` | Simpanan lokal v4 dan migrasi v2 |
+| `src/audio.ts`, `src/music.ts`, `public/audio/` | Pencampuran Web Audio, musik prosedural, dan sampel MP3 |
+| `src/story/talk.ts`, `src/voice.ts`, `src/ui-radio.ts` | Dialog adegan Bu Sari, seruan dan gumam, kartu radio, dan adegan bicara |
+| `scripts/design-voice.mjs`, `scripts/generate-voice.mjs` | Merancang suara Bu Sari dan merekam seruannya |
+| `src/settings.ts`, `src/ui-settings.ts` | Pengaturan dan jendelanya |
+| `src/ui.ts`, `src/ui-kit/` | Antarmuka dan potret tokoh |
 | `src/scene/` | Renderer 3D, air, hutan, terumbu, desa, dan tingkatan grafis |
 | `src/scene/opening.ts`, `src/scene/rescue.ts`, `src/scene/ending.ts` | Film pembuka, penyelamatan induk, dan kepulangan saat fajar |
 | `src/scene/story.ts`, `src/scene/fleet.ts`, `src/scene/health.ts`, `src/scene/plates.ts` | Visual cerita, armada, perubahan pesisir, dan label kejadian |
@@ -73,6 +94,7 @@ Simulasi berjalan di bidang 2D dan terpisah dari renderer.
 
 - [Three.js](https://threejs.org), lisensi MIT
 - [Fredoka](https://fonts.google.com/specimen/Fredoka) dan [Nunito](https://fonts.google.com/specimen/Nunito), SIL Open Font License
-- Musik latar: *Bassa Island Game Loop* & *Island Meet and Greet* oleh Kevin MacLeod ([incompetech.com](https://incompetech.com)), lisensi [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+- Musik latar: komposisi dinamis orisinal (Siang, Senja, Malam & Badai Muson) disintesis real-time melalui Web Audio API (`src/music.ts`)
+- Suara Bu Sari: dirancang dengan [ElevenLabs](https://elevenlabs.io) Voice Design dan direkam dengan ElevenLabs Text to Speech (eleven_v3). Efek suara: ElevenLabs Sound Effects
 
 Pekerjaan yang belum selesai ada di tab [Issues](../../issues).

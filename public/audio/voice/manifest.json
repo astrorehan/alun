@@ -1,0 +1,79 @@
+{
+ "version": 3,
+ "mumbles": {
+  "BU SARI": {
+   "ngobrol": [
+    {
+     "f": "sari-ngobrol-1.mp3",
+     "d": 1.76
+    },
+    {
+     "f": "sari-ngobrol-2.mp3",
+     "d": 1.24
+    },
+    {
+     "f": "sari-ngobrol-3.mp3",
+     "d": 1.81
+    }
+   ],
+   "senang": [
+    {
+     "f": "sari-senang-1.mp3",
+     "d": 2.54
+    },
+    {
+     "f": "sari-senang-2.mp3",
+     "d": 2.24
+    }
+   ],
+   "kaget": [
+    {
+     "f": "sari-kaget-1.mp3",
+     "d": 2.75
+    },
+    {
+     "f": "sari-kaget-2.mp3",
+     "d": 1.19
+    }
+   ],
+   "cemas": [
+    {
+     "f": "sari-cemas-1.mp3",
+     "d": 2.32
+    },
+    {
+     "f": "sari-cemas-2.mp3",
+     "d": 2.54
+    }
+   ],
+   "teriak": [
+    {
+     "f": "sari-teriak-1.mp3",
+     "d": 1.24
+    },
+    {
+     "f": "sari-teriak-2.mp3",
+     "d": 1.11
+    }
+   ],
+   "bisik": [
+    {
+     "f": "sari-bisik-1.mp3",
+     "d": 1.37
+    }
+   ],
+   "lega": [
+    {
+     "f": "sari-lega-1.mp3",
+     "d": 1.11
+    }
+   ],
+   "sedih": [
+    {
+     "f": "sari-sedih-1.mp3",
+     "d": 2
+    }
+   ]
+  }
+ }
+}

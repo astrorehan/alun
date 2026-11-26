@@ -951,7 +951,7 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     const now = performance.now();
     // Save GPU in non-gameplay overlays (shop, settings, victory) and settled title screen.
     if (this.fixedDt === null && !this.forceNextFrame) {
-      const overlayPaused = this.settingsOpen || this.phase === 'upgrade' || this.phase === 'victory';
+      const overlayPaused = this.settingsOpen || this.phase === 'upgrade' || this.phase === 'victory' || this.phase === 'defeat';
       if (overlayPaused && now - this.lastRenderMs < 80) return;
       if (this.phase === 'title' && Q.cached && this.director.isSettled() && now - this.lastRenderMs < 27) return;
     }

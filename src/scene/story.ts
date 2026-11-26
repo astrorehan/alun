@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { GameSimulation } from '../simulation';
 import { BoatJob } from '../story/jobs';
-import type { Entity } from '../types';
+import { PIRATE_SIGNAL_RADIUS, pirateKind } from '../story/state';
+import { PIRATE_KIND, type Entity, type PirateKind } from '../types';
 import { COLLECTOR_NET, DOLPHIN_SPOT, DUMP_SPOT, MOORING, PIER_END, SPAWNING_GROUND, WAITING_SPOT } from '../world';
 import { Build, hex } from './build';
 import {
@@ -13,11 +14,16 @@ import {
   DERRICK,
   drum,
   drumShip,
+  dumperShip,
   fishBasket,
   guard,
+  heavyRaider,
   mooring,
   pad,
   raider,
+  shieldShip,
+  signalShip,
+  skiff,
   smallFish,
   tideCoil,
   toolbox,
@@ -36,7 +42,7 @@ import type { Water } from './water';
 
 /**
  * What the story puts in the lagoon, as one layer over the scene: the tool chest and its rope, the
- * three ships and their gear, the pads and drums, the pier's cargo, the beacon, the dolphins and the
+ * ships and their gear, the pads and drums, the pier's cargo, the beacon, the dolphins and the
  * fish. Everything is read from the simulation each frame, nothing is kept that a save would need.
  */
 
@@ -71,10 +77,18 @@ const CORNER: Spot = { x: -24.0, z: 18.9, yaw: 0 };
 const OFFSHORE: Spot = { x: 70, z: 7.2, yaw: 0 };
 const WAIT: Spot = { x: toX(WAITING_SPOT.x), z: toZ(WAITING_SPOT.y), yaw: Math.PI };
 
+const PIRATE_HULLS = {
+  [PIRATE_KIND.raider]: { piece: 'raider', geometry: raider, scale: 1 },
+  [PIRATE_KIND.skiff]: { piece: 'skiff', geometry: skiff, scale: 0.89 },
+  [PIRATE_KIND.heavy]: { piece: 'heavy', geometry: heavyRaider, scale: 1.21 },
+  [PIRATE_KIND.shield]: { piece: 'shield', geometry: shieldShip, scale: 1.03 },
+  [PIRATE_KIND.dumper]: { piece: 'dumper', geometry: dumperShip, scale: 1.05 },
+  [PIRATE_KIND.signal]: { piece: 'signal', geometry: signalShip, scale: 1.02 },
+} as const;
+
+type ShipPiece = (typeof PIRATE_HULLS)[PirateKind]['piece'] | 'pukat' | 'drumship';
 type Piece =
-  | 'raider'
-  | 'pukat'
-  | 'drumship'
+  | ShipPiece
   | 'float'
   | 'cork'
   | 'drum'
@@ -203,13 +217,13 @@ export class StoryLayer {
       this.batch[k] = { im, data: im.geometry.attributes.aInst as THREE.InstancedBufferAttribute, n: 0 };
       this.group.add(im);
     };
-    add('raider', raider(), 3);
-    add('pukat', trawlShip(), 3);
-    add('drumship', drumShip(), 3);
-    add('float', trawlFloat(), 4);
-    add('cork', corkFloat(), 64);
-    add('drum', drum(), 6);
-    add('pad', pad(), 2);
+    for (const { piece, geometry } of Object.values(PIRATE_HULLS)) add(piece, geometry(), 48);
+    add('pukat', trawlShip(), 4);
+    add('drumship', drumShip(), 4);
+    add('float', trawlFloat(), 8);
+    add('cork', corkFloat(), 80);
+    add('drum', drum(), 10);
+    add('pad', pad(), 4);
     add('box', toolbox(), 2);
     add('basket', fishBasket(), 8);
     add('coil', tideCoil(), 1);
@@ -508,7 +522,7 @@ export class StoryLayer {
       this.put('coil', COIL_HOME[0], DECK + hop(just), COIL_HOME[1], 0.5, just < 1 ? smooth(0, 0.5, just) : 0.95);
       if (just < 3.5) this.star(COIL_HOME[0], DECK + 2.2, COIL_HOME[1], 1.5);
     }
-    if (s.flags.cargo) for (const [x, z, yaw] of GUARDS) this.put('guard', x, Math.max(groundAt(x, z), x > -44.2 && Math.abs(z - 10.8) < 1.4 ? DECK : 0), z, yaw + Math.sin(this.t * 0.4 + x) * 0.4, 1, { phase: 0.3 });
+    if (s.flags.toolbox) for (const [x, z, yaw] of GUARDS) this.put('guard', x, Math.max(groundAt(x, z), x > -44.2 && Math.abs(z - 10.8) < 1.4 ? DECK : 0), z, yaw + Math.sin(this.t * 0.4 + x) * 0.4, 1, { phase: 0.3 });
 
     /* ---- the baskets, and the one on its way to the raider's deck */
     const ship = sim.entities.find((e) => e.kind === 'raider' && e.tag !== 'leaving');
@@ -583,15 +597,20 @@ export class StoryLayer {
         this.chest(e, x, z, dt);
         break;
       case 'raider': {
-        const job = s.job;
-        if (job?.kind === 'raid' && e.tag !== 'leaving') this.loot.set(e.id, 2 - job.baskets);
-        this.ship('raider', e, x, z, 1.0, dt);
-        const n = this.loot.get(e.id) ?? 0;
-        for (let i = 0; i < n; i++) {
-          const [bx, bz] = this.local(e, x, z, -0.5 + i * 1.25, i ? -0.2 : 0.25);
-          this.put('basket', bx, 1.0 + this.water.heightAt(x, z, this.t, this.swell) * 0.75, bz, -e.rotation + i, 0.72);
+        const variant = pirateKind(e.variant);
+        const { piece, scale } = PIRATE_HULLS[variant];
+        this.ship(piece, e, x, z, scale, dt);
+        if (variant === PIRATE_KIND.signal && e.tag !== 'leaving') {
+          this.ring(x, z, PIRATE_SIGNAL_RADIUS * UNIT, [1.55, 0.96, 0.37], 0.24 + 0.06 * Math.sin(this.t * 2), SP.dash);
         }
-        if (job?.kind === 'raid' && job.phase === 'seize' && e.tag !== 'leaving') this.beckon(x, z, 4.2, [1.7, 0.28, 0.18]);
+        if (e.tag === 'attack') {
+          this.beckon(x, z, 4.0 * scale, [1.7, 0.25, 0.16]);
+          const px = toX(PIER_END.x);
+          const pz = toZ(PIER_END.y);
+          this.rope(x, 1.8, z, px, DECK + 0.4, pz, 0.6, 8, 0.09, CHAIN);
+        } else if (variant === PIRATE_KIND.heavy && e.tag !== 'leaving') {
+          this.ring(x, z, 4.6, [1.45, 0.42, 0.85], 0.45, SP.dash, this.t * 0.5);
+        }
         break;
       }
       case 'trawl_ship':
@@ -669,7 +688,7 @@ export class StoryLayer {
     if (v > 1.5 && this.r() < dt * 12) this.water.splash({ x, z, radius: 1.2, foam: 0.6, impulse: 0.4 });
   }
 
-  private ship(k: 'raider' | 'pukat' | 'drumship', e: Entity, x: number, z: number, scale: number, dt: number): void {
+  private ship(k: ShipPiece, e: Entity, x: number, z: number, scale: number, dt: number): void {
     const h = this.floatAt(x, z, 2.4);
     const hit = clamp(e.hitFlash / 0.24, 0, 1);
     this.put(k, x, h * 0.75 + 0.2 + Math.sin(this.t * 1.2 + e.id) * 0.06, z, -e.rotation, scale, {
@@ -686,6 +705,15 @@ export class StoryLayer {
       const side = this.r() < 0.5 ? -1 : 1;
       this.water.splash({ x: x + c * 3.2 - s * side * 1.2, z: z + s * 3.2 + c * side * 1.2, radius: 0.9, foam: 0.75, impulse: 0.4 });
       this.water.splash({ x: x - c * 3.8, z: z - s * 3.8, radius: 1.1, foam: 0.7, impulse: 0.35 });
+    }
+    if (k === 'skiff') {
+      const foam = smooth(14, 58, e.vx * c + e.vy * s);
+      if (foam > 0) {
+        for (const side of [-1, 1]) {
+          const [sx, sz] = this.local(e, x, z, -4.6 - foam * 1.3, side * 0.52);
+          this.fx.sprites.push(sx, 0.1, sz, 1.7 + foam * 2.2, 0.58, e.rotation + side * 0.15, 0.76, 0.95, 0.94, foam * 0.7, SP.puff, MODE.flat, 0, 0.3, (e.id % 7) * 0.18 + side * 0.15);
+        }
+      }
     }
     this.fx.sprites.push(x, 0.1, z, 4.3 * scale, 3.4 * scale, -e.rotation, 1, 1, 1, 0.24, SP.ring, MODE.flat, 0, 0.9);
   }

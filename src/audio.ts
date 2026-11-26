@@ -1,10 +1,12 @@
+import { TropicalMusicEngine } from './music';
+import { DEFAULT_SETTINGS, type Volumes } from './settings';
 import type { TimeOfDay, TrashRarity } from './types';
 
 /**
  * Hybrid Tropical Audio Engine for ALUN: Gema Pesisir Tropis.
- * Plays ElevenLabs-generated SFX & seamless ambient stems via Web Audio API
- * with stereo panning, combo pitch escalation, dynamic weather mixing,
- * master dynamics compression, and graceful procedural fallback while loading.
+ * Plays ElevenLabs-generated SFX & seamless ambient stems via Web Audio API,
+ * plus an original real-time procedural Web Audio soundtrack that crossfades
+ * smoothly across Day, Sunset, eerie/calm Night, and Monsoon Boss nights.
  */
 
 const PENTATONIC = [
@@ -40,10 +42,13 @@ type SfxId =
   | 'combo-milestone'
   | 'combo-break'
   | 'ui-click'
+  | 'ui-hover'
   | 'ui-tab'
   | 'ui-open'
   | 'ui-close'
   | 'ui-error'
+  | 'radio-in'
+  | 'radio-out'
   | 'upgrade-buy'
   | 'shop-unlock'
   | 'achievement-claim'
@@ -61,10 +66,13 @@ type SfxId =
 const PRIORITY_SFX: SfxId[] = [
   'ocean-ambience',
   'ui-click',
+  'ui-hover',
   'ui-tab',
   'ui-open',
   'ui-close',
   'ui-error',
+  'radio-in',
+  'radio-out',
   'wave-light',
   'wave-heavy',
   'wave-echo',
@@ -101,18 +109,16 @@ const SECONDARY_SFX: SfxId[] = [
   'victory',
 ];
 
-const BGM_PLAYLIST = [
-  './audio/bgm/bassa-island-game-loop.mp3',
-  './audio/bgm/island-meet-and-greet.mp3',
-] as const;
-
 interface PlayOptions {
   volume?: number;
   rate?: number;
   pan?: number;
   delay?: number;
-  bus?: 'sfx' | 'ui' | 'ambience';
+  bus?: 'sfx' | 'ui' | 'ambience' | 'voice';
 }
+
+/** Slider position to gain: half way sounds about half as loud. */
+const curve = (v: number): number => v * v;
 
 interface AmbienceTargets {
   ocean: number;
@@ -129,11 +135,17 @@ export class TropicalAudio {
   private ambienceBus: GainNode | null = null;
   private musicBus: GainNode | null = null;
   private musicFilter: BiquadFilterNode | null = null;
+  /** People on the radio: their clips, murmur and squelch. */
+  private voiceBus: GainNode | null = null;
+  private voiceMeter: AnalyserNode | null = null;
+  private meterData: Float32Array<ArrayBuffer> | null = null;
+  private volumes: Volumes = { ...DEFAULT_SETTINGS.volume };
+  /** A line is being spoken: music and weather step back. */
+  private voiceDucked = false;
+  private lastHoverMs = 0;
 
-  // Streaming tropical BGM playlist (Bassa Island Game Loop + Island Meet and Greet)
-  private bgmEl: HTMLAudioElement | null = null;
-  private bgmTrackIndex = 0;
-  private bgmStarted = false;
+  // Original real-time Web Audio dynamic soundtrack (Day / Sunset / eerie-calm Night / Monsoon Boss)
+  private music: TropicalMusicEngine | null = null;
 
   // Procedural fallback ambience nodes (crossfaded out once ElevenLabs loops decode)
   private fallbackOceanGain: GainNode | null = null;
@@ -188,9 +200,7 @@ export class TropicalAudio {
       if (this.ctx && this.ctx.state === 'suspended') {
         void this.ctx.resume();
       }
-      if (this.bgmEl && this.bgmEl.paused && !this.muted) {
-        void this.bgmEl.play().catch(() => {});
-      }
+      this.music?.setMuted(this.muted);
       return;
     }
 
@@ -211,16 +221,24 @@ export class TropicalAudio {
     comp.release.value = 0.16;
 
     this.masterGain = ctx.createGain();
-    this.masterGain.gain.value = this.muted ? 0 : 0.78;
+    this.masterGain.gain.value = this.masterLevel();
 
     this.sfxBus = ctx.createGain();
-    this.sfxBus.gain.value = 1.0;
+    this.sfxBus.gain.value = curve(this.volumes.sfx);
 
     this.uiBus = ctx.createGain();
-    this.uiBus.gain.value = 0.92;
+    this.uiBus.gain.value = 0.92 * curve(this.volumes.ui);
 
     this.ambienceBus = ctx.createGain();
-    this.ambienceBus.gain.value = this.shopDucked ? 0.48 : 1.0;
+    this.ambienceBus.gain.value = this.ambienceLevel();
+
+    this.voiceBus = ctx.createGain();
+    this.voiceBus.gain.value = curve(this.volumes.voice);
+    this.voiceMeter = ctx.createAnalyser();
+    this.voiceMeter.fftSize = 512;
+    this.voiceMeter.smoothingTimeConstant = 0.2;
+    this.meterData = new Float32Array(this.voiceMeter.fftSize);
+    this.voiceBus.connect(this.voiceMeter);
 
     this.musicFilter = ctx.createBiquadFilter();
     this.musicFilter.type = 'lowpass';
@@ -233,6 +251,7 @@ export class TropicalAudio {
     this.sfxBus.connect(comp);
     this.uiBus.connect(comp);
     this.ambienceBus.connect(comp);
+    this.voiceBus.connect(comp);
     this.musicFilter.connect(this.musicBus);
     this.musicBus.connect(comp);
     comp.connect(this.masterGain);
@@ -258,7 +277,7 @@ export class TropicalAudio {
     this.startFallbackAmbience();
     this.initialized = true;
     this.preloadAssets();
-    this.startBgm();
+    this.startMusic();
   }
 
   private preloadAssets(): void {
@@ -301,6 +320,9 @@ export class TropicalAudio {
         oceanFilterHz: 2600 + storm * 2400,
       };
     }
+    if (tod === 'night') {
+      return { ocean: 0.34, wind: 0.14, rain: 0.0001, oceanFilterHz: 2100 };
+    }
     if (tod === 'sunset') {
       return { ocean: 0.36, wind: 0.15, rain: 0.0001, oceanFilterHz: 2400 };
     }
@@ -340,50 +362,32 @@ export class TropicalAudio {
     this.applyMusicMix(timeConstant);
   }
 
-  private startBgm(): void {
-    if (this.bgmStarted || !this.ctx || !this.musicFilter || typeof Audio === 'undefined') return;
-    this.bgmStarted = true;
+  private startMusic(): void {
+    if (this.music || !this.ctx || !this.musicFilter || !this.noiseBuffer) return;
+    this.music = new TropicalMusicEngine(this.ctx, this.musicFilter, this.noiseBuffer);
+    this.music.setMuted(this.muted);
+    this.music.setTimeOfDay(this.currentTod ?? 'morning');
+    this.music.start();
+    this.applyMusicMix(1.1);
+  }
 
-    const el = new Audio(BGM_PLAYLIST[this.bgmTrackIndex]);
-    el.preload = 'auto';
-    el.loop = false;
-    el.addEventListener('ended', () => {
-      this.bgmTrackIndex = (this.bgmTrackIndex + 1) % BGM_PLAYLIST.length;
-      el.src = BGM_PLAYLIST[this.bgmTrackIndex];
-      if (this.ctx && this.musicBus) {
-        this.musicBus.gain.setValueAtTime(0.0001, this.ctx.currentTime);
-        this.applyMusicMix(1.1);
-      }
-      if (!this.muted) {
-        void el.play().catch(() => {});
-      }
-    });
-
-    try {
-      const src = this.ctx.createMediaElementSource(el);
-      src.connect(this.musicFilter);
-    } catch {
-      // If MediaElementSource is unavailable, fall back to direct element playback
-      el.volume = 0.22;
-    }
-
-    this.bgmEl = el;
-    this.applyMusicMix(1.2);
-    if (!this.muted) {
-      void el.play().catch(() => {});
-    }
+  public setPaused(paused: boolean): void {
+    this.music?.setPaused(paused);
   }
 
   private applyMusicMix(timeConstant = 0.55): void {
     if (!this.ctx || !this.musicBus || !this.musicFilter) return;
     const now = this.ctx.currentTime;
-    const baseGain = this.stormMix > 0.05 ? 0.24 - this.stormMix * 0.1 : 0.24;
-    const targetGain = this.shopDucked ? baseGain * 0.52 : baseGain;
+    const isNight = this.currentTod === 'night';
+    const baseGain = this.stormMix > 0.05 ? 0.36 : isNight ? 0.42 : 0.44;
+    const targetGain = (this.shopDucked ? baseGain * 0.48 : baseGain) * curve(this.volumes.music) * (this.voiceDucked ? 0.6 : 1);
     const targetHz = this.shopDucked
-      ? 2400
+      ? 2200
       : this.stormMix > 0.05
-        ? 18000 - this.stormMix * 15500
-        : 18000;
+        ? 11000
+        : isNight
+          ? 13500
+          : 18000;
 
     this.musicBus.gain.setTargetAtTime(targetGain, now, timeConstant);
     this.musicFilter.frequency.setTargetAtTime(targetHz, now, timeConstant);
@@ -506,7 +510,9 @@ export class TropicalAudio {
         ? this.uiBus
         : opts.bus === 'ambience'
           ? this.ambienceBus
-          : this.sfxBus;
+          : opts.bus === 'voice'
+            ? this.voiceBus
+            : this.sfxBus;
     if (!bus) return false;
 
     const t = this.ctx.currentTime + (opts.delay ?? 0);
@@ -544,8 +550,62 @@ export class TropicalAudio {
   public setShopDuck(ducked: boolean): void {
     this.shopDucked = ducked;
     if (!this.ctx || !this.ambienceBus) return;
-    this.ambienceBus.gain.setTargetAtTime(ducked ? 0.48 : 1.0, this.ctx.currentTime, 0.25);
+    this.ambienceBus.gain.setTargetAtTime(this.ambienceLevel(), this.ctx.currentTime, 0.25);
     this.applyMusicMix(0.35);
+  }
+
+  private masterLevel(): number {
+    return this.muted ? 0 : 0.78 * curve(this.volumes.master);
+  }
+
+  private ambienceLevel(): number {
+    return (this.shopDucked ? 0.48 : 1.0) * (this.voiceDucked ? 0.78 : 1) * curve(this.volumes.ambience);
+  }
+
+  /** The volume sliders of the settings, 0..1 each. */
+  public setVolumes(v: Volumes): void {
+    this.volumes = { ...v };
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    this.masterGain?.gain.setTargetAtTime(this.masterLevel(), now, 0.05);
+    this.sfxBus?.gain.setTargetAtTime(curve(v.sfx), now, 0.05);
+    this.uiBus?.gain.setTargetAtTime(0.92 * curve(v.ui), now, 0.05);
+    this.voiceBus?.gain.setTargetAtTime(curve(v.voice), now, 0.05);
+    this.ambienceBus?.gain.setTargetAtTime(this.ambienceLevel(), now, 0.05);
+    this.applyMusicMix(0.08);
+  }
+
+  /** While someone speaks on the radio the music and the sea step back a little. */
+  public setVoiceDuck(on: boolean): void {
+    if (this.voiceDucked === on) return;
+    this.voiceDucked = on;
+    if (!this.ctx) return;
+    this.ambienceBus?.gain.setTargetAtTime(this.ambienceLevel(), this.ctx.currentTime, on ? 0.12 : 0.6);
+    this.applyMusicMix(on ? 0.12 : 0.6);
+  }
+
+  /** Where the radio voices are mixed in, once sound has been unlocked by a tap. */
+  public voiceOut(): { ctx: AudioContext; bus: GainNode } | null {
+    return this.ctx && this.voiceBus && !this.muted ? { ctx: this.ctx, bus: this.voiceBus } : null;
+  }
+
+  /** The audio clock, which only runs while sound can actually be heard. */
+  public now(): number {
+    return this.ctx?.currentTime ?? 0;
+  }
+
+  public get running(): boolean {
+    return this.ctx?.state === 'running';
+  }
+
+  /** How loud the radio is right now, 0..1, for the speaker's mouth. */
+  public voiceLevel(): number {
+    if (!this.voiceMeter || !this.meterData) return 0;
+    this.voiceMeter.getFloatTimeDomainData(this.meterData);
+    let sum = 0;
+    for (let i = 0; i < this.meterData.length; i++) sum += this.meterData[i] * this.meterData[i];
+    const rms = Math.sqrt(sum / this.meterData.length) / Math.max(0.05, curve(this.volumes.voice));
+    return Math.min(1, rms * 5.5);
   }
 
   /** Updates full weather atmosphere from time of day; plays a soft cue on live weather shifts. */
@@ -555,6 +615,7 @@ export class TropicalAudio {
     const nextStorm = tod === 'monsoon' ? 1 : 0;
     const changed = prev !== null && prev !== tod;
     this.stormMix = nextStorm;
+    this.music?.setTimeOfDay(tod);
     this.applyAmbienceMix(0.65);
 
     if (changed && announceTransition && this.ctx && !this.muted) {
@@ -564,7 +625,7 @@ export class TropicalAudio {
       } else {
         this.playBuffer('weather-shift', {
           volume: 0.34,
-          rate: tod === 'dawn' ? 1.06 : tod === 'sunset' ? 0.95 : 1.0,
+          rate: tod === 'dawn' ? 1.06 : tod === 'night' ? 0.86 : tod === 'sunset' ? 0.95 : 1.0,
           bus: 'ambience',
         });
       }
@@ -595,18 +656,17 @@ export class TropicalAudio {
   }
 
   public toggleMute(): boolean {
-    this.muted = !this.muted;
-    if (this.ctx && this.masterGain) {
-      this.masterGain.gain.setTargetAtTime(this.muted ? 0 : 0.78, this.ctx.currentTime, 0.04);
-    }
-    if (this.bgmEl) {
-      if (this.muted) {
-        this.bgmEl.pause();
-      } else {
-        void this.bgmEl.play().catch(() => {});
-      }
-    }
+    this.setMuted(!this.muted);
     return this.muted;
+  }
+
+  public setMuted(muted: boolean): void {
+    this.muted = muted;
+    if (this.ctx && this.masterGain) {
+      this.masterGain.gain.setTargetAtTime(this.masterLevel(), this.ctx.currentTime, 0.04);
+    }
+    this.music?.setMuted(this.muted);
+    if (muted) this.setWaveCharge(0);
   }
 
   /* -------------------------------------------------------------- wave charge */
@@ -946,14 +1006,53 @@ export class TropicalAudio {
     if (!this.ctx || this.muted) return;
     if (
       this.playBuffer('ui-click', {
-        volume: 0.56,
+        volume: 0.46,
         rate: 0.97 + Math.random() * 0.07,
         bus: 'ui',
       })
     ) {
       return;
     }
-    this.playKalimbaTone(783.99, 0.1, 0.11, 0);
+    this.playUiBlip(1180, 0.05, 0.1);
+  }
+
+  /** The pointer reaches a button: a small soft blip, never more than one at a time. */
+  public playUiHover(): void {
+    if (!this.ctx || this.muted || this.ctx.state !== 'running') return;
+    const now = performance.now();
+    if (now - this.lastHoverMs < 45) return;
+    this.lastHoverMs = now;
+    if (this.playBuffer('ui-hover', { volume: 0.2, rate: 0.98 + Math.random() * 0.08, bus: 'ui' })) return;
+    this.playUiBlip(880, 0.04, 0.05);
+  }
+
+  /** A short sine blip for when a UI sample has not arrived yet. */
+  private playUiBlip(freq: number, length: number, volume: number): void {
+    if (!this.ctx || !this.uiBus) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, t);
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.82, t + length);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(volume, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + length);
+    osc.connect(g);
+    g.connect(this.uiBus);
+    osc.start(t);
+    osc.stop(t + length + 0.02);
+  }
+
+  /** The radio opens before someone speaks, and clicks shut after. */
+  public playRadioIn(): void {
+    if (!this.ctx || this.muted) return;
+    this.playBuffer('radio-in', { volume: 0.32, rate: 0.96 + Math.random() * 0.08, bus: 'voice' });
+  }
+
+  public playRadioOut(): void {
+    if (!this.ctx || this.muted) return;
+    this.playBuffer('radio-out', { volume: 0.22, rate: 0.96 + Math.random() * 0.08, bus: 'voice' });
   }
 
   public playUiTab(): void {
@@ -1515,5 +1614,11 @@ export class TropicalAudio {
     if (this.playBuffer('victory', { volume: 0.8, bus: 'ui' })) return;
     const notes = [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98];
     notes.forEach((f, i) => this.playKalimbaTone(f, 1.1, 0.2, i * 0.09));
+  }
+
+  public playDefeat(): void {
+    if (!this.ctx || this.muted) return;
+    const notes = [392.0, 349.23, 311.13, 261.63];
+    notes.forEach((f, i) => this.playKalimbaTone(f, 0.85, 0.2, i * 0.14));
   }
 }

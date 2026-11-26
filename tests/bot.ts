@@ -1,12 +1,12 @@
 import { loadGame, saveGame, type Store } from '../src/save';
 import { GameSimulation, isTrashKind } from '../src/simulation';
-import { BoatJob, BossJob, CalfJob, RaidJob, TrawlJob, WasteJob } from '../src/story/jobs';
-import { CALM, heldPollution, SALVAGE_VALUE, SUPPLY_HELD, SUPPLY_PER_MINUTE } from '../src/story/state';
+import { BoatJob, BossJob, CalfJob, TrawlJob, WasteJob } from '../src/story/jobs';
+import { heldPollution } from '../src/story/state';
 import type { Entity, JobRecord, PlayerProgress, Point, UpgradeId } from '../src/types';
-import { computeStats, getUpgradeCost, hasBlueprint, isForSale, UPGRADE_DEFS } from '../src/upgrades';
-import { COLLECTOR_NET, getShoreX, PIER_END, SEA_ROCKS, SPAWNING_GROUND, VILLAGE_PIER } from '../src/world';
+import { computeStats, getUpgradeCost, isForSale, UPGRADE_DEFS } from '../src/upgrades';
+import { COLLECTOR_NET, getShoreX, PIER_END, SEA_ROCKS, SPAWNING_GROUND, VILLAGE_PIER, WORLD_H } from '../src/world';
 
-/** The lagoon without a page around it: the real simulation, a hand that swipes, and a ledger. */
+/** Headless simulation harness & playtest bot for ALUN Day/Night Active Incremental Wave Defense. */
 
 export class MemoryStore implements Store {
   data = new Map<string, string>();
@@ -41,18 +41,47 @@ const silent = new Proxy(
   }
 ) as never;
 
-export type Style = 'biasa' | 'tanpa' | 'sejuta' | 'diam' | 'lambat';
+export type Style = 'biasa' | 'tanpa' | 'sejuta' | 'diam';
 
+/** Smart active-incremental shopping list across branches (width, power, eco: Muatan -> Jaring -> Kelangkaan, energy, echo, buoys, resonance, armor). */
 const SHOPPING: UpgradeId[] = [
   'wave_width',
-  'wave_power',
-  'wave_power',
-  'ai_guide',
+  'trash_density',
   'wave_power',
   'net_expand',
   'tidal_energy',
+  'wave_power',
+  'ai_guide',
+  'wave_width',
+  'pier_armor',
+  'energy_regen',
+  'trash_density',
+  'tidal_charge',
+  'echo_wave',
+  'wave_power',
+  'trash_rarity',
+  'ai_sonar',
+  'ai_buoy',
+  'resonance_burst',
+  'combo_flow',
+  'pier_armor',
+  'wave_power',
   'echo_wave',
   'energy_regen',
+  'ai_buoy',
+  'resonance_burst',
+  'wave_width',
+  'tidal_charge',
+  'wave_power',
+  'pier_armor',
+  'trash_density',
+  'trash_rarity',
+  'combo_flow',
+  'ai_sonar',
+  'ai_buoy',
+  'echo_wave',
+  'resonance_burst',
+  'wave_power',
 ];
 
 export interface Violation {
@@ -65,23 +94,19 @@ export class Session {
   progress: PlayerProgress;
   income: { at: number; amount: number }[] = [];
   violations: Violation[] = [];
-  chapters: { n: number; at: number }[] = [];
+  days: { n: number; at: number }[] = [];
   bought: { id: UpgradeId; at: number; level: number }[] = [];
-  firstBlueprint = -1;
+  banners: string[] = [];
   workshop = -1;
   endingAt = -1;
+  defeatedAt = -1;
   worstP = 0;
+  minPierHp = 100;
   radio: string[] = [];
   saves = 0;
-  starts: { id: string; at: number; calm: number }[] = [];
-  private lastJob: string | null = null;
-  private jobEnd = -1;
-  private reloaded = true;
   private lastEarned: number;
   private cool = 0;
-  private think = 0;
-  private key = '';
-  private plannedDrag: { from: Point; to: Point; hold: number } | null = null;
+  private plannedDrag: { from: Point; to: Point; hold: number; charge: number } | null = null;
 
   constructor(
     readonly store: MemoryStore,
@@ -96,8 +121,15 @@ export class Session {
       radio: (who, text) => this.radio.push(`${who}: ${text}`),
       coins: () => {},
       save: () => this.save(),
-      chapter: (n) => this.chapters.push({ n, at: this.clock }),
+      chapter: (n) => this.days.push({ n, at: this.clock }),
       celebrate: () => {},
+      banner: (title) => this.banners.push(title),
+      pierHurt: (hp) => {
+        this.minPierHp = Math.min(this.minPierHp, hp);
+      },
+      defeat: () => {
+        this.defeatedAt = this.clock;
+      },
       dolphin: () => false,
       filming: () => false,
       worsen: () => {},
@@ -106,6 +138,7 @@ export class Session {
       },
     });
     this.sim.initLagoon(this.progress, computeStats(this.progress));
+    this.minPierHp = this.progress.story.pierHp;
   }
 
   get clock(): number {
@@ -132,65 +165,38 @@ export class Session {
     this.lastEarned = this.progress.totalCoinsEarned;
 
     this.worstP = Math.max(this.worstP, s.pollution);
-    const flags = s.flags;
-    if (this.workshop < 0 && flags.toolbox) this.workshop = s.clock;
-    if (this.firstBlueprint < 0 && hasBlueprint('wave_width', flags)) this.firstBlueprint = s.clock;
+    this.minPierHp = Math.min(this.minPierHp, s.pierHp);
+    if (this.workshop < 0 && s.flags.toolbox) this.workshop = s.clock;
 
-    // what must hold at every moment
-    const valued = this.sim.entities.filter((e) => SALVAGE_VALUE[e.kind] !== undefined).length;
-    if (valued > SUPPLY_HELD) this.fail(`benda bernilai ${valued} > ${SUPPLY_HELD}`);
-    const recent = s.arrivals.filter((t) => t > s.clock - 60).length;
-    if (recent > SUPPLY_PER_MINUTE) this.fail(`kedatangan ${recent}/60 dtk`);
     this.sim.story.snapshot();
     const held = heldPollution(this.progress);
-    if (Math.abs(held - s.pollution) > 0.001) this.fail(`P ${s.pollution} != sumber ${held} (${s.chapter}/${s.step}/${s.job?.id ?? '-'})`);
-    if (s.pollution < 0 || s.pollution > 100) this.fail(`P di luar batas ${s.pollution}`);
-    // paid jobs keep their distance
-    const job = s.job?.id ?? null;
-    if (job !== this.lastJob) {
-      if (this.lastJob) this.jobEnd = s.clock;
-      if (job) {
-        this.starts.push({ id: job, at: s.clock, calm: this.jobEnd < 0 ? Infinity : s.clock - this.jobEnd });
-        if (this.jobEnd >= 0 && s.clock - this.jobEnd < CALM && !this.reloaded) this.fail(`jeda ${(s.clock - this.jobEnd).toFixed(1)} dtk sebelum ${job}`);
-      }
-      this.lastJob = job;
-      this.reloaded = false;
+    if (Math.abs(held - s.pollution) > 0.001) {
+      this.fail(`P ${s.pollution} != sumber ${held} (Hari ${s.day}/${s.cycle})`);
     }
+    if (s.pollution < 0 || s.pollution > 100) this.fail(`P di luar batas ${s.pollution}`);
+    if (s.pierHp < 0 || s.pierHp > s.maxPierHp) this.fail(`pierHp di luar batas ${s.pierHp}/${s.maxPierHp}`);
     for (const e of this.sim.entities) {
       if (!Number.isFinite(e.x) || !Number.isFinite(e.y)) this.fail(`posisi rusak ${e.kind}`);
     }
   }
 
-  /** Highest income in any 60 seconds of play. */
-  bestMinute(): number {
-    let best = 0;
-    let sum = 0;
-    let j = 0;
-    for (let i = 0; i < this.income.length; i++) {
-      sum += this.income[i].amount;
-      while (this.income[j].at <= this.income[i].at - 60) sum -= this.income[j++].amount;
-      best = Math.max(best, sum);
-    }
-    return best;
-  }
-
-  perMinute(): number[] {
-    const out: number[] = [];
-    for (const i of this.income) {
-      const m = Math.floor(i.at / 60);
-      out[m] = (out[m] ?? 0) + i.amount;
-    }
-    return Array.from({ length: Math.floor(this.clock / 60) + 1 }, (_, m) => out[m] ?? 0);
-  }
-
-  swipe(from: Point, to: Point, charge = 0.12): boolean {
+  swipe(from: Point, to: Point, charge = 0.14): boolean {
     return this.sim.launchPlayerWave(from.x, from.y, to.x, to.y, charge, this.progress, computeStats(this.progress));
   }
 
   shop(): void {
-    if (this.style === 'tanpa' || this.style === 'diam') return;
     const s = this.progress.story;
-    if (!s.flags.toolbox) return;
+    if (!s.flags.toolbox || s.cycle === 'night') return;
+    if (this.style === 'tanpa' || this.style === 'diam') {
+      if (s.cycle === 'prep' && s.step === 'shop') this.sim.story.leaveWorkshop();
+      return;
+    }
+
+    // Repair pier if damaged below 70%
+    if (s.pierHp < s.maxPierHp * 0.7) {
+      this.sim.story.repairPier();
+    }
+
     const buy = (id: UpgradeId): boolean => {
       const lv = this.progress.upgrades[id];
       if (!isForSale(id, this.progress)) return false;
@@ -203,62 +209,56 @@ export class Session {
       this.save();
       return true;
     };
+
     if (this.style === 'sejuta') {
       let again = true;
       while (again) {
         again = false;
         for (const d of UPGRADE_DEFS) if (buy(d.id)) again = true;
       }
+      if (s.cycle === 'prep' && s.step === 'shop') this.sim.story.leaveWorkshop();
       return;
     }
+
     const counts = new Map<UpgradeId, number>();
     for (const id of SHOPPING) {
       const want = (counts.get(id) ?? 0) + 1;
       counts.set(id, want);
       if (this.progress.upgrades[id] >= want) continue;
-      buy(id);
-      return;
+      if (buy(id)) break;
+      // Don't deadlock on one expensive item if a cheaper early item is affordable
+      if (getUpgradeCost(id, this.progress.upgrades[id]) > this.progress.coins * 1.8) continue;
+      break;
     }
+    if (s.cycle === 'prep' && s.step === 'shop') this.sim.story.leaveWorkshop();
   }
 
-  /** One thought of the hand: called every frame, swipes when it has a target and the time is right. */
   play(dt: number): void {
-    const st = this.sim.story;
-    const s = this.progress.story;
-    if (s.flags.ops && !s.callAnswered && !s.job && this.style !== 'diam') st.answerCall();
-    if (this.style === 'diam') return;
+    if (this.style === 'diam' || this.progress.story.defeated) return;
     this.shop();
-    if (s.step === 'workshop') st.leaveWorkshop();
 
     const fast = this.style === 'sejuta';
-    const slow = this.style === 'lambat';
-    const key = st.objective().key.split(':').slice(0, 2).join(':');
-    if (key !== this.key) {
-      this.key = key;
-      // reading the new objective takes a moment
-      this.think = fast ? 0.25 : slow ? 6 : 2.6;
-    }
-    this.think -= dt;
     this.cool -= dt;
     if (this.plannedDrag) {
       this.plannedDrag.hold -= dt;
       if (this.plannedDrag.hold <= 0) {
         const p = this.plannedDrag;
         this.plannedDrag = null;
-        const n = fast ? 4 : slow ? 26 : 13;
+        const n = fast ? 3 : 10;
         const j = (): number => (Math.random() - 0.5) * 2 * n;
-        this.swipe({ x: p.from.x + j(), y: p.from.y + j() }, { x: p.to.x + j(), y: p.to.y + j() });
+        this.swipe({ x: p.from.x + j(), y: p.from.y + j() }, { x: p.to.x + j(), y: p.to.y + j() }, p.charge);
       }
       return;
     }
-    if (this.cool > 0 || this.sim.energy < 22) return;
-    const t = this.target(this.think > 0);
+    const minEnergy = this.progress.story.cycle === 'night' ? 16 : 20;
+    if (this.cool > 0 || this.sim.energy < minEnergy) return;
+    const t = this.target();
     if (!t) return;
-    this.plannedDrag = { ...t, hold: fast ? 0.08 : slow ? 0.6 : 0.28 };
-    this.cool = fast ? 0.18 : slow ? 1.9 : 0.75 + Math.random() * 0.5;
+    const charge = t.heavy && this.sim.stats.chargeUnlocked ? 0.65 : 0.16;
+    this.plannedDrag = { from: t.from, to: t.to, hold: fast ? 0.06 : charge > 0.4 ? 0.32 : 0.16, charge };
+    this.cool = fast ? 0.18 : this.progress.story.cycle === 'night' ? 0.42 : 0.62;
   }
 
-  /** A swipe that carries something towards a place: it starts behind the thing and runs through it. */
   carry(e: Point, to: Point, back = 78): { from: Point; to: Point } {
     const d = Math.hypot(to.x - e.x, to.y - e.y) || 1;
     const ux = (to.x - e.x) / d;
@@ -266,56 +266,63 @@ export class Session {
     return { from: { x: e.x - ux * back, y: e.y - uy * back }, to: { x: e.x + ux * 60, y: e.y + uy * 60 } };
   }
 
-  private trashTarget(only?: (e: Entity) => boolean): { from: Point; to: Point } | null {
+  private trashTarget(only?: (e: Entity) => boolean): { from: Point; to: Point; heavy?: boolean } | null {
     const list = this.sim.entities.filter((e) => isTrashKind(e.kind) && (!only || only(e)));
     if (!list.length) return null;
     list.sort((a, b) => Math.hypot(a.x - COLLECTOR_NET.x, a.y - COLLECTOR_NET.y) - Math.hypot(b.x - COLLECTOR_NET.x, b.y - COLLECTOR_NET.y));
     const e = list[0];
-    if (Math.hypot(e.x - COLLECTOR_NET.x, e.y - COLLECTOR_NET.y) < 70 && list.length > 1 && Math.hypot(e.vx, e.vy) > 6) {
-      return this.carry(list[1], COLLECTOR_NET);
-    }
     const c = this.carry(e, { x: COLLECTOR_NET.x + 6, y: COLLECTOR_NET.y });
     c.from.x = Math.max(getShoreX(c.from.y) + 14, c.from.x);
     return c;
   }
 
-  private target(reading: boolean): { from: Point; to: Point } | null {
+  private target(): { from: Point; to: Point; heavy?: boolean } | null {
     const st = this.sim.story;
     const s = this.progress.story;
     const run = st.run;
     const job = s.job;
     const ents = this.sim.entities;
-    const away = (e: Point, push: Point, back = 84): { from: Point; to: Point } => {
+    const away = (e: Point, push: Point, back = 86): { from: Point; to: Point } => {
       const d = Math.hypot(push.x, push.y) || 1;
       return this.carry(e, { x: e.x + (push.x / d) * 100, y: e.y + (push.y / d) * 100 }, back);
     };
-    if (job && run && !reading) {
+
+    // 1. Prep phase
+    if (s.cycle === 'prep') {
+      if (s.step === 'box') {
+        const b = ents.find((q) => q.kind === 'toolbox');
+        return b ? this.carry(b, PIER_END) : null;
+      }
+      return this.trashTarget((e) => Boolean(e.opening));
+    }
+
+    // 2. Active pirates threatening the pier (closest first!)
+    const pirates = st.activePirates().filter((p) => p.x < 1210 && p.y > 40 && p.y < WORLD_H + 10);
+    if (pirates.length > 0) {
+      pirates.sort((a, b) => (a.tag === 'attack' ? -500 : 0) + a.x - ((b.tag === 'attack' ? -500 : 0) + b.x));
+      const p = pirates[0];
+      const aim = away(p, { x: 100, y: p.y < 360 ? -24 : 24 }, 92);
+      aim.from.x = Math.max(getShoreX(aim.from.y) + 14, aim.from.x);
+      return { ...aim, heavy: p.variant === 2 };
+    }
+
+    // 3. Active Boss or side job
+    if (job && run) {
       if (job.kind === 'dolphin') {
         const e = ents.find((q) => q.kind === 'dolphin');
         if (e) return this.carry({ x: e.x - 20, y: e.y - 10 }, e, 100);
       }
-      if (run instanceof BoatJob) {
-        const b = ents.find((q) => q.kind === 'boat');
-        if (b && job.phase === 'home') return this.carry(b, { x: VILLAGE_PIER.dockX, y: VILLAGE_PIER.dockY });
-        if (b && (job.phase === 'sail' || job.phase === 'aground')) {
-          const c = run.current();
-          const near = Math.hypot(b.x - c.x, b.y - c.y) < c.r + 10;
-          if (near) return away(b, { x: b.x - c.x - 60, y: b.y - c.y });
-        }
-      }
-      if (run instanceof RaidJob) {
-        const e = ents.find((q) => q.kind === 'raider' && q.tag !== 'leaving');
-        if (e && e.x < 1180 && e.y > 50) return away(e, { x: 60, y: e.y < 360 ? -30 : 40 }, 96);
-      }
-      if (run instanceof TrawlJob || run instanceof BossJob) {
+      if (run instanceof BossJob) {
         const f = ents.filter((q) => q.kind === 'float').find((q) => Math.hypot(q.x - q.home!.x, q.y - q.home!.y) <= 74);
         if (f) return away(f, { x: -20, y: f.tag === 'A' ? -90 : 90 }, 70);
         const d = ents.find((q) => q.kind === 'drum');
         if (d) return away(d, { x: d.x - 1070, y: d.y - 600 });
-        if (run instanceof BossJob && run.open) {
-          const b = this.sim.getBossEntity();
-          if (b) return this.carry({ x: b.x - 10, y: b.y }, { x: b.x + 60, y: b.y }, 110);
-        }
+        const b = this.sim.getBossEntity();
+        if (b) return { ...this.carry({ x: b.x - 10, y: b.y }, { x: b.x + 60, y: b.y }, 110), heavy: true };
+      }
+      if (run instanceof TrawlJob) {
+        const f = ents.filter((q) => q.kind === 'float').find((q) => Math.hypot(q.x - q.home!.x, q.y - q.home!.y) <= 74);
+        if (f) return away(f, { x: -20, y: f.tag === 'A' ? -90 : 90 }, 70);
       }
       if (run instanceof WasteJob) {
         const e = ents.find((q) => q.kind === 'polluter' && q.tag !== 'leaving');
@@ -323,23 +330,29 @@ export class Session {
         const pad = this.padTarget();
         if (pad) return pad;
       }
+      if (run instanceof BoatJob) {
+        const b = ents.find((q) => q.kind === 'boat');
+        if (b && job.phase === 'home') return this.carry(b, { x: VILLAGE_PIER.dockX, y: VILLAGE_PIER.dockY });
+        if (b && (job.phase === 'sail' || job.phase === 'aground')) {
+          const c = run.current();
+          if (Math.hypot(b.x - c.x, b.y - c.y) < c.r + 14) return away(b, { x: b.x - c.x - 60, y: b.y - c.y });
+        }
+      }
       if (run instanceof CalfJob) {
         const n = ents.find((q) => q.kind === 'drift_net');
         if (n) return away(n, { x: 10, y: n.y < SPAWNING_GROUND.y + 120 ? -90 : 90 }, 74);
       }
     }
-    if (s.step === 'box') {
-      const b = ents.find((q) => q.kind === 'toolbox');
-      if (b && !reading) return this.carry(b, PIER_END);
-      return null;
-    }
-    if (s.step === 'sweep') return reading ? null : this.trashTarget((e) => Boolean(e.opening));
-    if (s.step === 'healthy' || s.step === 'clean' || s.pollution > 30) {
+
+    // 4. Clean beach pollution when dirty so we get free dawn pier healing!
+    if (s.pollution > 30) {
       const r = this.recover();
       if (r) return r;
     }
+
+    // 5. Plant mangrove seed or farm salvage!
     const seed = ents.find((q) => q.kind === 'mangrove_seed');
-    if (seed && Math.random() < 0.3) return this.carry(seed, { x: getShoreX(seed.y) - 20, y: seed.y });
+    if (seed && Math.random() < 0.35) return this.carry(seed, { x: getShoreX(seed.y) - 20, y: seed.y });
     return this.trashTarget();
   }
 

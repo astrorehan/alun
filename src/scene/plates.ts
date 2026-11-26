@@ -1,6 +1,6 @@
 import type { GameSimulation } from '../simulation';
-import type { Entity } from '../types';
-import { P_HEALTHY } from '../story/state';
+import { P_HEALTHY, PIRATE_SPECS, pirateKind } from '../story/state';
+import { PIRATE_KIND, type Entity, type PirateKind } from '../types';
 
 /**
  * Name plates in the water, so the lagoon can be read with the sound off: whose ship that is and what it
@@ -27,13 +27,29 @@ function hurt(e: Entity): number {
   return e.maxHp >= 2 && e.hp < e.maxHp ? Math.max(0, e.hp / e.maxHp) : -1;
 }
 
+const PIRATE_PLATE_DROP: Record<PirateKind, number> = {
+  [PIRATE_KIND.raider]: 4.7,
+  [PIRATE_KIND.skiff]: 4.0,
+  [PIRATE_KIND.heavy]: 5.8,
+  [PIRATE_KIND.shield]: 4.7,
+  [PIRATE_KIND.dumper]: 5.4,
+  [PIRATE_KIND.signal]: 4.7,
+};
+
 function plateFor(sim: GameSimulation, e: Entity): Plate | null {
   const s = sim.story.s;
   const job = s.job;
   const at = (drop: number, text: string, tone: PlateTone, work = -1, hull = hurt(e)): Plate => ({ x: e.x, y: e.y, drop, text, tone, work, hull });
   switch (e.kind) {
-    case 'raider':
-      return job?.kind === 'raid' && job.phase === 'seize' ? at(4.7, 'MERAMPAS KERANJANG', 'busy', job.work) : at(4.7, 'PENJARAH', 'foe');
+    case 'raider': {
+      const variant = pirateKind(e.variant);
+      const drop = PIRATE_PLATE_DROP[variant];
+      const hpBar = variant === PIRATE_KIND.heavy ? Math.max(0, e.hp / Math.max(1, e.maxHp)) : hurt(e);
+      if (e.tag === 'attack') {
+        return at(drop, 'SERANG DERMAGA!', 'busy', e.attackWork ?? 0, hpBar);
+      }
+      return at(drop, PIRATE_SPECS[variant].name, 'foe', -1, hpBar);
+    }
     case 'trawl_ship':
       return job?.kind === 'trawl' && job.phase === 'haul' ? at(6.4, 'MENARIK PUKAT', 'busy', job.work) : at(6.4, 'KAPAL PUKAT', 'foe');
     case 'polluter':

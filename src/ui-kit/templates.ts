@@ -32,15 +32,15 @@ export interface UpgradeCardProps {
   waiting: boolean;
 }
 
-export interface JournalCardProps {
+interface JournalEntryProps {
+  date: string;
   title: string;
   text: string;
   swatch: UiSwatch;
   icon: UiIconName;
-  current: number;
-  target: number;
   written: boolean;
   fresh: boolean;
+  tally?: { label: string; unit?: '%'; current: number; target: number };
 }
 
 export interface RadioCardProps {
@@ -194,32 +194,91 @@ export function renderSupplyLine(text: string): string {
   `;
 }
 
-/** A page of the village journal: what happened, or what has yet to happen. */
-export function renderJournalCard(p: JournalCardProps): string {
-  const clamped = Math.max(0, Math.min(p.target, Math.floor(p.current)));
-  const pct = Math.max(0, Math.min(100, (clamped / Math.max(1, p.target)) * 100));
-  const foot = p.written
-    ? `<span class="ui-journal-done t-stroke-xs">${getUiIconSvg('check')}<span>Tercatat</span></span>`
-    : p.target > 1
-      ? `<div class="ui-prog-pill">
-            <div class="ui-prog-fill" style="width:${pct.toFixed(1)}%"></div>
-            <span class="ui-prog-text t-stroke-xs num">${clamped.toLocaleString('id-ID')} / ${p.target.toLocaleString('id-ID')}</span>
-          </div>`
-      : '';
+const JOURNAL_WATER_SKETCH = `
+  <path d="M11 69q14 -7 28 0t31 1m72 2q12 -8 25 -1t33 -1M38 79q16 -7 31 -1t36 0t29 -1t32 2M67 88q15 -5 28 0t30 0t25 0" />
+  <path d="M23 52l6 -2m10 -1l9 -2m121 1l8 2m8 0l6 2M38 29l5 -3l6 4l6 -4l6 3m92 4l5 -3l5 3l6 -4l6 4" opacity=".55" />
+`;
 
+const JOURNAL_PIER_SKETCH = `
+  <path d="M20 74l57 -18h62l56 18H20Zm22 0v14m130 -14v14M29 87q16 -6 32 -1m93 0q16 -7 34 0" />
+  <path d="M40 68h136m-116 -6h96M82 56l-17 18m66 -18l21 18M41 36v10m-5 -5h10m119 -7v8m-4 -4h8m15 14h5" opacity=".6" />
+`;
+
+const JOURNAL_BENCH_SKETCH = `
+  <path d="M24 70l39 -14h94l34 14v9H24v-9Zm0 0h167M44 79v9m127 -9v9" />
+  <path d="M52 66h22m70 0h22m-110 -3l17 -5m76 1l12 5M44 43l7 3m4 -11l6 6m104 8l7 -3m-13 -4l4 -5" opacity=".6" />
+`;
+
+const JOURNAL_SHORE_SKETCH = `
+  <path d="M15 76q36 -9 72 -5t48 -1t66 -7M45 84q25 -6 44 -3m58 0q22 -7 43 -7M34 73q1 -9 -4 -17m5 16q2 -8 8 -14m121 11q7 -9 5 -17m-4 16q5 -4 10 -5" />
+  <path d="M58 77h5m49 -2h8m10 10h10m34 -3l7 -1M47 49l7 -3m106 -5l7 2" opacity=".6" />
+`;
+
+const JOURNAL_SKETCH_SCENERY: Partial<Record<UiIconName, string>> = {
+  net: JOURNAL_PIER_SKETCH,
+  wrench: JOURNAL_BENCH_SKETCH,
+  moon: JOURNAL_PIER_SKETCH,
+  shield: JOURNAL_PIER_SKETCH,
+  rarity: JOURNAL_BENCH_SKETCH,
+  mangrove: JOURNAL_SHORE_SKETCH,
+  eco: JOURNAL_SHORE_SKETCH,
+  fire: JOURNAL_SHORE_SKETCH,
+};
+
+function renderJournalSketch(icon: UiIconName): string {
   return `
-    <article class="ui-achieve-card ui-journal-card ${p.written ? '' : 'is-blank'} ${p.fresh ? 'is-fresh' : ''}" data-swatch="${p.written ? p.swatch : 'dark'}">
-      <div class="ui-achieve-medallion">
-        ${getUiIconSvg(p.icon)}
-      </div>
-      <div class="ui-achieve-body">
-        <div>
-          <div class="ui-achieve-title t-stroke-md">${p.title}</div>
-          <div class="ui-achieve-desc t-stroke-xs">${p.text}</div>
+    <div class="journal-sketch" aria-hidden="true">
+      <svg class="journal-sketch-scene" viewBox="0 0 216 98" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round" stroke-linecap="round">
+        ${JOURNAL_SKETCH_SCENERY[icon] ?? JOURNAL_WATER_SKETCH}
+      </svg>
+      ${getUiIconSvg(icon, 'journal-sketch-icon')}
+    </div>
+  `;
+}
+
+function renderJournalTally({ label, unit, current, target }: NonNullable<JournalEntryProps['tally']>): string {
+  const value = Math.max(0, Math.min(target, Math.floor(current)));
+  const fill = Math.round((value / target) * 100);
+  const suffix = unit ?? '';
+  const formatted = `${value.toLocaleString('id-ID')}${suffix} / ${target.toLocaleString('id-ID')}${suffix}`;
+  return `
+    <p class="journal-tally">
+      <span class="journal-tally-marks" style="--tally-fill:${fill}%" aria-hidden="true"></span>
+      <span>${label} <strong class="num">${formatted}</strong></span>
+    </p>
+  `;
+}
+
+/** A page of Bu Sari's diary, with pencil for what has yet to happen. */
+export function renderJournalEntry(p: JournalEntryProps): string {
+  const stamp = p.fresh ? '<span class="journal-new">BARU</span>'
+    : p.written ? '' : '<span class="journal-pencil">Belum tercatat</span>';
+  return `
+    <article class="journal-leaf${p.written ? '' : ' journal-draft'}" data-swatch="${p.swatch}">
+      <div class="journal-dateline"><span>${p.date}</span>${stamp}</div>
+      <h3 class="journal-entry-heading">${p.title}</h3>
+      <div class="journal-entry-detail">
+        <div class="journal-entry-copy">
+          <p class="journal-prose">${p.text}</p>
+          ${!p.written && p.tally ? renderJournalTally(p.tally) : ''}
         </div>
-        ${foot ? `<div class="ui-journal-foot">${foot}</div>` : ''}
+        ${renderJournalSketch(p.icon)}
       </div>
-      ${p.fresh ? '<span class="ui-corner-tag ui-journal-new t-stroke-xs">BARU!</span>' : ''}
+    </article>
+  `;
+}
+
+export function renderJournalRecord(day: number, rows: readonly { label: string; value: string }[]): string {
+  return `
+    <article class="journal-leaf journal-record" data-swatch="teal">
+      <div class="journal-dateline"><span>Hari ${day}</span></div>
+      <h3 class="journal-entry-heading">Rekap patroli</h3>
+      <div class="journal-entry-detail">
+        <dl class="journal-record-rows">
+          ${rows.map(({ label, value }) => `<div><dt>${label}</dt><dd class="num">${value}</dd></div>`).join('')}
+        </dl>
+        ${renderJournalSketch('wave')}
+      </div>
     </article>
   `;
 }

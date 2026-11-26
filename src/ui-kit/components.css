@@ -703,46 +703,6 @@
   transform: translateY(-2px);
 }
 
-.ui-journal-card.is-blank {
-  filter: brightness(0.9);
-}
-
-.ui-journal-card.is-fresh {
-  box-shadow:
-    0 0 0 3px #fff180,
-    var(--gloss-top),
-    inset 0 -5px 0 rgba(8, 12, 24, 0.28),
-    0 6px 0 var(--ink);
-}
-
-.ui-journal-new {
-  top: -9px;
-  left: auto;
-  right: 14px;
-}
-
-.ui-journal-foot {
-  display: flex;
-  align-items: center;
-}
-
-.ui-journal-foot .ui-prog-pill {
-  width: min(220px, 100%);
-  height: 32px;
-}
-
-.ui-journal-done {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-}
-
-.ui-journal-done svg {
-  width: 20px;
-  height: 20px;
-}
-
 .ui-achieve-medallion {
   width: 74px;
   height: 74px;

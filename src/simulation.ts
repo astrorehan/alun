@@ -1,3 +1,4 @@
+import type { SceneId } from './story/talk';
 import type {
   AiBuoy,
   AmbientFish,
@@ -18,24 +19,32 @@ import type {
 import type { TropicalAudio } from './audio';
 import { Story } from './story/director';
 import { FireJob } from './story/jobs';
-import { PATROL, SALVAGE_VALUE } from './story/state';
+import { DAY_DURATION, isBossDay, SALVAGE_VALUE } from './story/state';
 import { AI_BUOY_SLOTS, COLLECTOR_NET, getShoreX, MANGROVE_SLOTS, SEA_ROCKS, WORLD_H, WORLD_W } from './world';
 
 /** What the simulation asks of the app around it. */
 export interface SimHooks {
   radio: (sender: string, text: string) => void;
+  /** Bu Sari tells something (see story/talk.ts). Without it, her lines go out over the radio. */
+  talk?: (id: SceneId) => void;
   coins: () => void;
   /** Something worth keeping happened: save now. */
   save: () => void;
   chapter: (n: number) => void;
   celebrate: (text: string, swatch: 'orange' | 'blue' | 'green' | 'gold' | 'teal' | 'purple' | 'red') => void;
+  /** Non-blocking dramatic center banner (nightfall, huge wave, dawn). */
+  banner: (title: string, sub: string, swatch: 'orange' | 'blue' | 'green' | 'gold' | 'teal' | 'purple' | 'red') => void;
+  /** Pier took damage from a pirate attack. */
+  pierHurt: (hp: number, maxHp: number) => void;
+  /** Pier HP reached 0 — run lost, restart from Day 1. */
+  defeat: () => void;
   /** The mother dolphin is there. True when a film takes it from here. */
   dolphin: (e: Entity) => boolean;
   /** One of the dolphin's films, or the help between them, is running. */
   filming: () => boolean;
   /** The shore got worse by this much. */
   worsen: (kind: 'trash' | 'spill' | 'ghost_net', amount: number) => void;
-  /** The last chapter closed. */
+  /** Day 5 Monsoon Boss defeated — victory dawn! */
   ending: () => void;
 }
 
@@ -109,6 +118,7 @@ export class GameSimulation {
 
   private nextId = 1;
   private ambientRippleTimer = 0;
+  private resonanceCooldown = 0;
 
   constructor(
     public readonly audio: TropicalAudio,
@@ -159,17 +169,16 @@ export class GameSimulation {
     }
   }
 
-  /** The light follows the story: mornings at the start, dusk for the night watch, dawn when the fleet is gone. */
+  /** Smooth Day/Night lighting cycle: dawn -> morning -> noon -> sunset -> night (or monsoon on Boss nights). */
   public getTimeOfDay(progress: PlayerProgress): TimeOfDay {
     const s = progress.story;
-    if (this.bossActive) return 'monsoon';
-    if (s.chapter >= PATROL) {
-      const hours = ['dawn', 'morning', 'noon', 'sunset'] as const;
-      return hours[Math.floor(Math.max(0, s.clock - (s.marks.ending ?? 0)) / 210) % 4];
-    }
-    if (s.step === 'clean') return 'dawn';
-    if (s.chapter <= 2) return 'morning';
-    if (s.chapter <= 5) return 'noon';
+    if (this.bossActive || (s.cycle === 'night' && isBossDay(s.day))) return 'monsoon';
+    if (s.cycle === 'night') return 'night';
+    if (s.cycle === 'prep') return 'morning';
+    const u = s.dayTime / Math.max(1, DAY_DURATION);
+    if (u < 0.14) return s.day > 1 ? 'dawn' : 'morning';
+    if (u < 0.34) return 'morning';
+    if (u < 0.76) return 'noon';
     return 'sunset';
   }
 
@@ -215,13 +224,17 @@ export class GameSimulation {
   /** The first words on the radio, for anyone who has not opened the workshop yet. */
   public greet(): void {
     const s = this.progress.story;
-    if (s.chapter === 1 && s.step === 'sweep') {
-      this.hooks.radio(
-        'BU SARI',
-        'Pak Damar tidak bisa pulang, dermaga tertutup sampah. Geser di air untuk menyapunya ke Jaring Desa.'
-      );
+    if (s.cycle !== 'prep') return;
+    // a new story starts with Bu Sari; a story picked up again only gets a reminder
+    if (s.step === 'sweep') {
+      if (!this.story.talk('wake')) this.hooks.radio('BU SARI', 'Sapu sampahnyo ke Jaring Desa, ya.');
+    } else if (s.step === 'box') {
+      this.hooks.radio('BU SARI', 'Peti ibuk masih di tambatan. Dorong ke ujung dermaga.');
+    } else if (s.step === 'shop') {
+      if (!this.story.talk('workshop')) this.hooks.radio('BU SARI', 'Bengkel la buka. Tombolnyo di kanan bawah.');
     }
   }
+
 
   /**
    * What floats while nobody is playing yet: trash bobs and slows to a stop where it fell, and nothing
@@ -255,6 +268,13 @@ export class GameSimulation {
     this.maxEnergy = stats.maxEnergy;
     if (this.maxEnergy > prevMax) {
       this.energy = Math.min(this.maxEnergy, this.energy + (this.maxEnergy - prevMax));
+    }
+
+    if (id === 'pier_armor') {
+      const s = this.progress.story;
+      const gain = Math.max(35, stats.maxPierHp - s.maxPierHp);
+      s.maxPierHp = stats.maxPierHp;
+      s.pierHp = Math.min(s.maxPierHp, s.pierHp + gain);
     }
 
     this.syncAiBuoys(stats);
@@ -346,6 +366,7 @@ export class GameSimulation {
     this.netPulse = Math.max(0, this.netPulse - dt * 4);
     this.flashAlpha = Math.max(0, this.flashAlpha - dt * 2.5);
     this.shoreSplash = Math.max(0, this.shoreSplash - dt * 2.4);
+    this.resonanceCooldown = Math.max(0, this.resonanceCooldown - dt);
 
     if (this.comboTimer > 0) {
       this.comboTimer -= dt;
@@ -397,7 +418,7 @@ export class GameSimulation {
       buoy.cooldown = Math.max(0, buoy.cooldown - dt);
     }
 
-    this.updateWaves(dt, progress, stats, tod === 'monsoon');
+    this.updateWaves(dt, progress, stats, tod === 'monsoon' || tod === 'night');
     this.updateEntities(dt, progress, stats);
     this.story.update(dt);
     this.updateAmbientFish(dt);
@@ -625,10 +646,12 @@ export class GameSimulation {
         }
       }
 
-      if (stats.resonanceLevel > 0 && w.kind !== 'resonance') {
+      if (stats.resonanceLevel > 0 && w.kind !== 'resonance' && this.resonanceCooldown <= 0 && newResonances.length === 0) {
         for (let j = i - 1; j >= 0; j--) {
           const other = this.waves[j];
           if (other.kind === 'resonance' || w.resonatedWith.has(other.id)) continue;
+          // Echoes from the same sweep should not endlessly self-detonate; cross waves or hit a buoy!
+          if (w.isEcho && other.isEcho) continue;
           if (w.age < 0.1 || other.age < 0.1) continue;
 
           const dist = Math.hypot(w.x - other.x, w.y - other.y);
@@ -638,13 +661,14 @@ export class GameSimulation {
               ? other.radius
               : other.crestWidth * 0.46);
 
-          if (dist < touchDist * 0.85 && dist > 14) {
+          if (dist < touchDist * 0.82 && dist > 18) {
             w.resonatedWith.add(other.id);
             other.resonatedWith.add(w.id);
             newResonances.push({
               x: (w.x + other.x) * 0.5,
               y: (w.y + other.y) * 0.5,
             });
+            break;
           }
         }
       }
@@ -658,11 +682,12 @@ export class GameSimulation {
     }
 
     for (const res of newResonances) {
+      this.resonanceCooldown = 0.52;
       this.spawnWaveInternal('resonance', res.x, res.y, 0, 1.0, stats, 1.25, 1.25);
       progress.totalResonances += 1;
-      this.hitstopTimer = 0.032;
-      this.screenShake = Math.max(this.screenShake, 10.5);
-      this.flashAlpha = Math.max(this.flashAlpha, 0.22);
+      this.hitstopTimer = 0.024;
+      this.screenShake = Math.max(this.screenShake, 9.5);
+      this.flashAlpha = Math.max(this.flashAlpha, 0.2);
       this.audio.playResonanceBurst(this.audio.worldXToPan(res.x, WORLD_W));
       this.text(res.x, res.y - 24, 'RESONANSI!', '#ffe07d', 1.2);
     }
@@ -1028,8 +1053,10 @@ export class GameSimulation {
     const label =
       rarity === 'legendary' ? 'RELIK!' : rarity === 'epic' ? 'BATERAI!' : rarity === 'rare' ? 'PETI!' : undefined;
     this.story.collected(e);
+    const comboMult = 1 + Math.min(0.5, Math.floor(this.comboCount / 3) * 0.1);
+    const pay = Math.round(e.value * comboMult);
     this.award(
-      e.value,
+      pay,
       COLLECTOR_NET.x + 12 + (Math.random() - 0.5) * 18,
       COLLECTOR_NET.y - 12 + (Math.random() - 0.5) * 16,
       label,

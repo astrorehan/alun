@@ -38,7 +38,7 @@ const CAPTIONS: { from: number; to: number; kicker: string; line: string }[] = [
   { from: 10.6, to: 14.2, kicker: 'TEMPAT PEMIJAHAN', line: 'Di sekitar karang inilah ikan bertelur.' },
   { from: 15.2, to: 18.9, kicker: 'TAMU DATANG', line: 'Rombongan wisatawan menyeberang ke laguna...' },
   { from: 19.6, to: 25.2, kicker: 'TAPI...', line: '...sampahnya dibuang begitu saja ke laut.' },
-  { from: 25.9, to: 31.6, kicker: 'BU SARI MENGHIDUPKAN A.L.U.N.', line: 'Dermaga tertutup. Pak Damar menunggu di laut.' },
+  { from: 25.9, to: 31.6, kicker: 'BU SARI MENGHIDUPKAN A.L.U.N.', line: 'Dermaga tertutup sampah — bersihkan sebelum malam datang!' },
 ];
 
 /** When A.L.U.N. comes online. */

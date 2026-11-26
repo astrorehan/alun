@@ -12,6 +12,9 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/src/style.css" />
+    <link rel="stylesheet" href="/src/journal.css" />
+    <link rel="stylesheet" href="/src/radio.css" />
+    <link rel="stylesheet" href="/src/settings.css" />
   </head>
   <body>
     <div id="app">
@@ -59,11 +62,23 @@
                 </div>
               </div>
             </div>
+
+            <div id="hud-wave-wrap" class="wave-bar-card hidden" data-swatch="blue">
+              <div class="wave-bar-body">
+                <div class="wave-bar-head">
+                  <span class="wave-bar-title t-stroke-xs" id="hud-wave-title">HARI 1 · SIANG</span>
+                  <span class="wave-bar-sub t-stroke-xs num" id="hud-wave-sub">02:30</span>
+                </div>
+                <div class="wave-bar-track" id="hud-wave-track">
+                  <div class="wave-bar-fill" id="hud-wave-fill" data-swatch="orange" style="width: 0%"></div>
+                  <div class="wave-bar-flags" id="hud-wave-flags"></div>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="hud-top-right">
             <div class="hud-right-row">
-              <button type="button" id="btn-hud-settings" class="ui-square-btn" data-swatch="blue" title="Pengaturan Grafis (G)" aria-label="Pengaturan Grafis"></button>
-              <button type="button" id="btn-mute" class="ui-square-btn" data-swatch="dark" title="Suara (M)" aria-label="Suara"></button>
+              <button type="button" id="btn-hud-settings" class="ui-square-btn" data-swatch="blue" title="Pengaturan (G)" aria-label="Pengaturan"></button>
               <div class="ui-time-pill hidden" id="hud-time-pill" data-swatch="blue">
                 <span id="hud-time-icon"></span>
                 <span class="ui-time-text t-stroke-sm" id="hud-day-label">PAGI CERAH</span>
@@ -71,7 +86,15 @@
             </div>
 
             <div class="hud-right-bars">
-              <div class="ui-slim-bar-wrap hidden" id="hud-eco-wrap" title="Kesehatan pesisir. Garis putih: batas pantai sehat.">
+              <div class="ui-slim-bar-wrap hidden" id="hud-pier-wrap" title="Ketahanan Dermaga. Jika 0, permainan ulang dari Hari 1.">
+                <div class="ui-slim-bar-track">
+                  <div class="ui-slim-bar-fill" id="hud-pier-bar" data-swatch="green" style="width: 100%"></div>
+                  <span class="ui-slim-bar-val t-stroke-xs num" id="hud-pier-val">Dermaga 100/100</span>
+                </div>
+                <div class="ui-slim-bar-medallion" data-swatch="blue" id="hud-pier-icon"></div>
+              </div>
+
+              <div class="ui-slim-bar-wrap hidden" id="hud-eco-wrap" title="Kesehatan pesisir. Pantai sehat (>=70%) menambal dermaga gratis tiap fajar!">
                 <div class="ui-slim-bar-track">
                   <div class="ui-slim-bar-fill" id="hud-eco-bar" data-swatch="orange" style="width: 64%"></div>
                   <i class="ui-slim-bar-mark"></i>
@@ -80,10 +103,10 @@
                 <div class="ui-slim-bar-medallion" data-swatch="orange" id="hud-eco-icon"></div>
               </div>
 
-              <div class="ui-slim-bar-wrap hidden" id="hud-boss-pill" title="Ketahanan kapal induk">
+              <div class="ui-slim-bar-wrap hidden" id="hud-boss-pill" title="Ketahanan Kapal Induk">
                 <div class="ui-slim-bar-track">
                   <div class="ui-slim-bar-fill" id="hud-boss-bar" data-swatch="red" style="width: 100%"></div>
-                  <span class="ui-slim-bar-val t-stroke-xs num" id="hud-boss-val">Kapal induk 100%</span>
+                  <span class="ui-slim-bar-val t-stroke-xs num" id="hud-boss-val">Kapal Induk 100%</span>
                 </div>
                 <div class="ui-slim-bar-medallion" data-swatch="red" id="hud-boss-icon"></div>
               </div>
@@ -92,6 +115,10 @@
         </div>
 
         <div class="hud-playfield" id="hud-playfield" aria-hidden="true">
+          <div id="wave-banner" class="wave-banner hidden" data-swatch="orange" role="status" aria-live="polite">
+            <div class="wave-banner-title t-stroke-lg" id="wave-banner-title"></div>
+            <div class="wave-banner-sub t-stroke-xs" id="wave-banner-sub"></div>
+          </div>
           <div id="target-pointer" class="target-pointer hidden" aria-hidden="true">
             <svg id="target-pointer-arrow" class="target-pointer-arrow" viewBox="0 0 40 34">
               <path d="M20 31L4 12.5C2.4 10.6 3.8 7.6 6.4 7.6H13V4.4C13 3 14.1 2 15.4 2H24.6C25.9 2 27 3 27 4.4V7.6H33.6C36.2 7.6 37.6 10.6 36 12.5L20 31Z" />
@@ -106,10 +133,7 @@
 
         <div class="hud-bottom">
           <div class="hud-messages">
-            <div id="radio-toast" class="ui-speech-bubble hidden" role="status" aria-live="polite">
-              <div class="ui-speech-sender t-stroke-xs" id="radio-sender">A.L.U.N.</div>
-              <div class="ui-speech-text" id="radio-text"></div>
-            </div>
+            <div id="radio-toast" class="radio-card hidden"></div>
             <div id="hud-notice" class="ui-toast t-stroke-sm hidden" role="status"></div>
           </div>
           <div class="hud-action-stack hidden" id="hud-action-stack">
@@ -129,6 +153,11 @@
           </div>
         </div>
       </div>
+
+      <!-- ================= BU SARI TALKS (THE LAGOON WAITS FOR A CLICK) ================= -->
+      <section id="talk-layer" class="talk-layer hidden" aria-label="Bu Sari bicara">
+        <div id="talk-card" class="radio-card talk-card"></div>
+      </section>
 
       <!-- ================= OPENING FILM (LETTERBOX + SUBTITLES) ================= -->
       <section id="intro-overlay" class="intro-overlay hidden" aria-label="Film">
@@ -151,7 +180,8 @@
             <div class="title-emblem" id="title-emblem"></div>
             <div>
               <h1 class="game-title t-stroke-xl">ALUN</h1>
-              <p class="game-subtitle">Geser air untuk menyapu sampah dari dermaga. Tahan sebelum melepas untuk membuat ombak lebih kuat.</p>
+              <p class="game-subtitle">Bersihkan teluk di siang hari, perkuat ombakmu di Bengkel, dan tahan gelombang bajak laut setiap malam!</p>
+              <div id="title-best" class="title-best t-stroke-xs hidden"></div>
             </div>
           </div>
 
@@ -166,7 +196,7 @@
             </button>
             <button type="button" id="btn-title-settings" class="ui-btn t-stroke-sm" data-swatch="blue">
               <span class="ui-btn-icon" id="title-settings-icon"></span>
-              <span>Grafis</span>
+              <span>Pengaturan</span>
             </button>
             <button type="button" id="btn-credits" class="ui-btn t-stroke-sm" data-swatch="slate">
               <span class="ui-btn-icon" id="title-info-icon"></span>
@@ -203,6 +233,10 @@
             </div>
 
             <div class="shop-mini-chips" id="run-summary-chips"></div>
+            <button type="button" id="btn-repair-pier" class="ui-btn ui-btn-sm shop-repair-btn t-stroke-xs hidden" data-swatch="green">
+              <span id="repair-pier-icon" class="ui-btn-icon"></span>
+              <span id="repair-pier-label">Tambal +35</span>
+            </button>
             <div class="ui-currency-pill shop-bank-pill">
               <span class="ui-currency-icon" id="shop-coin-icon"></span>
               <span class="ui-currency-val t-stroke-md t-gold num" id="upgrade-coins">0</span>
@@ -256,60 +290,44 @@
           <!-- VILLAGE JOURNAL: a book with pages instead of a scrolling list -->
           <div id="panel-journal" role="tabpanel" aria-labelledby="tab-journal" class="shop-panel panel-journal hidden">
             <div class="journal-head">
-              <div class="ui-tab-bar journal-parts" role="tablist" aria-label="Bagian jurnal">
-                <button type="button" id="journal-part-1" class="ui-tab t-stroke-sm is-active" data-swatch="orange" role="tab">
+              <h2 class="journal-title t-stroke-sm">Jurnal Bu Sari</h2>
+              <div class="journal-parts" role="tablist" aria-label="Bagian jurnal">
+                <button type="button" id="journal-part-1" class="journal-bookmark" role="tab" aria-selected="true" aria-controls="journal-book">
                   <span>Cerita</span>
                   <span id="journal-badge-1" class="ui-notif-badge hidden">0</span>
                 </button>
-                <button type="button" id="journal-part-2" class="ui-tab t-stroke-sm" data-swatch="slate" role="tab">
+                <button type="button" id="journal-part-2" class="journal-bookmark" role="tab" aria-selected="false" aria-controls="journal-book" tabindex="-1">
                   <span>Laguna</span>
                   <span id="journal-badge-2" class="ui-notif-badge hidden">0</span>
                 </button>
               </div>
-
-              <div class="achieve-summary-bar">
-                <span class="ach-sum-item">
-                  <span id="journal-sum-icon" class="ach-mini-svg"></span>
-                  <strong class="t-stroke-sm t-gold num" id="journal-count">0 / 12</strong>
-                </span>
-                <div class="ui-bar-track ach-overall-track">
-                  <div class="ui-bar-fill" id="journal-bar" data-swatch="gold" style="width: 0%"></div>
-                </div>
-              </div>
             </div>
 
-            <div class="journal-book" id="journal-book">
-              <div id="journal-grid" class="journal-grid"></div>
-              <div id="journal-measure" class="journal-grid journal-measure" aria-hidden="true"></div>
+            <div class="journal-book" id="journal-book" role="tabpanel" aria-labelledby="journal-part-1" tabindex="0">
+              <div id="journal-spread" class="journal-spread"></div>
             </div>
 
-            <div class="journal-foot">
-              <div class="journal-pager">
-                <button type="button" id="journal-prev" class="ui-square-btn journal-flip" data-swatch="blue" aria-label="Halaman sebelumnya"></button>
-                <span class="journal-page t-stroke-xs num" id="journal-page" aria-live="polite">1 / 1</span>
-                <button type="button" id="journal-next" class="ui-square-btn journal-flip" data-swatch="blue" aria-label="Halaman berikutnya"></button>
-              </div>
-              <button type="button" id="btn-reset-save" class="journal-reset">
-                <span class="journal-reset-icon" id="journal-reset-icon"></span>
-                <span>Hapus simpanan</span>
-              </button>
-            </div>
+            <nav class="journal-pager" aria-label="Halaman jurnal">
+              <button type="button" id="journal-prev" class="ui-square-btn journal-flip" data-swatch="gold" aria-label="Halaman sebelumnya"></button>
+              <span class="journal-page t-stroke-xs num" id="journal-page" aria-live="polite"></span>
+              <button type="button" id="journal-next" class="ui-square-btn journal-flip" data-swatch="gold" aria-label="Halaman berikutnya"></button>
+            </nav>
           </div>
         </div>
       </section>
 
-      <!-- ================= THE STORY IS OVER ================= -->
+      <!-- ================= VICTORY (DAY 5 MONSOON CLEARED) ================= -->
       <section id="victory-screen" class="ui-modal-backdrop hidden">
         <div class="ui-modal-frame ui-shell-navy victory-modal">
           <div class="ui-modal-ribbon" data-swatch="gold">
-            <span class="ui-modal-ribbon-title t-stroke-lg">Cerita Tamat</span>
+            <span class="ui-modal-ribbon-title t-stroke-lg">Badai Muson Takluk!</span>
           </div>
 
           <div class="victory-head">
-            <div class="victory-sub t-stroke-xs t-cyan">FAJAR DI DERMAGA</div>
+            <div class="victory-sub t-stroke-xs t-cyan">FAJAR HARI 6 · DERMAGA SELAMAT</div>
             <p class="modal-lead">
-              Perahu Pak Damar bersandar di tempat yang dulu tertutup sampah. Induk dan anak lumba-lumba
-              melintas di sampingnya. Kampung, alat, saldo dan pantainya tetap sama di Patroli Laguna.
+              Kapal Induk dan armada layar robek berhasil dipukul mundur! Perahu Pak Damar dan lumba-lumba kembali ke teluk.
+              Lanjutkan ke Patroli Tanpa Batas (Hari 6+) untuk menembus batas kekuatan A.L.U.N.!
             </p>
           </div>
 
@@ -317,10 +335,37 @@
 
           <div class="modal-actions">
             <button type="button" id="btn-endless" class="ui-btn ui-btn-lg t-stroke-md" data-swatch="green">
-              <span>Patroli Laguna</span>
+              <span>Lanjut Hari 6+ (Endless)</span>
             </button>
             <button type="button" id="btn-victory-shop" class="ui-btn ui-btn-lg t-stroke-md" data-swatch="blue">
               <span>Buka Bengkel</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= DEFEAT (PIER DESTROYED -> RESTART FROM DAY 1) ================= -->
+      <section id="defeat-screen" class="ui-modal-backdrop hidden" role="alertdialog" aria-modal="true">
+        <div class="ui-modal-frame ui-shell-navy victory-modal defeat-modal">
+          <div class="ui-modal-ribbon" data-swatch="red">
+            <span class="ui-modal-ribbon-title t-stroke-lg">Dermaga Runtuh!</span>
+          </div>
+
+          <div class="victory-head">
+            <div class="victory-sub t-stroke-xs t-gold" id="defeat-sub">MALAM 1 · SERBUAN BAJAK LAUT</div>
+            <p class="modal-lead">
+              Armada layar robek berhasil menembus pertahanan dermaga. Mulai ulang dari Hari 1, percepat bersih-bersih di siang hari, dan perkuat ombak serta Benteng Dermaga!
+            </p>
+          </div>
+
+          <div class="victory-grid" id="defeat-stats"></div>
+
+          <div class="modal-actions">
+            <button type="button" id="btn-retry-run" class="ui-btn ui-btn-lg t-stroke-md" data-swatch="green">
+              <span>Ulang dari Hari 1</span>
+            </button>
+            <button type="button" id="btn-defeat-title" class="ui-btn ui-btn-lg t-stroke-md" data-swatch="slate">
+              <span>Layar Judul</span>
             </button>
           </div>
         </div>
@@ -359,13 +404,13 @@
             <div class="credit-block" data-swatch="gold">
               <h4 class="t-stroke-sm t-gold">Deklarasi Penggunaan AI (Transparan)</h4>
               <p>
-                Kode program (TypeScript, Three.js / WebGL, UI kit dan Web Audio API) serta perancangan sistem dibantu secara transparan menggunakan asisten AI (Antigravity / Gemini dan Claude Code). Seluruh grafis digambar prosedural secara real-time. Efek suara dibuat dengan ElevenLabs Sound Effects dan sintesis Web Audio. Musik latar: <em>Bassa Island Game Loop</em> &amp; <em>Island Meet and Greet</em> oleh Kevin MacLeod (incompetech.com), lisensi CC BY 4.0. Adegan 3D memakai pustaka Three.js (lisensi MIT).
+                Kode program dan perancangan sistem dibantu secara transparan oleh asisten AI (Antigravity / Gemini, Claude Code dan Codex). Grafis 3D digambar prosedural secara real-time dengan Three.js (lisensi MIT). Potret tokoh radio digambar sebagai SVG dengan acuan gambar referensi buatan AI. Suara Bu Sari dirancang dengan ElevenLabs Voice Design dan direkam dengan ElevenLabs Text to Speech, efek suara dengan ElevenLabs Sound Effects dan Web Audio. Musik latar (Siang, Senja, Malam &amp; Badai Muson) disintesis orisinal secara real-time melalui Web Audio API.
               </p>
             </div>
             <div class="credit-block" data-swatch="blue">
               <h4 class="t-stroke-sm t-lime">Kontrol Singkat</h4>
               <p>
-                <strong>Klik atau sentuh, lalu geser</strong> di air untuk mengirim ombak. <strong>Tahan</strong> sebelum dilepas supaya lebih kuat. <strong>Tab / E</strong> membuka bengkel, <strong>1/2</strong> ganti tab, <strong>G</strong> grafis dan <strong>M</strong> suara. Permainan tersimpan sendiri di browser ini.
+                <strong>Klik atau sentuh, lalu geser</strong> di air untuk mengirim ombak. <strong>Tahan</strong> sebelum dilepas supaya lebih kuat. <strong>Tab / E</strong> membuka bengkel, <strong>1/2</strong> ganti tab, <strong>G</strong> pengaturan dan <strong>M</strong> bisukan suara. Saat Bu Sari bicara, <strong>klik</strong> atau <strong>Spasi</strong> untuk lanjut. Permainan tersimpan sendiri di browser ini.
               </p>
             </div>
           </div>
@@ -378,19 +423,36 @@
         </div>
       </section>
 
-      <!-- ================= GRAPHICS SETTINGS MODAL ================= -->
+      <!-- ================= SETTINGS MODAL ================= -->
       <section id="settings-modal" class="ui-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="settings-ribbon-title">
         <div class="ui-modal-frame ui-shell-navy settings-modal">
           <div class="ui-modal-ribbon" data-swatch="blue">
-            <span class="ui-modal-ribbon-title t-stroke-lg" id="settings-ribbon-title">Pengaturan Grafis</span>
+            <span class="ui-modal-ribbon-title t-stroke-lg" id="settings-ribbon-title">Pengaturan</span>
           </div>
-          <button type="button" id="btn-close-settings" class="ui-close-btn" title="Tutup (Esc)" aria-label="Tutup Pengaturan Grafis"></button>
+          <button type="button" id="btn-close-settings" class="ui-close-btn" title="Tutup (Esc)" aria-label="Tutup Pengaturan"></button>
 
+          <div class="settings-body">
+          <div class="settings-tabs" role="tablist" aria-label="Bagian pengaturan">
+            <button type="button" class="settings-tab is-active" role="tab" id="set-tab-graphics" data-pane="graphics" data-swatch="purple" aria-controls="set-pane-graphics" aria-selected="true">
+              <span class="settings-tab-icon" id="set-tab-icon-graphics"></span>
+              <span class="settings-tab-label t-stroke-sm">Grafis</span>
+            </button>
+            <button type="button" class="settings-tab" role="tab" id="set-tab-audio" data-pane="audio" data-swatch="teal" aria-controls="set-pane-audio" aria-selected="false" tabindex="-1">
+              <span class="settings-tab-icon" id="set-tab-icon-audio"></span>
+              <span class="settings-tab-label t-stroke-sm">Suara</span>
+            </button>
+            <button type="button" class="settings-tab" role="tab" id="set-tab-game" data-pane="game" data-swatch="orange" aria-controls="set-pane-game" aria-selected="false" tabindex="-1">
+              <span class="settings-tab-icon" id="set-tab-icon-game"></span>
+              <span class="settings-tab-label t-stroke-sm">Permainan</span>
+            </button>
+          </div>
+
+          <div class="settings-panes">
+          <div class="settings-pane" id="set-pane-graphics" role="tabpanel" aria-labelledby="set-tab-graphics">
           <div class="settings-status-row">
             <span class="shop-chip chip-ai t-stroke-xs" id="settings-active-chip">Aktif: Otomatis</span>
             <span class="shop-chip t-stroke-xs num" id="settings-res-chip">1920×1080</span>
           </div>
-
 
           <div id="graphics-options" class="graphics-options" role="radiogroup" aria-label="Kualitas Grafis">
             <button type="button" class="graphics-opt" data-quality="auto" data-swatch="teal" role="radio" aria-checked="true">
@@ -425,8 +487,100 @@
               <span class="gopt-desc">Riak paling detail dan bayangan 3K.</span>
             </button>
           </div>
+          </div>
 
-          <div class="modal-actions">
+          <div class="settings-pane is-off" id="set-pane-audio" role="tabpanel" aria-labelledby="set-tab-audio" aria-hidden="true" inert>
+            <div class="set-switches">
+              <button type="button" class="set-switch" role="switch" aria-checked="false" data-setting="muted">
+                <span class="set-switch-name">Bisukan semua <kbd>M</kbd></span>
+                <span class="set-switch-track"><i></i></span>
+                <span class="set-switch-state t-stroke-xs">Mati</span>
+              </button>
+              <button type="button" class="set-switch" role="switch" aria-checked="true" data-setting="hoverSounds">
+                <span class="set-switch-name">Bunyi saat menyorot tombol</span>
+                <span class="set-switch-track"><i></i></span>
+                <span class="set-switch-state t-stroke-xs">Nyala</span>
+              </button>
+            </div>
+            <div class="set-sliders">
+              <label class="set-slider" data-channel="master">
+                <span class="set-slider-head"><span class="set-slider-name">Semua suara</span><span class="set-slider-val num">100%</span></span>
+                <input type="range" min="0" max="100" step="5" value="100" aria-label="Volume semua suara" />
+              </label>
+              <label class="set-slider" data-channel="music">
+                <span class="set-slider-head"><span class="set-slider-name">Musik</span><span class="set-slider-val num">80%</span></span>
+                <input type="range" min="0" max="100" step="5" value="80" aria-label="Volume musik" />
+              </label>
+              <label class="set-slider" data-channel="sfx">
+                <span class="set-slider-head"><span class="set-slider-name">Ombak &amp; efek</span><span class="set-slider-val num">100%</span></span>
+                <input type="range" min="0" max="100" step="5" value="100" aria-label="Volume ombak dan efek" />
+              </label>
+              <label class="set-slider" data-channel="ambience">
+                <span class="set-slider-head"><span class="set-slider-name">Laut &amp; cuaca</span><span class="set-slider-val num">85%</span></span>
+                <input type="range" min="0" max="100" step="5" value="85" aria-label="Volume laut dan cuaca" />
+              </label>
+              <label class="set-slider" data-channel="voice">
+                <span class="set-slider-head"><span class="set-slider-name">Suara tokoh</span><span class="set-slider-val num">100%</span></span>
+                <input type="range" min="0" max="100" step="5" value="100" aria-label="Volume suara tokoh" />
+              </label>
+              <label class="set-slider" data-channel="ui">
+                <span class="set-slider-head"><span class="set-slider-name">Tombol &amp; menu</span><span class="set-slider-val num">80%</span></span>
+                <input type="range" min="0" max="100" step="5" value="80" aria-label="Volume tombol dan menu" />
+              </label>
+            </div>
+          </div>
+
+          <div class="settings-pane is-off" id="set-pane-game" role="tabpanel" aria-labelledby="set-tab-game" aria-hidden="true" inert>
+            <div class="set-grid">
+              <div class="set-cell">
+                <span class="set-cell-name" id="set-voice-name">Suara tokoh</span>
+                <div class="set-seg" role="radiogroup" aria-labelledby="set-voice-name" data-setting="voiceMode">
+                  <button type="button" role="radio" aria-checked="true" data-value="voice">Asli</button>
+                  <button type="button" role="radio" aria-checked="false" data-value="babble" tabindex="-1">Gumam</button>
+                  <button type="button" role="radio" aria-checked="false" data-value="off" tabindex="-1">Diam</button>
+                </div>
+              </div>
+              <div class="set-cell">
+                <span class="set-cell-name" id="set-speed-name">Kecepatan teks</span>
+                <div class="set-seg" role="radiogroup" aria-labelledby="set-speed-name" data-setting="textSpeed">
+                  <button type="button" role="radio" aria-checked="false" data-value="slow" tabindex="-1">Lambat</button>
+                  <button type="button" role="radio" aria-checked="true" data-value="normal">Sedang</button>
+                  <button type="button" role="radio" aria-checked="false" data-value="fast" tabindex="-1">Cepat</button>
+                </div>
+              </div>
+              <div class="set-cell">
+                <span class="set-cell-name" id="set-film-name">Film cerita</span>
+                <div class="set-seg" role="radiogroup" aria-labelledby="set-film-name" data-setting="films">
+                  <button type="button" role="radio" aria-checked="true" data-value="play">Putar</button>
+                  <button type="button" role="radio" aria-checked="false" data-value="skip" tabindex="-1">Lewati</button>
+                </div>
+              </div>
+              <div class="set-cell">
+                <button type="button" class="set-switch" role="switch" aria-checked="true" data-setting="shake">
+                  <span class="set-switch-name">Guncangan layar</span>
+                  <span class="set-switch-track"><i></i></span>
+                  <span class="set-switch-state t-stroke-xs">Nyala</span>
+                </button>
+              </div>
+              <div class="set-cell" id="set-row-fullscreen">
+                <button type="button" class="set-switch" role="switch" aria-checked="false" data-setting="fullscreen">
+                  <span class="set-switch-name">Layar penuh</span>
+                  <span class="set-switch-track"><i></i></span>
+                  <span class="set-switch-state t-stroke-xs">Mati</span>
+                </button>
+              </div>
+              <div class="set-cell">
+                <button type="button" id="btn-settings-reset" class="set-danger">
+                  <span class="set-danger-icon" id="set-reset-icon"></span>
+                  <span>Hapus simpanan</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          </div>
+          </div>
+
+          <div class="modal-actions settings-actions">
             <button type="button" id="btn-close-settings-ok" class="ui-btn t-stroke-md" data-swatch="green">
               <span>Selesai</span>
             </button>

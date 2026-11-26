@@ -6,3 +6,8 @@ Thumbs.db
 .vscode/
 # Local secrets written by `elevenlabs onboard`
 /.env.local
+
+# Raw voice takes kept so clips can be reprocessed without paying again
+scripts/.voice-raw/
+scripts/.voice-design/
+scripts/.voice-old/

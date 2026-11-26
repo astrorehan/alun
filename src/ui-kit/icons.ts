@@ -28,8 +28,11 @@ export type UiIconName =
   | 'core'
   | 'sun'
   | 'sunset'
+  | 'moon'
   | 'storm'
   | 'dawn'
+  | 'shield'
+  | 'skull'
   | 'lock'
   | 'trophy'
   | 'star_on'
@@ -231,6 +234,29 @@ export function getUiIconSvg(name: UiIconName, className = ''): string {
         <path d="M9 26A11 11 0 0 1 31 26Z" fill="#ff9436" stroke="${INK}" stroke-width="3" stroke-linejoin="round"/>
         <path d="M5 29H35" stroke="#ffe45e" stroke-width="3.4" stroke-linecap="round"/>
         <path d="M10 34H30" stroke="#ff7452" stroke-width="3.2" stroke-linecap="round"/>
+      </svg>`;
+
+    case 'moon':
+      return `<svg${cls} viewBox="0 0 40 40" fill="none">
+        <path d="M25.5 7.5C18.2 7.5 12.2 13.5 12.2 20.8C12.2 28.1 18.2 34 25.5 34C29.4 34 32.8 32.3 35.2 29.6C33.8 30 32.3 30.2 30.7 30.2C23.9 30.2 18.4 24.7 18.4 17.9C18.4 13.7 20.6 9.9 23.9 7.6C24.4 7.5 25 7.5 25.5 7.5Z" fill="#ffe568" stroke="${INK}" stroke-width="3.2" stroke-linejoin="round"/>
+        <path d="M29 10L30.4 13.5L34 15L30.4 16.5L29 20L27.6 16.5L24 15L27.6 13.5L29 10Z" fill="#fff7c4" stroke="${INK}" stroke-width="1.8" stroke-linejoin="round"/>
+      </svg>`;
+
+    case 'shield':
+      return `<svg${cls} viewBox="0 0 40 40" fill="none">
+        <path d="M20 4L34 10V20C34 28.2 28 33.8 20 36.5C12 33.8 6 28.2 6 20V10L20 4Z" fill="#52dcff" stroke="${INK}" stroke-width="3.2" stroke-linejoin="round"/>
+        <path d="M20 8.5L29.5 12.6V20C29.5 25.8 25.4 29.8 20 32C14.6 29.8 10.5 25.8 10.5 20V12.6L20 8.5Z" fill="#1b82d6"/>
+        <path d="M13 14.5L20 11.5L27 14.5" stroke="#ccf7ff" stroke-width="2.4" stroke-linecap="round"/>
+        <path d="M20 15V26M15 20.5H25" stroke="#ffe554" stroke-width="3.4" stroke-linecap="round"/>
+      </svg>`;
+
+    case 'skull':
+      return `<svg${cls} viewBox="0 0 40 40" fill="none">
+        <path d="M20 5C11.7 5 6 10.6 6 18.2C6 22.8 8.3 26.5 11.8 28.5V34H28.2V28.5C31.7 26.5 34 22.8 34 18.2C34 10.6 28.3 5 20 5Z" fill="#ff6b6b" stroke="${INK}" stroke-width="3.2" stroke-linejoin="round"/>
+        <circle cx="14.5" cy="18.5" r="3.4" fill="${INK}"/>
+        <circle cx="25.5" cy="18.5" r="3.4" fill="${INK}"/>
+        <path d="M17.5 25.5L20 22.5L22.5 25.5H17.5Z" fill="${INK}"/>
+        <path d="M15.5 30V34M20 30V34M24.5 30V34" stroke="${INK}" stroke-width="2.6" stroke-linecap="round"/>
       </svg>`;
 
     case 'storm':

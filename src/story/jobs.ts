@@ -15,7 +15,7 @@ import {
   WORLD_W,
 } from '../world';
 import type { Story } from './director';
-import { BOSS_HP, PAY, P_DIRTY, POLLUTER_HP, RAIDER_HP, TRAWL_HP } from './state';
+import { bossHpForDay, PAY, P_DIRTY, pirateScale, POLLUTER_HP, RAIDER_HP, TRAWL_HP } from './state';
 import { firePay, hitDamage } from '../upgrades';
 
 /**
@@ -89,15 +89,23 @@ export abstract class Job {
     return this.st.sim;
   }
 
-  /** One wave counts once against a hull. Returns the damage, or 0 when it does not count. */
+  /** One wave counts once against a hull. Scales freely with incremental upgrades, resonance, sonar crit & buoys! */
   protected hullHit(e: Entity, w: Wave, px: number, py: number, shove: number): number {
-    if (w.hitMap.has(e.id) || w.kind === 'buoy_pulse') return 0;
+    if (w.hitMap.has(e.id)) return 0;
     w.hitMap.set(e.id, w.age);
     this.s.touched = true;
-    const k = shove * (0.55 + w.power * 0.45);
+    const buoyScale = w.kind === 'buoy_pulse' ? 0.58 : 1;
+    const k = shove * (0.55 + w.power * 0.45) * buoyScale;
     e.vx += px * k;
     e.vy += py * k;
-    return Math.min(40, hitDamage(w.power, w.charge, false));
+    const dmg = Math.max(
+      1,
+      Math.round(hitDamage(w.power, w.charge, w.kind === 'resonance', this.sim.stats.critBonus) * buoyScale)
+    );
+    if (this.sim.stats.comboEnergyReturn > 0) {
+      this.sim.energy = Math.min(this.sim.stats.maxEnergy, this.sim.energy + this.sim.stats.comboEnergyReturn);
+    }
+    return dmg;
   }
 
   protected showHit(e: Entity, dmg: number): void {
@@ -185,10 +193,7 @@ export class DolphinJob extends Job {
     // the film hands the lagoon back by setting actionTimer; without one, the knots can be torn at once
     if (!this.sim.hooks.dolphin(e)) {
       e.actionTimer = 1;
-      this.st.radio(
-        'A.L.U.N.',
-        'Induk lumba-lumba terjerat di ujung tali. Kirim ombak ke arahnya: tiga lilitan harus robek.'
-      );
+      if (!this.st.talk('dolphin')) this.st.radio('A.L.U.N.', 'Induk lumba-lumba terjerat. Kirim ombak ke arahnya. Tiga lilitan.');
     }
   }
 
@@ -276,15 +281,15 @@ export class BoatJob extends Job {
     });
     if (resumed && this.s.phase !== 'start') return;
     const p = this.st.s.pollution;
-    this.s.pay = PAY.boat + (p < P_DIRTY ? PAY.boatBonus : 0);
+    this.s.pay = PAY.boat + (p < P_DIRTY ? PAY.boatBonus : 0) + this.sim.stats.boatLevel * 13;
     this.phase('sail');
     this.st.radio(
       'PAK DAMAR',
       this.s.story
-        ? 'Aku masuk lewat celah karang. Arus silang menyeretku ke batu, sapu lambungku dari samping!'
+        ? 'Aku masuk lewat celah karang! Arusnyo nyeret ke batu, sapu lambung perahuku dari samping!'
         : p >= P_DIRTY
-          ? 'Ikan menjauh, upahnya cuma cukup 16. Kalau sempat, angkat endapan di tepi pantai.'
-          : 'Perahu nelayan masuk. Arus silangnya kuat, tolong sapu sisi lambungnya.'
+          ? 'Ikan pada menjauh, airnyo kotor. Kalau sempat, angkat endapan di tepi pantai.'
+          : 'Perahu nelayan masuk. Arusnyo kuat, sapu sisi lambungnyo, ya.'
     );
     if (p >= P_DIRTY) this.st.offerDeposit();
   }
@@ -296,7 +301,7 @@ export class BoatJob extends Job {
     this.ease = Math.max(0, this.ease - dt);
     if (this.s.phase === 'aground' && this.s.t > 42) {
       this.phase('turn');
-      this.st.radio('PAK DAMAR', 'Aku tidak bisa lewat. Kuputar dulu, nanti kucoba lagi.');
+      this.st.radio('PAK DAMAR', 'Dak bisa lewat. Aku putar dulu, nanti kucubo lagi.');
     }
     if (this.s.phase === 'turn' && b.x > WORLD_W + 20) {
       this.st.settle(this, 'failed', 0, { x: WORLD_W - 60, y: b.y }, '');
@@ -379,7 +384,7 @@ export class BoatJob extends Job {
           this.sim.shake(4);
           this.sim.burst(r.x + (ox / od) * r.r, r.y + (oy / od) * r.r, '#e5ffff', 14, 'foam');
           this.sim.audio.playNetSnap(0.5);
-          this.st.radio('PAK DAMAR', 'Kandas! Sapu aku menjauh dari batu.');
+          this.st.radio('PAK DAMAR', 'Kandas! Sapu aku jauh dari batu!');
           return true;
         }
       }
@@ -389,7 +394,7 @@ export class BoatJob extends Job {
       // nobody gets past the rocks on their own
       if (this.s.touched) {
         this.phase('home');
-        if (this.s.story) this.st.radio('PAK DAMAR', 'Sudah lewat batunya! Sekarang aku bisa merapat sendiri.');
+        if (this.s.story) this.st.radio('PAK DAMAR', 'La lewat batunyo! Sisanyo aku bisa sendiri.');
       } else this.phase('turn');
     }
     if (home && hyp(e.x - VILLAGE_PIER.dockX, e.y - VILLAGE_PIER.dockY) < VILLAGE_PIER.dockRadius + 16) {
@@ -469,7 +474,7 @@ export class RaidJob extends Job {
         this.s.t = 0;
         this.st.s.baskets = 0;
         this.boat = this.sim.add('boat', 1262, 428, { radius: 24, mass: 1.9, rotation: Math.PI, variant: 0, tag: 'fisher' });
-        this.st.radio('PAK DAMAR', 'Aku bawa bekal untuk suar. Ada layar robek dari selatan, tolong jaga sampai kubongkar!');
+        this.st.radio('PAK DAMAR', 'Aku bawa bekal buat suar. Ado layar robek dari selatan, jaga aku sampai selesai bongkar!');
         this.st.touchSave();
         return;
       }
@@ -479,8 +484,8 @@ export class RaidJob extends Job {
       this.st.radio(
         'BU SARI',
         this.s.story
-          ? 'Layar robek itu penjarah! Mereka mengincar dua keranjang di dermaga.'
-          : 'Penjarah lagi! Jaga keranjang di dermaga.'
+          ? 'Layar robek tu penjarah! Dio ngincar dua keranjang ikan di dermaga.'
+          : 'Penjarah lagi! Jaga keranjangnyo.'
       );
       return;
     }
@@ -538,7 +543,7 @@ export class RaidJob extends Job {
           this.leave('failed');
           return;
         }
-        this.st.radio('BU SARI', 'Satu keranjang sudah di kapal mereka. Selamatkan yang satu lagi!');
+        this.st.radio('BU SARI', 'Satu keranjang la diangkut! Selamatkan yang satu lagi!');
       }
     }
     if (s.total > PATIENCE + 20 && s.phase !== 'cargo') {
@@ -708,24 +713,25 @@ export class TrawlJob extends Job {
 
   enter(resumed: boolean): void {
     if (!resumed || this.s.phase === 'start') {
-      this.s.hp = TRAWL_HP;
+      this.s.hp = Math.round(TRAWL_HP * pirateScale(this.st.s.day));
       this.phase('enter');
       this.st.radio(
         'PAK DAMAR',
         this.s.story
-          ? 'Dari pos jaga terlihat pelampung bergaris ditebar di tempat ikan bertelur. Jangan sampai tergulung!'
-          : 'Kapal pukat kembali ke tempat ikan bertelur.'
+          ? 'Pukat ditebar di tempat ikan bertelur! Sapu pelampung belangnyo, atau hantam kapalnyo!'
+          : 'Kapal pukat datang lagi ke tempat ikan bertelur!'
       );
     } else {
       this.s.phase = 'enter';
       this.s.t = 0;
       this.s.work = 0;
     }
+    const maxHp = Math.max(this.s.hp, TRAWL_HP);
     this.ship = this.sim.add('trawl_ship', WORLD_W + 80, TRAWL_GATE.y + 14, {
       radius: 36,
       mass: 4,
       hp: this.s.hp,
-      maxHp: TRAWL_HP,
+      maxHp,
       rotation: Math.PI,
     });
     this.sim.audio.playAlert();
@@ -834,14 +840,14 @@ export class WasteJob extends Job {
 
   enter(resumed: boolean): void {
     if (!resumed || this.s.phase === 'start') {
-      this.s.hp = POLLUTER_HP;
+      this.s.hp = Math.round(POLLUTER_HP * pirateScale(this.st.s.day));
       this.s.sources = this.st.s.sources.filter((q) => q.kind === 'spill').map((q) => q.id);
       this.phase('enter');
       this.st.radio(
         'BU SARI',
         this.s.story
-          ? 'Di batu itu masih ada minyak lama, dan kapal drum kuning mau membuang lagi. Halau dulu!'
-          : 'Kapal drum kuning mendekat. Halau sebelum drumnya jatuh.'
+          ? 'Kapal drum kuning! Dio buang limbah. Usir sebelum drumnyo bocor ke laut!'
+          : 'Kapal drum kuning lagi. Usir sebelum drumnyo jatuh!'
       );
     } else if (this.s.phase !== 'clean') {
       this.s.phase = 'enter';
@@ -849,11 +855,12 @@ export class WasteJob extends Job {
       this.s.work = 0;
     }
     if (this.s.phase === 'clean') return;
+    const maxHp = Math.max(this.s.hp, POLLUTER_HP);
     this.ship = this.sim.add('polluter', WORLD_W + 80, DUMP_STATION.y + 10, {
       radius: 33,
       mass: 3.4,
       hp: this.s.hp,
-      maxHp: POLLUTER_HP,
+      maxHp,
       rotation: Math.PI,
     });
     this.sim.audio.playAlert();
@@ -887,7 +894,7 @@ export class WasteJob extends Job {
       const id = this.st.leak(DUMP_SPOT);
       if (id) s.sources.push(id);
       this.sim.audio.playSplash(1.3);
-      this.st.radio('BU SARI', 'Drumnya bocor! Tumpahan baru harus diserap juga.');
+      this.st.radio('BU SARI', 'Aduh, drumnyo bocor! Tumpahannyo harus diserap juga.');
       this.st.sendOff(e);
       this.ship = null;
       this.cleanUp();
@@ -898,7 +905,7 @@ export class WasteJob extends Job {
     this.phase('clean');
     this.st.s.padTimer = Math.min(this.st.s.padTimer, 1.6);
     if (this.s.sources.length > 0 && !this.s.leaked) {
-      this.st.radio('PAK DAMAR', 'Kapalnya lari. Kulempar bantalan penyerap, dorong melintasi bercaknya.');
+      this.st.radio('PAK DAMAR', 'Kapalnyo lari. Kulempar bantalan penyerap, dorong lewat bercaknyo.');
     }
   }
 
@@ -990,8 +997,8 @@ export class CalfJob extends Job {
       this.st.radio(
         'A.L.U.N.',
         this.s.story
-          ? 'Induk lumba-lumba kembali membawa anaknya. Jaring hanyut menutup jalur mereka.'
-          : 'Lumba-lumba tertahan jaring hanyut. Buka jalurnya.'
+          ? 'Induk lumba-lumba kembali. Bersama anak. Jalur tertutup jaring hanyut.'
+          : 'Lumba-lumba tertahan jaring. Buka jalur.'
       );
     } else if (this.s.phase !== 'swim') {
       this.s.t = 0;
@@ -1036,7 +1043,7 @@ export class CalfJob extends Job {
         return;
       }
       if (s.t > POD_WAIT) {
-        this.st.radio('BU SARI', 'Mereka berbalik ke laut dalam. Nanti mereka coba lagi.');
+        this.st.radio('BU SARI', 'Balik lagi dio ke laut dalam. Nanti dicubo lagi.');
         this.clear();
         this.st.settle(this, 'failed', 0, p, '');
       }
@@ -1117,7 +1124,7 @@ export class FireJob extends Job {
     this.id = e.id;
     if (resumed && this.s.phase === 'burn') return;
     this.phase('burn');
-    this.st.radio('PENJAGA RIMBA', 'Ada api di tepi hutan. Kirim ombak sampai memercik ke pantai!');
+    this.st.radio('PENJAGA RIMBA', 'Hutan terbakar di tepi pantai! Kirim ombak besar, biar airnyo nyiprat ke api!');
     this.sim.audio.playAlert();
   }
 
@@ -1147,11 +1154,9 @@ export class FireJob extends Job {
 
 /* ================================================================== the mother ship */
 
-const GEAR_TRAWL = 24;
-const GEAR_DRUM = 21;
-const WINDOW = 10;
-/** A whole turn of the storm cannot take more than this off the hull, so both kinds of gear get their turn. */
-const PER_WINDOW = 30;
+const GEAR_TRAWL = 22;
+const GEAR_DRUM = 19;
+const WINDOW = 11;
 const DRUM_REEF: Point = { x: 1070, y: 600 };
 const BOSS_STATION: Point = { x: 1060, y: 372 };
 
@@ -1159,25 +1164,27 @@ export class BossJob extends Job {
   private ship: Entity | null = null;
   trawl: Trawl | null = null;
   private drum: Entity | null = null;
+  private maxHp = 360;
 
   enter(resumed: boolean): void {
+    this.maxHp = bossHpForDay(this.st.s.day);
     if (!resumed || this.s.phase === 'start') {
-      this.s.hp = this.st.s.bossHp;
+      this.s.hp = this.maxHp;
+      this.st.s.bossHp = this.maxHp;
       this.s.phase = 'enter';
       this.s.t = 0;
-      this.st.radio('BU SARI', 'Kapal induk masuk. Gagalkan alatnya dulu, lalu hantam lambungnya selagi ia berhenti.');
+      if (!this.st.talk('mothership')) this.st.radio('BU SARI', 'Kapal induk lagi! Pecahkan alatnyo, baru hantam lambungnyo!');
       this.st.touchSave();
     }
     const at = this.s.at ?? (this.s.phase === 'enter' ? { x: WORLD_W + 120, y: BOSS_STATION.y } : BOSS_STATION);
     this.ship = this.sim.add('trawler', at.x, at.y, {
-      radius: 50,
+      radius: 52,
       mass: 5,
       hp: this.s.hp,
-      maxHp: BOSS_HP,
+      maxHp: this.maxHp,
       rotation: Math.PI,
     });
     if (this.s.phase === 'gear_trawl' || this.s.phase === 'gear_drum') {
-      // Older saves can still resume the deployment from its starting point.
       if (!this.s.gearAt) {
         this.s.t = 0;
         this.s.work = 0;
@@ -1185,7 +1192,6 @@ export class BossJob extends Job {
       if (this.s.phase === 'gear_trawl') this.lowerTrawl(this.s.gearAt);
       else this.lowerDrum(this.s.gearAt?.[0]);
     }
-    if (this.open) this.s.windowDamage ??= Math.min(PER_WINDOW, BOSS_HP - this.s.hp);
     this.sim.bossActive = true;
     this.sim.audio.playAlert();
   }
@@ -1225,7 +1231,7 @@ export class BossJob extends Job {
       s.seen.trawl = true;
       this.lowerTrawl();
       this.phase('gear_trawl');
-      this.st.radio('A.L.U.N.', 'Pukatnya turun di tempat ikan bertelur. Sapu kedua pelampung bergaris keluar.');
+      this.st.radio('A.L.U.N.', 'Pukat turun di tempat ikan bertelur. Sapu dua pelampung belang keluar.');
     } else {
       s.seen.drum = true;
       this.lowerDrum();
@@ -1242,7 +1248,7 @@ export class BossJob extends Job {
     this.s.windowDamage = 0;
     this.phase('window');
     this.sim.text(this.ship!.x, this.ship!.y - 74, text, '#c8fff4', 1.15);
-    this.st.radio('BU SARI', 'Ia berhenti menarik alatnya. Hantam lambungnya sekarang!');
+    this.st.radio('BU SARI', 'Dio berhenti narik alatnyo. Hantam lambungnyo sekarang!');
   }
 
   update(dt: number): void {
@@ -1279,7 +1285,7 @@ export class BossJob extends Job {
             s.leaked = true;
             this.st.leak({ x: Math.round(d.x), y: Math.round(d.y) });
             this.sim.audio.playSplash(1.3);
-            this.st.radio('BU SARI', 'Drumnya pecah di karang. Tumpahannya bisa diserap setelah ini.');
+            this.st.radio('BU SARI', 'Drumnyo pecah di karang. Tumpahannyo diserap nanti, ya.');
             this.sim.remove(d.id);
             this.drum = null;
             this.phase('rest');
@@ -1292,10 +1298,10 @@ export class BossJob extends Job {
         break;
       }
       case 'window':
-        if (s.t > WINDOW || (s.windowDamage ?? 0) >= PER_WINDOW) this.phase('rest');
+        if (s.t > WINDOW) this.phase('rest');
         break;
       case 'rest':
-        if (s.t > 3.2) this.nextGear();
+        if (s.t > 2.6) this.nextGear();
         break;
     }
   }
@@ -1324,53 +1330,47 @@ export class BossJob extends Job {
       if (w.kind !== 'buoy_pulse') this.s.touched = true;
       return 'push';
     }
-    const dmg = this.hullHit(e, w, px, py, 34);
-    if (dmg <= 0) return 'hold';
-    if (!this.open) {
-      this.sim.text(e.x - 20, e.y - 60, 'GAGALKAN ALATNYA DULU', '#ffc46a', 0.9);
-      e.hitFlash = 0.1;
-      return 'hold';
-    }
-    const dealt = this.s.windowDamage ?? 0;
-    const take = Math.min(dmg, PER_WINDOW - dealt, this.s.hp);
+    const rawDmg = this.hullHit(e, w, px, py, 34);
+    if (rawDmg <= 0) return 'hold';
+    // Uncapped full incremental damage during exposed window, 38% armored chip damage otherwise!
+    const take = Math.min(this.s.hp, this.open ? rawDmg : Math.max(1, Math.round(rawDmg * 0.38)));
     if (take <= 0) return 'hold';
-    this.s.windowDamage = dealt + take;
     this.s.hp -= take;
     this.st.s.bossHp = this.s.hp;
     this.showHit(e, take);
-    this.sim.shake(7);
+    this.sim.shake(this.open ? 7.5 : 4);
     this.st.touchSave();
     if (this.s.hp <= 0) {
-      this.sim.burst(e.x, e.y, '#ffe07d', 40);
-      this.sim.flashAlpha = 0.4;
-      this.sim.shake(15);
+      this.sim.burst(e.x, e.y, '#ffe07d', 48);
+      this.sim.flashAlpha = 0.45;
+      this.sim.shake(16);
       this.st.sendOff(e);
       this.ship = null;
       this.sim.bossActive = false;
       this.clear();
-      this.st.settle(this, 'done', 0, { x: e.x, y: e.y }, 'KAPAL INDUK MUNDUR!');
+      this.st.settle(this, 'done', PAY.boss, { x: e.x, y: e.y }, 'KAPAL INDUK MUNDUR!');
     }
     return 'hold';
   }
 
   objective(): Objective {
     const e = this.ship;
-    const hits = Math.ceil(Math.max(0, this.s.hp) / 10);
+    const pct = Math.max(0, Math.round((this.s.hp / Math.max(1, this.maxHp)) * 100));
     const at = e ? { x: e.x, y: e.y } : undefined;
     switch (this.s.phase) {
       case 'gear_trawl': {
         const t = this.trawl!;
         const next = t.floats.find((f) => !t.out(f)) ?? t.floats[0];
-        return { key: `boss:trawl:${t.cleared}`, title: 'Belokkan pukat kapal induk', sub: `Sapu kedua pelampung bergaris keluar dari jalur ikan · ${t.cleared}/2`, icon: 'float', swatch: 'blue', at: { x: next.x, y: next.y } };
+        return { key: `boss:trawl:${t.cleared}`, title: 'Belokkan pukat Kapal Induk', sub: `Sapu kedua pelampung keluar dari jalur ikan untuk membuka celah · ${t.cleared}/2`, icon: 'float', swatch: 'blue', at: { x: next.x, y: next.y } };
       }
       case 'gear_drum': {
         const d = this.drum!;
-        return { key: 'boss:drum', title: 'Jauhkan drum dari karang', sub: 'Sapu drum kuning menjauh dari karang kanan bawah.', icon: 'drum', swatch: 'gold', at: { x: d.x, y: d.y } };
+        return { key: 'boss:drum', title: 'Jauhkan drum Kapal Induk', sub: 'Sapu drum kuning menjauh dari karang kanan bawah.', icon: 'drum', swatch: 'gold', at: { x: d.x, y: d.y } };
       }
       case 'window':
-        return { key: `boss:window:${hits}`, title: 'Hantam lambungnya sekarang!', sub: `Ia berhenti menarik alat · sekitar ${hits} hantaman dasar lagi`, icon: 'boss', swatch: 'red', at };
+        return { key: `boss:window:${pct}`, title: 'Hantam lambung Kapal Induk!', sub: `Celah terbuka — lepaskan Gema & Resonansi penuh! · sisa ${pct}%`, icon: 'boss', swatch: 'red', at };
       default:
-        return { key: 'boss:rest', title: 'Kapal induk di laguna', sub: 'Tunggu alatnya turun, lalu gagalkan.', icon: 'boss', swatch: 'purple', at };
+        return { key: 'boss:rest', title: 'Hadapi Kapal Induk Badai Muson', sub: 'Hantam lambungnya dan gagalkan alatnya sambil menjaga dermaga!', icon: 'boss', swatch: 'purple', at };
     }
   }
 
