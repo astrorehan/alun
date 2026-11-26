@@ -1,6 +1,6 @@
 export type GamePhase = 'title' | 'intro' | 'playing' | 'upgrade' | 'victory';
 
-export type ShopTab = 'cards' | 'tree' | 'achievements';
+export type ShopTab = 'tree' | 'journal';
 
 export type TimeOfDay = 'morning' | 'noon' | 'sunset' | 'monsoon' | 'dawn';
 
@@ -40,15 +40,16 @@ export interface UpgradeDef {
   statBefore: (level: number) => string;
   statAfter: (level: number) => string;
   cardSwatch: 'orange' | 'blue' | 'green' | 'gold' | 'teal' | 'purple' | 'red';
-  featuredTag?: string;
-  featured?: boolean;
   maxLevel: number;
   baseCost: number;
   costMult: number;
   requires: UpgradeId[];
-  /** Position in 1000x560 normalized skill-tree coordinate space */
-  x: number;
-  y: number;
+  /**
+   * Cell on the workshop map: column 0-6 with A.L.U.N. in column 3, row 0-3, halves allowed. A tool
+   * sits one column further from the core than the tool it needs, so every path runs outward.
+   */
+  col: number;
+  row: number;
   icon:
     | 'core'
     | 'width'
@@ -103,11 +104,29 @@ export type EntityKind =
   | 'trash_battery'
   | 'trash_relic'
   | 'mangrove_seed'
+  /** A fishing boat on its way to the pier. */
   | 'boat'
   | 'fire'
-  | 'oil'
+  | 'dolphin'
+  /** The tool chest snagged at the mooring. */
+  | 'toolbox'
+  /** The three ships of the fleet share one hull and differ in their gear, and the mother ship has all of it. */
+  | 'raider'
+  | 'trawl_ship'
+  | 'polluter'
   | 'trawler'
-  | 'dolphin';
+  /** One end float of a trawl. */
+  | 'float'
+  /** A drum the mother ship lowers towards the reef. */
+  | 'drum'
+  /** The absorbent pad the fishers throw. */
+  | 'pad'
+  /** A net drifting across the dolphins' lane. */
+  | 'drift_net'
+  /** Pollution that stays where it is until it is lifted. */
+  | 'oil'
+  | 'ghost_net'
+  | 'deposit';
 
 export interface Entity {
   id: number;
@@ -130,6 +149,25 @@ export interface Entity {
   hitFlash: number;
   variant: number;
   actionTimer: number;
+  /** Caught on weed or rope: it stays where it is until the first wave reaches it. */
+  snagged?: boolean;
+  /** Washed up on the beach. */
+  stranded?: boolean;
+  /** One of the six pieces that close the pier at the start. */
+  opening?: boolean;
+  /** Pollution this very thing added, taken back when it is lifted. */
+  pollution?: number;
+  /** Which part of a job this is ("A" and "B" for the two ends of a trawl). */
+  tag?: string;
+  /** The pollution source this thing stands for. */
+  source?: number;
+  /** Where it belongs, for things on a line. */
+  home?: Point;
+}
+
+export interface Point {
+  x: number;
+  y: number;
 }
 
 export interface PermanentMangrove {
@@ -219,17 +257,143 @@ export interface PlayerProgress {
   totalResonances: number;
   victoryAchieved: boolean;
   endlessMode: boolean;
-  claimedAchievements: string[];
-  /** The dolphin caught in the ghost net has been set free. Missing in older saves. */
-  dolphinRescued?: boolean;
+  /** Village journal pages already opened by the player. */
+  journalSeen: string[];
+  story: StoryState;
 }
 
-export interface RarityWeights {
-  common: number;
-  uncommon: number;
-  rare: number;
-  epic: number;
-  legendary: number;
+/** Everything that opens a blueprint or a chapter. Once true, always true. */
+export type StoryFlag =
+  | 'toolbox'
+  | 'dolphin'
+  | 'seedling'
+  | 'planted'
+  | 'damar'
+  | 'cargo'
+  | 'trawl'
+  | 'waste'
+  | 'calf'
+  | 'night'
+  | 'ops'
+  | 'boss'
+  | 'ending';
+
+export type JobKind = 'dolphin' | 'boat' | 'raid' | 'trawl' | 'waste' | 'calf' | 'fire' | 'boss';
+
+export type JobResult = 'done' | 'failed' | 'ignored';
+
+/** One event in the water. Plain data only: it goes into the save as it is. */
+export interface JobState {
+  id: string;
+  kind: JobKind;
+  /** A story event, as opposed to one of the repeating ones. */
+  story: boolean;
+  variant: number;
+  phase: string;
+  /** Seconds in this phase, and in the whole job. */
+  t: number;
+  total: number;
+  /** What the player's waves did, as opposed to time passing. */
+  touched: boolean;
+  /** Pollution when the job began, for the log. */
+  p0: number;
+  hp: number;
+  baskets: number;
+  /** Progress of whatever the ship is doing, 0..1: seizing a basket, winding the winch, dropping a drum. */
+  work: number;
+  /** Pay decided at the start (the boat's bonus) or on the way (waste that leaked). */
+  pay: number;
+  leaked: boolean;
+  /** Pollution sources that belong to this job. */
+  sources: number[];
+  turns: number;
+  seen: { trawl: boolean; drum: boolean };
+  /** Where things stood, so that a reload does not move them. */
+  at: { x: number; y: number } | null;
+  gearAt?: Point[];
+  windowDamage?: number;
+}
+
+export interface JobRecord {
+  id: string;
+  kind: JobKind;
+  result: JobResult;
+  pay: number;
+  dP: number;
+  chapter: number;
+  at: number;
+}
+
+export type SourceKind = 'spill' | 'ghost_net' | 'deposit';
+
+/** Pollution lying somewhere, with the amount that was really added to P. */
+export interface PollutionSource {
+  id: number;
+  kind: SourceKind;
+  amount: number;
+  x: number;
+  y: number;
+  /** The old blotch of chapter 6. */
+  old?: boolean;
+  /** Deposits stay under the sand until a fisher points one out. */
+  shown?: boolean;
+}
+
+/** A piece of salvage in the water or on the beach. */
+export interface SavedTrash {
+  kind: EntityKind;
+  variant: number;
+  x: number;
+  y: number;
+  snagged?: boolean;
+  stranded?: boolean;
+  opening?: boolean;
+  pollution?: number;
+}
+
+export interface StoryState {
+  version: 3;
+  /** 1..8, and 9 for Patroli Laguna. */
+  chapter: number;
+  flags: Record<StoryFlag, boolean>;
+  /** Seconds played. Nothing in the story looks at the clock on the wall. */
+  clock: number;
+  /** Where the chapter stands, for the objective. */
+  step: string;
+  pollution: number;
+  sources: PollutionSource[];
+  nextSource: number;
+  openingLeft: number;
+  box: 'hidden' | 'snagged' | 'loose' | 'home';
+  boxAt: { x: number; y: number };
+  job: JobState | null;
+  jobSeq: number;
+  /** No paid job may begin before this moment on the play clock. */
+  calmUntil: number;
+  /** Turn of the repeating four: dolphin, threat, boat, threat. */
+  turn: number;
+  /** Ships still to be seen off before the chapter's own event, see `roundsFor`. */
+  rounds: number;
+  threat: number;
+  callAnswered: boolean;
+  bossHp: number;
+  /** Fish baskets on the pier right now. */
+  baskets: number;
+  beacon: boolean;
+  log: JobRecord[];
+  /** Moments on the play clock at which valued salvage arrived, the last minute of them. */
+  arrivals: number[];
+  trash: SavedTrash[];
+  supplyTimer: number;
+  seedTimer: number;
+  padTimer: number;
+  /** When each chapter began and other firsts, for the journal and for the playtests. */
+  marks: Record<string, number>;
+  worstP: number;
+  /** Play-clock moment the pollution last went above 30, or -1. */
+  aboveSince: number;
+  recoveries: number[];
+  saved: { dolphins: number; baskets: number; raids: number; trawls: number; spills: number; deposits: number; ghosts: number };
 }
 
 export interface ComputedStats {
@@ -244,28 +408,25 @@ export interface ComputedStats {
   maxChargeBonus: number;
   echoCount: number;
   resonanceLevel: number;
-  comboMaxMult: number;
   comboEnergyReturn: number;
   aiGuideStrength: number;
   aiSonarLevel: number;
   aiBuoyCount: number;
   netRadius: number;
   netPull: number;
-  coinMultiplier: number;
-  /** Maximum simultaneous debris items in lagoon */
-  maxTrashCount: number;
-  /** Seconds between debris cluster spawns */
-  trashSpawnInterval: number;
-  /** Number of debris spawned per wave cluster */
-  trashClusterMin: number;
-  trashClusterMax: number;
-  trashRarityLevel: number;
-  rarityWeights: RarityWeights;
+  /** Seconds between arrivals of salvage, and how many arrive together. The tide's quota caps both. */
+  supplyInterval: number;
+  supplyClusterMin: number;
+  supplyClusterMax: number;
+  rarityLevel: number;
   mangroveLevel: number;
+  /** How much of the cross-current the fishers can steer against on their own, 0..1. */
+  steering: number;
   boatLevel: number;
   forestLevel: number;
-  bossUnlocked: boolean;
+  /** Coastal health shown in the HUD: 100 - pollution. */
   ecoPercent: number;
+  pollution: number;
 }
 
 export interface DragState {

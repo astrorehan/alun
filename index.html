@@ -2,7 +2,8 @@
 <html lang="id">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <link rel="icon" href="data:," />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>ALUN — Gema Pesisir Tropis</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,25 +17,37 @@
     <div id="app">
       <canvas id="game-canvas"></canvas>
 
-      <!-- ================= IN-GAME ARCADE GLOSS HUD ================= -->
-      <div id="hud" class="hud hidden" aria-label="Status Permainan">
-        <!-- Top Row: Center Energy Meter + Right Time/Eco/Boss Cluster -->
+      <div id="hud" class="hud hidden" aria-label="Status permainan">
         <div class="hud-top">
           <div class="hud-top-left">
-            <div class="ui-currency-pill" id="hud-coin-pill">
-              <span class="ui-currency-icon" id="hud-coin-icon"></span>
-              <span class="ui-currency-val t-stroke-md t-lime num" id="hud-coins">0</span>
-              <div class="ui-delta-stack" id="hud-coin-deltas"></div>
+            <details id="hud-objective" class="mission hidden">
+              <summary>
+                <span class="mission-chapter t-stroke-xs" id="hud-obj-kicker">Bab 1</span>
+                <span class="mission-title" aria-live="polite" id="hud-obj-title">Sapu sampah ke jaring</span>
+                <span class="mission-progress num" id="hud-obj-progress"></span>
+              </summary>
+              <div class="mission-detail">
+                <strong id="mission-chapter-title"></strong>
+                <p id="hud-obj-sub"></p>
+              </div>
+            </details>
+            <div class="hud-rewards">
+              <div class="ui-currency-pill hidden" id="hud-coin-pill">
+                <span class="ui-currency-icon" id="hud-coin-icon"></span>
+                <span class="ui-currency-val t-stroke-md t-lime num" id="hud-coins">0</span>
+              </div>
+              <div class="ui-combo-chip hidden" id="hud-combo-pill" data-swatch="gold">
+                <span class="t-stroke-xs">BERUNTUN</span>
+                <span class="t-stroke-sm t-gold num" id="hud-combo-val">2</span>
+              </div>
             </div>
-
-            <div class="ui-combo-chip hidden" id="hud-combo-pill" data-swatch="gold">
-              <span class="t-stroke-xs">KOMBO</span>
-              <span class="t-stroke-sm t-gold num" id="hud-combo-val">x1.0</span>
-            </div>
+            <button type="button" id="hud-save-warning" class="ui-save-warning t-stroke-xs hidden" title="Browser menolak menyimpan progres">
+              <span id="hud-save-icon" class="ui-btn-icon"></span>
+              <span>Tidak tersimpan</span>
+            </button>
           </div>
-
           <div class="hud-top-center">
-            <div class="ui-meter-pill" data-swatch="blue">
+            <div id="hud-energy" class="ui-meter-pill hidden" data-swatch="blue">
               <div class="ui-meter-badge" data-swatch="blue" id="hud-energy-icon"></div>
               <div class="ui-meter-content">
                 <div class="ui-meter-top">
@@ -47,165 +60,109 @@
               </div>
             </div>
           </div>
-
           <div class="hud-top-right">
             <div class="hud-right-row">
               <button type="button" id="btn-hud-settings" class="ui-square-btn" data-swatch="blue" title="Pengaturan Grafis (G)" aria-label="Pengaturan Grafis"></button>
               <button type="button" id="btn-mute" class="ui-square-btn" data-swatch="dark" title="Suara (M)" aria-label="Suara"></button>
-              <div class="ui-time-pill" id="hud-time-pill" data-swatch="blue">
+              <div class="ui-time-pill hidden" id="hud-time-pill" data-swatch="blue">
                 <span id="hud-time-icon"></span>
                 <span class="ui-time-text t-stroke-sm" id="hud-day-label">PAGI CERAH</span>
               </div>
             </div>
 
             <div class="hud-right-bars">
-              <div class="ui-slim-bar-wrap" title="Pemulihan Ekosistem & Mangrove">
+              <div class="ui-slim-bar-wrap hidden" id="hud-eco-wrap" title="Kesehatan pesisir. Garis putih: batas pantai sehat.">
                 <div class="ui-slim-bar-track">
-                  <div class="ui-slim-bar-fill" id="hud-eco-bar" data-swatch="green" style="width: 10%"></div>
-                  <span class="ui-slim-bar-val t-stroke-xs num" id="hud-eco-pct">10% · 0 Pohon</span>
+                  <div class="ui-slim-bar-fill" id="hud-eco-bar" data-swatch="orange" style="width: 64%"></div>
+                  <i class="ui-slim-bar-mark"></i>
+                  <span class="ui-slim-bar-val t-stroke-xs num" id="hud-eco-pct">Pesisir 64%</span>
                 </div>
-                <div class="ui-slim-bar-medallion" data-swatch="green" id="hud-eco-icon"></div>
+                <div class="ui-slim-bar-medallion" data-swatch="orange" id="hud-eco-icon"></div>
               </div>
 
-              <div class="ui-slim-bar-wrap hidden" id="hud-boss-pill" title="Kekuatan Kapal Limbah Ilegal">
+              <div class="ui-slim-bar-wrap hidden" id="hud-boss-pill" title="Ketahanan kapal induk">
                 <div class="ui-slim-bar-track">
                   <div class="ui-slim-bar-fill" id="hud-boss-bar" data-swatch="red" style="width: 100%"></div>
-                  <span class="ui-slim-bar-val t-stroke-xs num" id="hud-boss-val">KAPAL 100%</span>
+                  <span class="ui-slim-bar-val t-stroke-xs num" id="hud-boss-val">Kapal induk 100%</span>
                 </div>
                 <div class="ui-slim-bar-medallion" data-swatch="red" id="hud-boss-icon"></div>
               </div>
             </div>
-
-            <!-- Compact Right-Edge Arcade Action Stack (Lobby Style!) -->
-            <div class="hud-action-stack">
-              <button id="btn-open-shop" class="ui-btn hud-shop-btn t-stroke-sm" data-swatch="slate" disabled>
-                <span id="shop-btn-icon" class="ui-btn-icon"></span>
-                <span id="shop-btn-label" class="num">KALIBRASI · 0/20</span>
-                <span id="shop-badge" class="ui-notif-badge hidden">0</span>
-              </button>
-
-              <button id="btn-open-achieve" class="ui-btn ui-btn-sm hud-sub-btn t-stroke-xs hidden" data-swatch="blue">
-                <span id="achieve-btn-icon" class="ui-btn-icon"></span>
-                <span>Pencapaian</span>
-                <span id="achieve-badge" class="ui-notif-badge hidden">0</span>
-              </button>
-            </div>
           </div>
         </div>
 
-        <!-- Floating Objective Banner (Exact f_031 Objective Template) -->
-        <div class="hud-objective-anchor">
-          <div id="hud-objective" class="ui-objective-banner hidden" data-swatch="orange" title="Klik untuk menyembunyikan">
-            <span class="ui-objective-kicker t-stroke-xs">MISI AKTIF</span>
-            <div class="ui-objective-icon" id="hud-obj-icon"></div>
-            <div class="ui-objective-copy">
-              <div class="ui-objective-title t-stroke-md" id="hud-obj-title">Buka Kalibrasi A.L.U.N.</div>
-              <div class="ui-objective-sub t-stroke-xs" id="hud-obj-sub">Sapukan limbah ke Jaring Desa (20 Koin)</div>
-            </div>
+        <div class="hud-playfield" id="hud-playfield" aria-hidden="true">
+          <div id="target-pointer" class="target-pointer hidden" aria-hidden="true">
+            <svg id="target-pointer-arrow" class="target-pointer-arrow" viewBox="0 0 40 34">
+              <path d="M20 31L4 12.5C2.4 10.6 3.8 7.6 6.4 7.6H13V4.4C13 3 14.1 2 15.4 2H24.6C25.9 2 27 3 27 4.4V7.6H33.6C36.2 7.6 37.6 10.6 36 12.5L20 31Z" />
+            </svg>
           </div>
+          <svg id="swipe-hint" class="swipe-hint hidden" aria-hidden="true">
+            <line id="swipe-hint-line" x1="0" y1="0" x2="0" y2="0" />
+            <path id="swipe-hint-head" class="swipe-hint-head" d="M0 0 L-14 -7 L-11 0 L-14 7 Z" />
+            <circle id="swipe-hint-dot" class="swipe-hint-dot" cx="0" cy="0" r="5" />
+          </svg>
         </div>
 
-        <!-- Bottom Bar: 3D Keycap Prompts + Comic Speech Bubble -->
         <div class="hud-bottom">
-          <div class="hud-bottom-left">
-            <div class="ui-keycap-group">
-              <span class="ui-keycap t-stroke-xs">Geser</span>
-              <span class="ui-keycap-pill t-stroke-xs" data-swatch="blue">Sapu Ombak</span>
-            </div>
-            <div class="ui-keycap-group" id="keycap-shop-wrap">
-              <span class="ui-keycap t-stroke-xs">Tab</span>
-              <button type="button" id="btn-keycap-shop" class="ui-keycap-pill t-stroke-xs" data-swatch="gold">Kalibrasi</button>
-            </div>
-          </div>
-
-          <div class="hud-bottom-center">
+          <div class="hud-messages">
             <div id="radio-toast" class="ui-speech-bubble hidden" role="status" aria-live="polite">
               <div class="ui-speech-sender t-stroke-xs" id="radio-sender">A.L.U.N.</div>
               <div class="ui-speech-text" id="radio-text"></div>
             </div>
+            <div id="hud-notice" class="ui-toast t-stroke-sm hidden" role="status"></div>
           </div>
+          <div class="hud-action-stack hidden" id="hud-action-stack">
+            <button type="button" id="btn-open-shop" class="ui-btn hud-shop-btn t-stroke-sm" data-swatch="slate">
+              <span id="shop-btn-icon" class="ui-btn-icon"></span>
+              <span class="hud-shop-copy">
+                <span id="shop-btn-label">Bengkel</span>
+              </span>
+              <span id="shop-badge" class="ui-notif-badge hidden">0</span>
+            </button>
 
-          <div class="hud-bottom-right">
-            <div class="ui-keycap-group">
-              <span class="ui-keycap t-stroke-xs">G</span>
-              <button type="button" id="btn-keycap-settings" class="ui-keycap-pill t-stroke-xs" data-swatch="blue">Grafis</button>
-            </div>
-            <div class="ui-keycap-group">
-              <span class="ui-keycap t-stroke-xs">M</span>
-              <button type="button" id="btn-keycap-mute" class="ui-keycap-pill t-stroke-xs" data-swatch="dark">Suara</button>
-            </div>
+            <button type="button" id="btn-open-journal" aria-label="Buka jurnal" class="ui-btn ui-btn-sm hud-sub-btn t-stroke-xs hidden" data-swatch="blue">
+              <span id="journal-btn-icon" class="ui-btn-icon"></span>
+              <span class="hud-sub-label">Jurnal</span>
+              <span id="journal-badge" class="ui-notif-badge hidden">0</span>
+            </button>
           </div>
         </div>
       </div>
 
-      <!-- ================= RESCUE HINT ("GESER" FROM OPEN WATER TO THE DOLPHIN) ================= -->
-      <svg id="rescue-hint" class="rescue-hint hidden" aria-hidden="true">
-        <line id="rescue-hint-line" x1="0" y1="0" x2="0" y2="0" />
-        <circle id="rescue-hint-ring" class="rescue-hint-ring" cx="0" cy="0" r="34" />
-        <circle id="rescue-hint-dot" class="rescue-hint-dot" cx="0" cy="0" r="14" />
-        <text id="rescue-hint-label" class="rescue-hint-label" x="0" y="0" text-anchor="end">GESER</text>
-      </svg>
-
       <!-- ================= OPENING FILM (LETTERBOX + SUBTITLES) ================= -->
-      <section id="intro-overlay" class="intro-overlay hidden" aria-label="Pembukaan">
+      <section id="intro-overlay" class="intro-overlay hidden" aria-label="Film">
         <div class="intro-bar intro-bar-top"></div>
         <div class="intro-bar intro-bar-bottom"></div>
         <div id="intro-caption" class="intro-caption is-out" role="status" aria-live="polite">
           <span class="intro-kicker t-stroke-xs t-cyan" id="intro-kicker"></span>
           <span class="intro-line t-stroke-md" id="intro-line"></span>
         </div>
-        <button type="button" id="btn-skip-intro" class="ui-btn ui-btn-sm t-stroke-xs intro-skip" data-swatch="slate" title="Lewati pembukaan (Esc)">
+        <button type="button" id="btn-skip-intro" class="ui-btn ui-btn-sm t-stroke-xs intro-skip" data-swatch="slate" title="Lewati (Esc)">
           <span>Lewati</span>
           <span class="intro-skip-key">Esc</span>
         </button>
       </section>
 
-      <!-- Floating Bottom-Center Pill Toast (+Koin / Terbuka / Error) -->
-      <div id="ui-toast-host" class="ui-toast-host hidden" aria-live="polite"></div>
-
       <!-- ================= TITLE OVERLAY (ARCADE TROPICAL LAUNCH) ================= -->
       <section id="title-screen" class="overlay title-screen">
         <div class="ui-modal-frame ui-shell-navy title-modal">
-          <div class="ui-modal-ribbon" data-swatch="orange">
-            <span class="ui-modal-ribbon-title t-stroke-lg">IT RUSH 2026</span>
-          </div>
-
           <div class="title-hero">
             <div class="title-emblem" id="title-emblem"></div>
             <div>
-              <div class="title-kicker t-stroke-xs t-cyan">ONLY ONE MECHANICS IN A TROPICAL</div>
               <h1 class="game-title t-stroke-xl">ALUN</h1>
-              <p class="game-subtitle">
-                <strong>Autonomous Littoral Utility Node</strong> — Satu mekanik murni:
-                <strong>sapuan ombak terarah</strong> untuk membersihkan laguna tanpa henti, menumbuhkan mangrove, &amp; menyelamatkan pesisir tropis!
-              </p>
-            </div>
-          </div>
-
-          <div class="title-feature-grid">
-            <div class="title-feature-card" data-swatch="blue">
-              <span class="tf-icon" id="tf-icon-1"></span>
-              <div>
-                <div class="tf-title t-stroke-sm">01 · SATU MEKANIK</div>
-                <div class="tf-desc">Klik &amp; geser di air untuk menyapu ombak. Tahan untuk gelombang pasang super!</div>
-              </div>
-            </div>
-            <div class="title-feature-card" data-swatch="teal">
-              <span class="tf-icon" id="tf-icon-2"></span>
-              <div>
-                <div class="tf-title t-stroke-sm">02 · INCREMENTAL BEBAS</div>
-                <div class="tf-desc">Tanpa batas fase! Buka Kalibrasi [Tab] kapan saja untuk upgrade, rarity muatan &amp; AI.</div>
-              </div>
+              <p class="game-subtitle">Geser air untuk menyapu sampah dari dermaga. Tahan sebelum melepas untuk membuat ombak lebih kuat.</p>
             </div>
           </div>
 
           <div class="title-actions">
+            <button type="button" id="btn-continue" class="ui-btn ui-btn-lg t-stroke-md hidden" data-swatch="green">
+              <span class="ui-btn-icon" id="title-continue-icon"></span>
+              <span id="continue-label">Lanjutkan</span>
+            </button>
             <button type="button" id="btn-play" class="ui-btn ui-btn-lg t-stroke-md" data-swatch="green">
               <span class="ui-btn-icon" id="title-play-icon"></span>
-              <span>Main Sekarang</span>
-            </button>
-            <button type="button" id="btn-continue" class="ui-btn ui-btn-lg t-stroke-md hidden" data-swatch="blue">
-              <span>Lanjutkan Laguna</span>
+              <span>Permainan Baru</span>
             </button>
             <button type="button" id="btn-title-settings" class="ui-btn t-stroke-sm" data-swatch="blue">
               <span class="ui-btn-icon" id="title-settings-icon"></span>
@@ -219,157 +176,140 @@
         </div>
       </section>
 
-      <!-- ================= TABBED KALIBRASI MODAL (SHOP / TREE / ACHIEVEMENTS) ================= -->
-      <section id="upgrade-screen" class="ui-modal-backdrop hidden">
+      <!-- ================= WORKSHOP ================= -->
+      <section id="upgrade-screen" class="ui-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="shop-ribbon-title">
         <div class="ui-modal-frame ui-shell-navy shop-modal" id="shop-modal-frame">
           <!-- Floating Overlapping Ribbon -->
           <div class="ui-modal-ribbon" id="shop-ribbon" data-swatch="orange">
-            <span class="ui-modal-ribbon-title t-stroke-lg" id="shop-ribbon-title">Kalibrasi A.L.U.N.</span>
+            <span class="ui-modal-ribbon-title t-stroke-lg" id="shop-ribbon-title">Bengkel</span>
           </div>
 
           <!-- Overhanging Red Glossy Close Square [X] -->
-          <button type="button" id="btn-close-shop" class="ui-close-btn" title="Kembali ke Laguna (Esc)"></button>
+          <button type="button" id="btn-close-shop" class="ui-close-btn" aria-label="Kembali ke laguna" title="Kembali ke laguna (Esc)"></button>
 
-          <!-- Top Bar: Segmented Tabs + Currency & Summary Chips -->
+          <!-- Top bar: the two pages of the workshop on the left, the purse on the right. One row at every size. -->
           <div class="shop-top-bar">
-            <div class="ui-tab-bar" role="tablist">
-              <button type="button" id="tab-cards" class="ui-tab t-stroke-sm is-active" data-swatch="purple" role="tab">
-                <span class="ui-btn-icon" id="tab-icon-cards"></span>
-                <span>Kartu Upgrade</span>
-                <span id="tab-badge-cards" class="ui-notif-badge hidden">0</span>
-              </button>
-              <button type="button" id="tab-tree" class="ui-tab t-stroke-sm" data-swatch="slate" role="tab">
+            <div class="ui-tab-bar shop-tabs" role="tablist" aria-label="Halaman bengkel">
+              <button type="button" id="tab-tree" class="ui-tab t-stroke-sm" data-swatch="slate" role="tab" aria-controls="panel-tree">
                 <span class="ui-btn-icon" id="tab-icon-tree"></span>
-                <span>Pohon Evolusi</span>
+                <span>Pohon alat</span>
+                <span id="tab-badge-tree" class="ui-notif-badge hidden">0</span>
               </button>
-              <button type="button" id="tab-achievements" class="ui-tab t-stroke-sm" data-swatch="slate" role="tab">
-                <span class="ui-btn-icon" id="tab-icon-achieve"></span>
-                <span>Pencapaian</span>
-                <span id="tab-badge-achieve" class="ui-notif-badge hidden">0</span>
+              <button type="button" id="tab-journal" class="ui-tab t-stroke-sm" data-swatch="slate" role="tab" aria-controls="panel-journal">
+                <span class="ui-btn-icon" id="tab-icon-journal"></span>
+                <span>Jurnal</span>
+                <span id="tab-badge-journal" class="ui-notif-badge hidden">0</span>
               </button>
             </div>
 
-            <div class="shop-bank-wrap">
-              <div class="shop-mini-chips" id="run-summary-chips"></div>
-              <div class="ui-currency-pill shop-bank-pill">
-                <span class="ui-currency-icon" id="shop-coin-icon"></span>
-                <span class="ui-currency-val t-stroke-md t-gold num" id="upgrade-coins">0</span>
-              </div>
+            <div class="shop-mini-chips" id="run-summary-chips"></div>
+            <div class="ui-currency-pill shop-bank-pill">
+              <span class="ui-currency-icon" id="shop-coin-icon"></span>
+              <span class="ui-currency-val t-stroke-md t-gold num" id="upgrade-coins">0</span>
             </div>
           </div>
 
-          <!-- TAB 1: VIBRANT CHECKERED UPGRADE CARDS (Exact Shop Template!) -->
-          <div id="panel-cards" class="shop-panel panel-cards">
-            <div id="cards-scroll" class="cards-scroll"></div>
-          </div>
-
-          <!-- TAB 2: INTERACTIVE SKILL TREE -->
-          <div id="panel-tree" class="shop-panel panel-tree hidden">
-            <div class="tree-body">
-              <div class="tree-viewport" id="tree-viewport">
-                <svg id="tree-links" class="tree-links" viewBox="0 0 1000 560" preserveAspectRatio="xMidYMid meet"></svg>
-                <div id="tree-nodes" class="tree-nodes"></div>
+          <!-- TOOL TREE: the map and, beside it, the tool that is picked. Nothing on it moves when something is pressed. -->
+          <div id="panel-tree" role="tabpanel" aria-labelledby="tab-tree" class="shop-panel panel-tree hidden">
+            <div class="tree-layout">
+              <!-- the canvas holds the whole grid; when it is larger than the map, it is dragged -->
+              <div class="tree-map" id="tree-map">
+                <div class="tree-canvas" id="tree-canvas">
+                  <svg id="tree-links" class="tree-links" aria-hidden="true"></svg>
+                  <div id="tree-nodes" class="tree-nodes" role="group" aria-label="Alat di bengkel"></div>
+                </div>
+                <div class="tree-edge tree-edge-l" aria-hidden="true"></div>
+                <div class="tree-edge tree-edge-r" aria-hidden="true"></div>
+                <div class="tree-edge tree-edge-t" aria-hidden="true"></div>
+                <div class="tree-edge tree-edge-b" aria-hidden="true"></div>
+                <div id="shop-toast" class="shop-toast t-stroke-sm" role="status" aria-live="polite"></div>
               </div>
 
-              <aside class="inspector-panel" id="inspector-panel">
+              <aside class="tool-panel" id="tool-panel" aria-labelledby="insp-title">
                 <div class="insp-header-card" id="insp-header-card" data-swatch="blue">
                   <div class="insp-branch-pill t-stroke-xs" id="insp-branch">INTI A.L.U.N.</div>
                   <div class="insp-title-row">
-                    <span class="insp-icon-box" id="insp-icon"></span>
-                    <h3 class="insp-title t-stroke-md" id="insp-title">Pilih Node</h3>
+                    <div class="insp-name">
+                      <span class="insp-icon-box" id="insp-icon"></span>
+                      <h3 class="insp-title t-stroke-md" id="insp-title">Detail alat</h3>
+                    </div>
+                    <div class="insp-pips" id="insp-pips" aria-hidden="true"></div>
                   </div>
                 </div>
 
-                <p class="inspector-desc" id="insp-desc">
-                  Klik node di Pohon Evolusi untuk langsung membeli atau melihat detail evolusi ombakmu.
-                </p>
+                <p class="inspector-desc" id="insp-desc"></p>
 
-                <div class="inspector-stats" id="insp-stats"></div>
-
-                <button type="button" id="btn-buy-node" class="ui-btn ui-btn-block t-stroke-md hidden" data-swatch="green">
-                  Tingkatkan
-                </button>
-
-                <div class="eco-progress-card">
-                  <div class="eco-row">
-                    <span class="t-stroke-xs">Pemulihan Pesisir</span>
-                    <span class="t-stroke-xs t-lime num" id="insp-eco-val">10%</span>
-                  </div>
-                  <div class="ui-bar-track">
-                    <div class="ui-bar-fill" id="insp-eco-bar" data-swatch="green" style="width: 10%"></div>
-                  </div>
-                  <div class="eco-sub" id="insp-eco-sub">
-                    Buka Rimba &amp; Pelampung AI untuk mengakses Misi Final Badai Muson.
-                  </div>
+                <div class="tool-bottom">
+                  <p class="tool-note" id="tool-note"></p>
+                  <div class="inspector-stats" id="insp-stats"></div>
+                  <button type="button" id="btn-buy-node" class="ui-btn ui-btn-block t-stroke-md tool-buy" data-swatch="green">
+                    Tingkatkan
+                  </button>
+                  <button type="button" id="btn-return-lagoon" class="tool-return hidden">
+                    <span class="tool-return-icon" id="tool-return-icon"></span><span>Kembali ke laguna</span>
+                  </button>
                 </div>
               </aside>
             </div>
           </div>
 
-          <!-- TAB 3: ACHIEVEMENTS (Exact Chapter 1 / Chapter 2 Template!) -->
-          <div id="panel-achievements" class="shop-panel panel-achievements hidden">
-            <div class="achieve-top-row">
-              <div class="ui-tab-bar">
-                <button type="button" id="ach-chap-1" class="ui-tab t-stroke-sm is-active" data-swatch="orange">
-                  <span>Bab 1 · Laguna</span>
-                  <span id="ach-badge-1" class="ui-notif-badge left hidden">0</span>
+          <!-- VILLAGE JOURNAL: a book with pages instead of a scrolling list -->
+          <div id="panel-journal" role="tabpanel" aria-labelledby="tab-journal" class="shop-panel panel-journal hidden">
+            <div class="journal-head">
+              <div class="ui-tab-bar journal-parts" role="tablist" aria-label="Bagian jurnal">
+                <button type="button" id="journal-part-1" class="ui-tab t-stroke-sm is-active" data-swatch="orange" role="tab">
+                  <span>Cerita</span>
+                  <span id="journal-badge-1" class="ui-notif-badge hidden">0</span>
                 </button>
-                <button type="button" id="ach-chap-2" class="ui-tab t-stroke-sm" data-swatch="slate">
-                  <span>Bab 2 · Harmoni</span>
-                  <span id="ach-badge-2" class="ui-notif-badge left hidden">0</span>
+                <button type="button" id="journal-part-2" class="ui-tab t-stroke-sm" data-swatch="slate" role="tab">
+                  <span>Laguna</span>
+                  <span id="journal-badge-2" class="ui-notif-badge hidden">0</span>
                 </button>
               </div>
 
               <div class="achieve-summary-bar">
                 <span class="ach-sum-item">
-                  <span id="ach-trophy-icon" class="ach-mini-svg"></span>
-                  <strong class="t-stroke-sm t-gold num" id="ach-count-label">0 / 6</strong>
+                  <span id="journal-sum-icon" class="ach-mini-svg"></span>
+                  <strong class="t-stroke-sm t-gold num" id="journal-count">0 / 12</strong>
                 </span>
                 <div class="ui-bar-track ach-overall-track">
-                  <div class="ui-bar-fill" id="ach-overall-bar" data-swatch="gold" style="width: 0%"></div>
+                  <div class="ui-bar-fill" id="journal-bar" data-swatch="gold" style="width: 0%"></div>
                 </div>
-                <span class="ach-sum-item">
-                  <span id="ach-coin-icon" class="ach-mini-svg"></span>
-                  <strong class="t-stroke-sm t-lime num" id="ach-coins-label">0 / 665</strong>
-                </span>
               </div>
             </div>
 
-            <div id="achieve-grid" class="achieve-grid"></div>
-          </div>
-
-          <!-- Shared Modal Footer -->
-          <div class="shop-footer">
-            <div class="legend-row">
-              <span class="legend-pill" data-swatch="blue"><i class="dot"></i>Ombak</span>
-              <span class="legend-pill" data-swatch="orange"><i class="dot"></i>Energi</span>
-              <span class="legend-pill" data-swatch="teal"><i class="dot"></i>Modul AI</span>
-              <span class="legend-pill" data-swatch="green"><i class="dot"></i>Muatan &amp; Eko</span>
+            <div class="journal-book" id="journal-book">
+              <div id="journal-grid" class="journal-grid"></div>
+              <div id="journal-measure" class="journal-grid journal-measure" aria-hidden="true"></div>
             </div>
-            <div class="footer-actions">
-              <button type="button" id="btn-reset-save" class="ui-btn ui-btn-sm t-stroke-xs" data-swatch="red">
-                Reset Progres
-              </button>
-              <button type="button" id="btn-resume-lagoon" class="ui-btn t-stroke-sm" data-swatch="green">
-                <span class="ui-btn-icon" id="footer-play-icon"></span>
-                <span>Kembali ke Laguna</span>
+
+            <div class="journal-foot">
+              <div class="journal-pager">
+                <button type="button" id="journal-prev" class="ui-square-btn journal-flip" data-swatch="blue" aria-label="Halaman sebelumnya"></button>
+                <span class="journal-page t-stroke-xs num" id="journal-page" aria-live="polite">1 / 1</span>
+                <button type="button" id="journal-next" class="ui-square-btn journal-flip" data-swatch="blue" aria-label="Halaman berikutnya"></button>
+              </div>
+              <button type="button" id="btn-reset-save" class="journal-reset">
+                <span class="journal-reset-icon" id="journal-reset-icon"></span>
+                <span>Hapus simpanan</span>
               </button>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- ================= VICTORY MODAL ================= -->
+      <!-- ================= THE STORY IS OVER ================= -->
       <section id="victory-screen" class="ui-modal-backdrop hidden">
         <div class="ui-modal-frame ui-shell-navy victory-modal">
           <div class="ui-modal-ribbon" data-swatch="gold">
-            <span class="ui-modal-ribbon-title t-stroke-lg">Laguna Terselamatkan!</span>
+            <span class="ui-modal-ribbon-title t-stroke-lg">Cerita Tamat</span>
           </div>
 
           <div class="victory-head">
-            <div class="victory-sub t-stroke-xs t-cyan">FAJAR HARMONI · EKOSISTEM PULIH SEPENUHNYA</div>
+            <div class="victory-sub t-stroke-xs t-cyan">FAJAR DI DERMAGA</div>
             <p class="modal-lead">
-              Kapal limbah ilegal terusir dari perairan, hutan mangrove berdiri kokoh menahan ombak, terumbu karang kembali berwarna, dan Bunga Rafflesia mekar di tepi rimba!
+              Perahu Pak Damar bersandar di tempat yang dulu tertutup sampah. Induk dan anak lumba-lumba
+              melintas di sampingnya. Kampung, alat, saldo dan pantainya tetap sama di Patroli Laguna.
             </p>
           </div>
 
@@ -377,11 +317,26 @@
 
           <div class="modal-actions">
             <button type="button" id="btn-endless" class="ui-btn ui-btn-lg t-stroke-md" data-swatch="green">
-              <span>Lanjut Mode Bebas</span>
+              <span>Patroli Laguna</span>
             </button>
-            <button type="button" id="btn-victory-tree" class="ui-btn ui-btn-lg t-stroke-md" data-swatch="blue">
-              <span>Buka Kalibrasi</span>
+            <button type="button" id="btn-victory-shop" class="ui-btn ui-btn-lg t-stroke-md" data-swatch="blue">
+              <span>Buka Bengkel</span>
             </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= ARE YOU SURE ================= -->
+      <section id="confirm-modal" class="ui-modal-backdrop ui-modal-top hidden" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-text">
+        <div class="ui-modal-frame ui-shell-navy confirm-modal">
+          <div class="confirm-head">
+            <span class="confirm-icon" id="confirm-icon"></span>
+            <h2 class="confirm-title t-stroke-md" id="confirm-title"></h2>
+          </div>
+          <p class="modal-lead" id="confirm-text"></p>
+          <div class="modal-actions">
+            <button type="button" id="btn-confirm-no" class="ui-btn t-stroke-sm" data-swatch="green">Batal</button>
+            <button type="button" id="btn-confirm-yes" class="ui-btn t-stroke-sm" data-swatch="red"></button>
           </div>
         </div>
       </section>
@@ -404,13 +359,13 @@
             <div class="credit-block" data-swatch="gold">
               <h4 class="t-stroke-sm t-gold">Deklarasi Penggunaan AI (Transparan)</h4>
               <p>
-                Kode program (TypeScript, Three.js / WebGL, HTML5 Canvas, UI Kit &amp; Web Audio API prosedural) serta perancangan sistem dibantu secara transparan menggunakan asisten AI (Antigravity / Gemini dan Claude Code). Seluruh grafis dalam game digambar prosedural real-time dan seluruh audio disintesis real-time tanpa aset pihak ketiga berhak cipta. Adegan 3D dirender memakai pustaka Three.js (lisensi MIT).
+                Kode program (TypeScript, Three.js / WebGL, UI kit dan Web Audio API) serta perancangan sistem dibantu secara transparan menggunakan asisten AI (Antigravity / Gemini dan Claude Code). Seluruh grafis digambar prosedural secara real-time. Efek suara dibuat dengan ElevenLabs Sound Effects dan sintesis Web Audio. Musik latar: <em>Bassa Island Game Loop</em> &amp; <em>Island Meet and Greet</em> oleh Kevin MacLeod (incompetech.com), lisensi CC BY 4.0. Adegan 3D memakai pustaka Three.js (lisensi MIT).
               </p>
             </div>
             <div class="credit-block" data-swatch="blue">
               <h4 class="t-stroke-sm t-lime">Kontrol Singkat</h4>
               <p>
-                <strong>Klik &amp; Geser</strong> di air untuk mengirim ombak terarah. <strong>Tahan</strong> sebelum dilepas untuk mengisi gelombang pasang besar. Tekan <strong>Tab / E</strong> untuk membuka Kalibrasi, <strong>1/2/3</strong> ganti tab, dan <strong>M</strong> untuk suara.
+                <strong>Klik atau sentuh, lalu geser</strong> di air untuk mengirim ombak. <strong>Tahan</strong> sebelum dilepas supaya lebih kuat. <strong>Tab / E</strong> membuka bengkel, <strong>1/2</strong> ganti tab, <strong>G</strong> grafis dan <strong>M</strong> suara. Permainan tersimpan sendiri di browser ini.
               </p>
             </div>
           </div>
@@ -436,9 +391,6 @@
             <span class="shop-chip t-stroke-xs num" id="settings-res-chip">1920×1080</span>
           </div>
 
-          <p class="settings-lead">
-            Pilih kualitas tampilan sesuai perangkatmu. Perubahan diterapkan langsung tanpa mengulang permainan.
-          </p>
 
           <div id="graphics-options" class="graphics-options" role="radiogroup" aria-label="Kualitas Grafis">
             <button type="button" class="graphics-opt" data-quality="auto" data-swatch="teal" role="radio" aria-checked="true">
@@ -446,35 +398,31 @@
                 <span class="gopt-title t-stroke-sm">Otomatis</span>
                 <span class="gopt-badge t-stroke-xs">DISARANKAN</span>
               </span>
-              <span class="gopt-desc">Menyesuaikan tingkat grafis secara otomatis mengikuti kemampuan GPU.</span>
+              <span class="gopt-desc">Mengikuti kemampuan perangkat.</span>
             </button>
             <button type="button" class="graphics-opt" data-quality="low" data-swatch="green" role="radio" aria-checked="false">
               <span class="gopt-head">
                 <span class="gopt-title t-stroke-sm">Rendah</span>
-                <span class="gopt-badge t-stroke-xs">RINGAN</span>
-              </span>
-              <span class="gopt-desc">Tajam di resolusi asli untuk GPU terintegrasi; optimasi air &amp; latar statis.</span>
+                </span>
+              <span class="gopt-desc">Air dan bayangan sederhana.</span>
             </button>
             <button type="button" class="graphics-opt" data-quality="medium" data-swatch="blue" role="radio" aria-checked="false">
               <span class="gopt-head">
                 <span class="gopt-title t-stroke-sm">Sedang</span>
-                <span class="gopt-badge t-stroke-xs">SEIMBANG</span>
-              </span>
-              <span class="gopt-desc">Detail air lebih penuh, bayangan lebih tajam, dan pencahayaan lebih kaya.</span>
+                </span>
+              <span class="gopt-desc">Air lebih detail dan bayangan lebih tajam.</span>
             </button>
             <button type="button" class="graphics-opt" data-quality="high" data-swatch="purple" role="radio" aria-checked="false">
               <span class="gopt-head">
                 <span class="gopt-title t-stroke-sm">Tinggi</span>
-                <span class="gopt-badge t-stroke-xs">PENUH</span>
-              </span>
-              <span class="gopt-desc">Render langsung setiap frame, air resolusi penuh, MSAA 4x &amp; bayangan 2K.</span>
+                </span>
+              <span class="gopt-desc">Air resolusi penuh dan bayangan 2K.</span>
             </button>
             <button type="button" class="graphics-opt" data-quality="ultra" data-swatch="gold" role="radio" aria-checked="false">
               <span class="gopt-head">
                 <span class="gopt-title t-stroke-sm">Ultra</span>
-                <span class="gopt-badge t-stroke-xs">MAKSIMAL</span>
-              </span>
-              <span class="gopt-desc">Bayangan 3K, simulasi ombak ultra-halus, dan detail riak maksimal untuk GPU kuat.</span>
+                </span>
+              <span class="gopt-desc">Riak paling detail dan bayangan 3K.</span>
             </button>
           </div>
 
@@ -508,6 +456,13 @@
         </div>
       </section>
     </div>
+
+    <dialog id="rotate-prompt" class="rotate-prompt" aria-labelledby="rotate-title">
+      <div class="phone-symbol" aria-hidden="true"></div>
+      <h2 id="rotate-title">Putar HP ke samping</h2>
+      <p>Laguna dimainkan dalam posisi horizontal.</p>
+      <button type="button" id="btn-landscape" class="ui-btn t-stroke-sm" data-swatch="teal">Aktifkan layar horizontal</button>
+    </dialog>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

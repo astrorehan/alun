@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "uji": "node tests/jalankan.mjs",
+    "generate:sfx": "node --env-file=.env.local scripts/generate-sfx.mjs"
   },
   "devDependencies": {
     "@types/three": "0.172.0",
@@ -14,6 +16,7 @@
     "vite": "^6.2.0"
   },
   "dependencies": {
+    "@elevenlabs/elevenlabs-js": "^2.80.0",
     "three": "0.172.0"
   }
 }

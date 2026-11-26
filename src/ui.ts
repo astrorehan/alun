@@ -7,16 +7,14 @@ import type {
   UpgradeBranch,
   UpgradeId,
 } from './types';
-import {
-  ACHIEVEMENT_DEFS,
-  countClaimableAchievements,
-  isAchievementClaimable,
-} from './achievements';
+import { isWritten, JOURNAL, unreadPages, type JournalEntry } from './journal';
+import type { Objective } from './story/jobs';
+import { chapterTitle, nextSupply, P_DIRTY, P_HEALTHY, PATROL } from './story/state';
 import {
   countAffordableUpgrades,
-  getMinUnlockableCost,
   getUpgradeCost,
-  isUpgradeUnlocked,
+  isForSale,
+  isUpgradeShown,
   UPGRADE_DEFS,
   UPGRADE_MAP,
 } from './upgrades';
@@ -24,11 +22,8 @@ import { getUiIconSvg, type UiIconName } from './ui-kit/icons';
 import type { QualitySetting, Tier } from './scene/quality';
 import type { QualityState } from './scene/SceneRenderer';
 import {
-  renderAchievementCard,
-  renderSectionDivider,
+  renderJournalCard,
   renderStatTile,
-  renderUpgradeCard,
-  showUiToast,
   spawnUiConfetti,
   type UiSwatch,
 } from './ui-kit/templates';
@@ -46,8 +41,8 @@ const BRANCH_LABELS: Record<UpgradeBranch, string> = {
   wave: 'CABANG OMBAK',
   energy: 'CABANG ENERGI',
   ai: 'MODUL AI A.L.U.N.',
-  eco: 'MUATAN & EKOSISTEM',
-  final: 'MISI KLIMAKS',
+  eco: 'DESA & PESISIR',
+  final: 'RADIO BENGKEL',
 };
 
 const BRANCH_SWATCH: Record<UpgradeBranch, UiSwatch> = {
@@ -59,29 +54,6 @@ const BRANCH_SWATCH: Record<UpgradeBranch, UiSwatch> = {
   final: 'red',
 };
 
-const CARD_SECTIONS: { label: string; icon: UiIconName; ids: UpgradeId[] }[] = [
-  {
-    label: 'OMBAK & TENAGA PASANG',
-    icon: 'wave',
-    ids: ['wave_width', 'wave_power', 'tidal_charge', 'echo_wave', 'resonance_burst'],
-  },
-  {
-    label: 'MUATAN, KELANGKAAN & ENERGI',
-    icon: 'rarity',
-    ids: ['net_expand', 'trash_density', 'trash_rarity', 'tidal_energy', 'energy_regen', 'combo_flow'],
-  },
-  {
-    label: 'MODUL AI A.L.U.N.',
-    icon: 'sonar',
-    ids: ['ai_guide', 'ai_sonar', 'ai_buoy'],
-  },
-  {
-    label: 'EKOSISTEM TROPIS & MISI FINAL',
-    icon: 'mangrove',
-    ids: ['unlock_mangrove', 'unlock_boats', 'unlock_forest', 'unlock_boss'],
-  },
-];
-
 const TIER_LABELS: Record<Tier, string> = {
   low: 'Rendah',
   medium: 'Sedang',
@@ -89,13 +61,81 @@ const TIER_LABELS: Record<Tier, string> = {
   ultra: 'Ultra',
 };
 
+/** The workshop map is a grid of 7 columns and 4 rows; each tool's col and row put it in its own cell. */
+const MAP_COLS = 7;
+const MAP_ROWS = 4;
+/** Every tool is this many times as wide as it is tall, at any size. */
+const NODE_RATIO = 1.3;
+/** The tallest a tool gets, and the smallest type its name may have before the map pans instead. */
+const NODE_MAX_H = 86;
+const NODE_MIN_FONT = 9.5;
+/** Room between tools as parts of a tool's height: least, then most when the map has space to spare. */
+const GAP_X: [number, number] = [0.42, 1.1];
+const GAP_Y: [number, number] = [0.4, 0.9];
+
+/** Type sizes the journal may step down through, as in the `data-fit` levels of the stylesheet. */
+const JOURNAL_FIT = [1, 0.9, 0.81, 0.73, 0.66];
+
+/** Screen pixels per layout pixel: below 1 while a modal zooms in, and measurements must not follow it. */
+function layoutScale(node: HTMLElement): number {
+  const w = node.getBoundingClientRect().width;
+  return node.offsetWidth > 0 && w > 0 ? w / node.offsetWidth : 1;
+}
+
+/** The tool panel's steps, in order: smaller type, then no stars, then (beside a note) no description. */
+const PANEL_FIT: ReadonlyArray<{ k: number; pips?: false; desc?: false }> = [
+  { k: 1 },
+  { k: 0.92 },
+  { k: 0.85 },
+  { k: 0.85, pips: false },
+  { k: 0.8, pips: false },
+  { k: 0.8, pips: false, desc: false },
+  { k: 0.74, pips: false, desc: false },
+];
+
+/**
+ * A one-line label that does not fit its button gets smaller type instead of being cut; when even 12px
+ * is too wide, a button that allows it takes the label on two lines within its own height.
+ */
+function fitLine(btn: HTMLElement, wrap = false): void {
+  btn.style.fontSize = '';
+  btn.classList.remove('is-wrapped');
+  if (btn.classList.contains('hidden') || !btn.clientWidth) return;
+  const full = parseFloat(getComputedStyle(btn).fontSize);
+  let size = full;
+  while (btn.scrollWidth > btn.clientWidth + 1 && size > 12) {
+    size -= 1;
+    btn.style.fontSize = `${size}px`;
+  }
+  if (!wrap || btn.scrollWidth <= btn.clientWidth + 1) return;
+  const height = btn.offsetHeight;
+  btn.classList.add('is-wrapped');
+  size = Math.min(full, 15);
+  btn.style.fontSize = `${size}px`;
+  while ((btn.scrollWidth > btn.clientWidth + 1 || btn.offsetHeight > height) && size > 11) {
+    size -= 1;
+    btn.style.fontSize = `${size}px`;
+  }
+}
+
+const CLOSED_SHOP = 'Bengkel masih tutup: peti perkakas Bu Sari belum kembali.';
+const SAVE_FAILED = 'Browser menolak menyimpan. Progres hilang kalau halaman ditutup.';
+
+/** Keep longer radio lines on screen long enough to read. */
+const radioTime = (text: string): number => Math.min(6.8, Math.max(2.8, 2 + text.length * 0.045));
+type HudMessage = { text: string; seconds: number } & (
+  | { kind: 'radio'; sender: string }
+  | { kind: 'notice'; swatch: UiSwatch }
+);
+
 export interface UIHandlers {
   onStartNew: () => void;
   onContinue: () => void;
   onOpenShop: (tab?: ShopTab) => void;
   onCloseShop: () => void;
   onBuyUpgrade: (id: UpgradeId, originEl?: HTMLElement | null) => void;
-  onClaimAchievement: (id: string, originEl?: HTMLElement | null) => void;
+  onAnswerCall: (originEl?: HTMLElement | null) => void;
+  onReadJournal: (part: JournalEntry['part']) => void;
   onToggleMute: () => void;
   onResetSave: () => void;
   onStartEndless: () => void;
@@ -108,166 +148,226 @@ export interface UIHandlers {
   onUiError?: () => void;
 }
 
+const el = (id: string): HTMLElement => document.getElementById(id)!;
+
 export class GameUI {
-  private hud = document.getElementById('hud')!;
-  private titleScreen = document.getElementById('title-screen')!;
-  private introOverlay = document.getElementById('intro-overlay')!;
-  private introCaption = document.getElementById('intro-caption')!;
-  private introKicker = document.getElementById('intro-kicker')!;
-  private introLine = document.getElementById('intro-line')!;
-  private rescueHint = document.getElementById('rescue-hint')!;
-  private rescueLine = document.getElementById('rescue-hint-line')!;
-  private rescueRing = document.getElementById('rescue-hint-ring')!;
-  private rescueDot = document.getElementById('rescue-hint-dot')!;
-  private rescueLabel = document.getElementById('rescue-hint-label')!;
-  private eventObjective: { title: string; sub: string; icon: UiIconName; swatch: UiSwatch } | null = null;
-  private upgradeScreen = document.getElementById('upgrade-screen')!;
-  private victoryScreen = document.getElementById('victory-screen')!;
-  private creditsModal = document.getElementById('credits-modal')!;
-  private settingsModal = document.getElementById('settings-modal')!;
-  private settingsActiveChip = document.getElementById('settings-active-chip')!;
-  private settingsResChip = document.getElementById('settings-res-chip')!;
-  private graphicsOptions = document.getElementById('graphics-options')!;
-  private webglErrorModal = document.getElementById('webgl-error-modal')!;
-  private webglErrorTitle = document.getElementById('webgl-error-title')!;
-  private webglErrorMsg = document.getElementById('webgl-error-msg')!;
-  private webglErrorTip = document.getElementById('webgl-error-tip')!;
-  private btnWebglRetry = document.getElementById('btn-webgl-retry') as HTMLButtonElement;
+  private app = el('app');
+  private hud = el('hud');
+  private titleScreen = el('title-screen');
+  private introOverlay = el('intro-overlay');
+  private introCaption = el('intro-caption');
+  private introKicker = el('intro-kicker');
+  private introLine = el('intro-line');
+  private swipeHint = el('swipe-hint');
+  private swipeLine = el('swipe-hint-line');
+  private swipeHead = el('swipe-hint-head');
+  private swipeDot = el('swipe-hint-dot');
+  private playfield = el('hud-playfield');
+  private guideBounds = new DOMRect();
+  private pointer = el('target-pointer');
+  private pointerArrow = el('target-pointer-arrow');
+  private upgradeScreen = el('upgrade-screen');
+  private victoryScreen = el('victory-screen');
+  private creditsModal = el('credits-modal');
+  private confirmModal = el('confirm-modal');
+  private confirmTitle = el('confirm-title');
+  private confirmText = el('confirm-text');
+  private btnConfirmYes = el('btn-confirm-yes') as HTMLButtonElement;
+  private btnConfirmNo = el('btn-confirm-no') as HTMLButtonElement;
+  private settingsModal = el('settings-modal');
+  private settingsActiveChip = el('settings-active-chip');
+  private settingsResChip = el('settings-res-chip');
+  private graphicsOptions = el('graphics-options');
+  private webglErrorModal = el('webgl-error-modal');
+  private webglErrorTitle = el('webgl-error-title');
+  private webglErrorMsg = el('webgl-error-msg');
+  private webglErrorTip = el('webgl-error-tip');
+  private btnWebglRetry = el('btn-webgl-retry') as HTMLButtonElement;
   private settingsOpen = false;
   private settingsReturnFocus: HTMLElement | null = null;
+  private confirmReturnFocus: HTMLElement | null = null;
+  private confirmYes: (() => void) | null = null;
 
-  private hudCoinPill = document.getElementById('hud-coin-pill')!;
-  private hudCoins = document.getElementById('hud-coins')!;
-  private hudCoinDeltas = document.getElementById('hud-coin-deltas')!;
-  private hudComboPill = document.getElementById('hud-combo-pill')!;
-  private hudComboVal = document.getElementById('hud-combo-val')!;
-  private hudEnergyVal = document.getElementById('hud-energy-val')!;
-  private hudEnergyBar = document.getElementById('hud-energy-bar')!;
-  private hudTimePill = document.getElementById('hud-time-pill')!;
-  private hudTimeIcon = document.getElementById('hud-time-icon')!;
-  private hudDayLabel = document.getElementById('hud-day-label')!;
-  private hudEcoBar = document.getElementById('hud-eco-bar')!;
-  private hudEcoPct = document.getElementById('hud-eco-pct')!;
-  private hudBossPill = document.getElementById('hud-boss-pill')!;
-  private hudBossBar = document.getElementById('hud-boss-bar')!;
-  private hudBossVal = document.getElementById('hud-boss-val')!;
+  private hudCoinPill = el('hud-coin-pill');
+  private hudCoins = el('hud-coins');
+  private hudEnergy = el('hud-energy');
+  private hudComboPill = el('hud-combo-pill');
+  private hudComboVal = el('hud-combo-val');
+  private hudSaveWarning = el('hud-save-warning');
+  private hudEnergyVal = el('hud-energy-val');
+  private hudEnergyBar = el('hud-energy-bar');
+  private hudTimePill = el('hud-time-pill');
+  private hudTimeIcon = el('hud-time-icon');
+  private hudDayLabel = el('hud-day-label');
+  private hudEcoWrap = el('hud-eco-wrap');
+  private hudEcoBar = el('hud-eco-bar');
+  private hudEcoPct = el('hud-eco-pct');
+  private hudEcoIcon = el('hud-eco-icon');
+  private hudBossPill = el('hud-boss-pill');
+  private hudBossBar = el('hud-boss-bar');
+  private hudBossVal = el('hud-boss-val');
 
-  private btnMute = document.getElementById('btn-mute') as HTMLButtonElement;
-  private btnOpenShop = document.getElementById('btn-open-shop') as HTMLButtonElement;
-  private shopBtnIcon = document.getElementById('shop-btn-icon')!;
-  private shopBtnLabel = document.getElementById('shop-btn-label')!;
-  private shopBadge = document.getElementById('shop-badge')!;
-  private btnOpenAchieve = document.getElementById('btn-open-achieve') as HTMLButtonElement;
-  private achieveBadge = document.getElementById('achieve-badge')!;
+  private btnMute = el('btn-mute') as HTMLButtonElement;
+  private btnOpenShop = el('btn-open-shop') as HTMLButtonElement;
+  private shopBtnIcon = el('shop-btn-icon');
+  private shopBtnLabel = el('shop-btn-label');
+  private shopBadge = el('shop-badge');
+  private btnOpenJournal = el('btn-open-journal') as HTMLButtonElement;
+  private actionStack = el('hud-action-stack');
+  private journalBadge = el('journal-badge');
 
-  private hudObjective = document.getElementById('hud-objective')!;
-  private hudObjIcon = document.getElementById('hud-obj-icon')!;
-  private hudObjTitle = document.getElementById('hud-obj-title')!;
-  private hudObjSub = document.getElementById('hud-obj-sub')!;
+  private hudObjective = el('hud-objective') as HTMLDetailsElement;
+  private missionChapterTitle = el('mission-chapter-title');
+  private hudObjKicker = el('hud-obj-kicker');
+  private hudObjTitle = el('hud-obj-title');
+  private hudObjProgress = el('hud-obj-progress');
+  private hudObjSub = el('hud-obj-sub');
 
-  private radioToast = document.getElementById('radio-toast')!;
-  private radioSender = document.getElementById('radio-sender')!;
-  private radioText = document.getElementById('radio-text')!;
+  private radioToast = el('radio-toast');
+  private radioSender = el('radio-sender');
+  private radioText = el('radio-text');
 
-  private btnContinue = document.getElementById('btn-continue')!;
-  private shopRibbon = document.getElementById('shop-ribbon')!;
-  private shopRibbonTitle = document.getElementById('shop-ribbon-title')!;
-  private tabCards = document.getElementById('tab-cards') as HTMLButtonElement;
-  private tabTree = document.getElementById('tab-tree') as HTMLButtonElement;
-  private tabAchievements = document.getElementById('tab-achievements') as HTMLButtonElement;
-  private tabBadgeCards = document.getElementById('tab-badge-cards')!;
-  private tabBadgeAchieve = document.getElementById('tab-badge-achieve')!;
-  private panelCards = document.getElementById('panel-cards')!;
-  private panelTree = document.getElementById('panel-tree')!;
-  private panelAchievements = document.getElementById('panel-achievements')!;
+  private btnPlay = el('btn-play') as HTMLButtonElement;
+  private btnContinue = el('btn-continue') as HTMLButtonElement;
+  private continueLabel = el('continue-label');
+  private shopRibbon = el('shop-ribbon');
+  private tabTree = el('tab-tree') as HTMLButtonElement;
+  private tabJournal = el('tab-journal') as HTMLButtonElement;
+  private tabBadgeTree = el('tab-badge-tree');
+  private tabBadgeJournal = el('tab-badge-journal');
+  private panelTree = el('panel-tree');
+  private panelJournal = el('panel-journal');
 
-  private cardsScroll = document.getElementById('cards-scroll')!;
-  private runSummaryChips = document.getElementById('run-summary-chips')!;
-  private upgradeCoins = document.getElementById('upgrade-coins')!;
-  private treeLinks = document.getElementById('tree-links')!;
-  private treeNodes = document.getElementById('tree-nodes')!;
+  private runSummaryChips = el('run-summary-chips');
+  private upgradeCoins = el('upgrade-coins');
+  private treeMap = el('tree-map');
+  private treeCanvas = el('tree-canvas');
+  private treeLinks = el('tree-links');
+  private treeNodes = el('tree-nodes');
+  private shopToast = el('shop-toast');
+  private toastTimer = 0;
+  /** The buttons on the map, kept between renders so that focus and position survive a purchase. */
+  private nodeEls = new Map<UpgradeId, HTMLButtonElement>();
+  /** Centres of the tools on the map's canvas, which is as big as the whole grid. */
+  private nodeAt = new Map<UpgradeId, { x: number; y: number }>();
+  /** Tool size and spacing at this size of the map; vw and vh are the part of the canvas on view. */
+  private treeGeom = { w: 0, h: 0, gapX: 0, pad: 0, cw: 0, ch: 0, vw: 0, vh: 0 };
+  /** Where the canvas sits in the map: it only moves when the player drags it or opens the workshop. */
+  private pan = { x: 0, y: 0 };
+  private panAxes = { x: false, y: false };
+  private panToTools = true;
+  private panDragged = false;
+  private panGlideTimer = 0;
 
-  private inspHeaderCard = document.getElementById('insp-header-card')!;
-  private inspBranch = document.getElementById('insp-branch')!;
-  private inspIcon = document.getElementById('insp-icon')!;
-  private inspTitle = document.getElementById('insp-title')!;
-  private inspDesc = document.getElementById('insp-desc')!;
-  private inspStats = document.getElementById('insp-stats')!;
-  private btnBuyNode = document.getElementById('btn-buy-node') as HTMLButtonElement;
-  private inspEcoVal = document.getElementById('insp-eco-val')!;
-  private inspEcoBar = document.getElementById('insp-eco-bar')!;
-  private inspEcoSub = document.getElementById('insp-eco-sub')!;
+  private toolPanel = el('tool-panel');
+  private toolBottom = this.toolPanel.querySelector('.tool-bottom') as HTMLElement;
+  private inspHeaderCard = el('insp-header-card');
+  private inspBranch = el('insp-branch');
+  private inspIcon = el('insp-icon');
+  private inspTitle = el('insp-title');
+  private inspDesc = el('insp-desc');
+  private inspPips = el('insp-pips');
+  private inspStats = el('insp-stats');
+  private toolNote = el('tool-note');
+  private btnBuyNode = el('btn-buy-node') as HTMLButtonElement;
+  private btnReturn = el('btn-return-lagoon') as HTMLButtonElement;
 
-  private achChap1Btn = document.getElementById('ach-chap-1') as HTMLButtonElement;
-  private achChap2Btn = document.getElementById('ach-chap-2') as HTMLButtonElement;
-  private achBadge1 = document.getElementById('ach-badge-1')!;
-  private achBadge2 = document.getElementById('ach-badge-2')!;
-  private achCountLabel = document.getElementById('ach-count-label')!;
-  private achOverallBar = document.getElementById('ach-overall-bar')!;
-  private achCoinsLabel = document.getElementById('ach-coins-label')!;
-  private achieveGrid = document.getElementById('achieve-grid')!;
+  private journalPart1 = el('journal-part-1') as HTMLButtonElement;
+  private journalPart2 = el('journal-part-2') as HTMLButtonElement;
+  private journalBadge1 = el('journal-badge-1');
+  private journalBadge2 = el('journal-badge-2');
+  private journalCount = el('journal-count');
+  private journalBar = el('journal-bar');
+  private journalBook = el('journal-book');
+  private journalGrid = el('journal-grid');
+  private journalMeasure = el('journal-measure');
+  private journalPrev = el('journal-prev') as HTMLButtonElement;
+  private journalNext = el('journal-next') as HTMLButtonElement;
+  private journalPageLabel = el('journal-page');
+  /** Cards of the open part, as last rendered; the pager only cuts them into pages. */
+  private journalCards: string[] = [];
+  /** The first page entry shown, per part; a resize keeps it on screen. Null: pick where the news is. */
+  private journalAnchor: Record<JournalEntry['part'], number | null> = { cerita: null, patroli: null };
+  private journalPerPage = 1;
+  private journalPages = 1;
+  private journalPageIndex = 0;
+  private journalWheel = 0;
+  private journalWheelAt = 0;
 
-  private victoryStats = document.getElementById('victory-stats')!;
+  private victoryStats = el('victory-stats');
 
-  private activeTab: ShopTab = 'cards';
-  private activeAchChapter: 1 | 2 = 1;
+  private activeTab: ShopTab = 'tree';
+  public sawWorkshopTools = false;
+  private activePart: JournalEntry['part'] = 'cerita';
+  /** Pages that were new when the journal was opened; they keep their mark while it stays open. */
+  private freshPages = new Set<string>();
   private selectedNode: UpgradeId = 'wave_width';
-  private radioTimeout: number | null = null;
-  private lastKnownCoins = -1;
-  private displayedCoins = 0;
+  private notice = el('hud-notice');
+  private messages: HudMessage[] = [];
+  private messageLeft = 0;
+  private displayedCoins = -1;
   private lastHudCoinsText = '';
-  private lastComboShown: boolean | null = null;
   private lastComboText = '';
   private lastEnergyText = '';
   private lastEnergyWidth = '';
   private lastEnergySwatch = '';
   private lastEcoPct = -1;
-  private lastEcoMangroves = -1;
   private lastBossShown: boolean | null = null;
   private lastBossPct = -1;
   private lastShopSig = '';
   private lastTimeKey: TimeOfDay | null = null;
   private lastObjectiveKey = '';
-  private objectiveDismissedKey = '';
-  private lastShopUnlockedState: boolean | null = null;
   private currentProgress: PlayerProgress | null = null;
   private currentStats: ComputedStats | null = null;
+  private headline = '';
   private handlers: UIHandlers;
 
   constructor(handlers: UIHandlers) {
     this.handlers = handlers;
     this.mountStaticIcons();
     this.bindStaticEvents();
+    const observer = new ResizeObserver(() => {
+      this.guideBounds = this.playfield.getBoundingClientRect();
+    });
+    for (const region of this.hud.children) observer.observe(region);
+    observer.observe(this.hud);
   }
 
   private mountStaticIcons(): void {
-    document.getElementById('hud-coin-icon')!.innerHTML = getUiIconSvg('coin');
-    document.getElementById('shop-coin-icon')!.innerHTML = getUiIconSvg('coin');
-    document.getElementById('hud-energy-icon')!.innerHTML = getUiIconSvg('wave');
-    document.getElementById('hud-eco-icon')!.innerHTML = getUiIconSvg('mangrove');
-    document.getElementById('hud-boss-icon')!.innerHTML = getUiIconSvg('boss');
-    document.getElementById('achieve-btn-icon')!.innerHTML = getUiIconSvg('trophy');
-    document.getElementById('title-emblem')!.innerHTML = getUiIconSvg('wave');
-    document.getElementById('tf-icon-1')!.innerHTML = getUiIconSvg('swipe');
-    document.getElementById('tf-icon-2')!.innerHTML = getUiIconSvg('shop');
-    document.getElementById('title-play-icon')!.innerHTML = getUiIconSvg('play');
-    document.getElementById('title-settings-icon')!.innerHTML = getUiIconSvg('settings');
-    document.getElementById('btn-hud-settings')!.innerHTML = getUiIconSvg('settings');
-    document.getElementById('title-info-icon')!.innerHTML = getUiIconSvg('info');
-    document.getElementById('tab-icon-cards')!.innerHTML = getUiIconSvg('shop');
-    document.getElementById('tab-icon-tree')!.innerHTML = getUiIconSvg('tree');
-    document.getElementById('tab-icon-achieve')!.innerHTML = getUiIconSvg('trophy');
-    document.getElementById('ach-trophy-icon')!.innerHTML = getUiIconSvg('trophy');
-    document.getElementById('ach-coin-icon')!.innerHTML = getUiIconSvg('coin');
-    document.getElementById('footer-play-icon')!.innerHTML = getUiIconSvg('play');
-    document.getElementById('btn-close-shop')!.innerHTML = getUiIconSvg('close');
-    document.getElementById('btn-close-credits')!.innerHTML = getUiIconSvg('close');
-    document.getElementById('btn-close-settings')!.innerHTML = getUiIconSvg('close');
+    const icons: Record<string, UiIconName> = {
+      'hud-coin-icon': 'coin',
+      'shop-coin-icon': 'coin',
+      'hud-energy-icon': 'wave',
+      'hud-eco-icon': 'eco',
+      'hud-boss-icon': 'boss',
+      'hud-save-icon': 'warn',
+      'journal-btn-icon': 'journal',
+      'title-emblem': 'wave',
+      'title-play-icon': 'play',
+      'title-continue-icon': 'play',
+      'title-settings-icon': 'settings',
+      'btn-hud-settings': 'settings',
+      'title-info-icon': 'info',
+      'tab-icon-tree': 'tree',
+      'tab-icon-journal': 'journal',
+      'journal-sum-icon': 'journal',
+      'confirm-icon': 'warn',
+      'btn-close-shop': 'close',
+      'btn-close-credits': 'close',
+      'btn-close-settings': 'close',
+      'journal-prev': 'arrow_right',
+      'journal-next': 'arrow_right',
+      'journal-reset-icon': 'warn',
+      'tool-return-icon': 'wave',
+    };
+    for (const id in icons) el(id).innerHTML = getUiIconSvg(icons[id]);
     this.setMutedVisual(false);
   }
 
   private bindStaticEvents(): void {
-    document.getElementById('btn-play')!.addEventListener('click', () => {
+    const click = (id: string, fn: (e: Event) => void): void => el(id).addEventListener('click', fn);
+
+    this.btnPlay.addEventListener('click', () => {
       this.handlers.onUiClick?.();
       this.handlers.onStartNew();
     });
@@ -275,64 +375,30 @@ export class GameUI {
       this.handlers.onUiClick?.();
       this.handlers.onContinue();
     });
-    document.getElementById('btn-skip-intro')!.addEventListener('click', () => {
-      this.handlers.onSkipIntro();
-    });
-    this.btnOpenShop.addEventListener('click', () => {
-      if (!this.btnOpenShop.disabled) {
-        this.handlers.onOpenShop('cards');
-      } else {
-        this.handlers.onUiError?.();
-        showUiToast('Kumpulkan 20 Koin dulu untuk membuka Kalibrasi!', 'red');
-      }
-    });
-    this.btnOpenAchieve.addEventListener('click', () => {
-      this.handlers.onOpenShop('achievements');
-    });
-    document.getElementById('btn-keycap-shop')!.addEventListener('click', () => {
-      if (!this.btnOpenShop.disabled) {
-        this.handlers.onOpenShop();
-      } else {
-        this.handlers.onUiError?.();
-        showUiToast('Kumpulkan 20 Koin dulu untuk membuka Kalibrasi!', 'red');
-      }
-    });
-    document.getElementById('btn-keycap-mute')!.addEventListener('click', () => {
-      this.handlers.onToggleMute();
-    });
-    const openSettingsFrom = (el: HTMLElement | null) => {
+    click('btn-skip-intro', () => this.handlers.onSkipIntro());
+    this.btnOpenShop.addEventListener('click', () => this.handlers.onOpenShop('tree'));
+    this.btnOpenJournal.addEventListener('click', () => this.handlers.onOpenShop('journal'));
+
+    const openSettingsFrom = (e: Event): void => {
       this.handlers.onUiClick?.();
-      this.openSettings(el);
+      this.openSettings(e.currentTarget as HTMLElement);
     };
-    document.getElementById('btn-title-settings')!.addEventListener('click', (e) => {
-      openSettingsFrom(e.currentTarget as HTMLElement);
-    });
-    document.getElementById('btn-hud-settings')!.addEventListener('click', (e) => {
-      openSettingsFrom(e.currentTarget as HTMLElement);
-    });
-    document.getElementById('btn-keycap-settings')!.addEventListener('click', (e) => {
-      openSettingsFrom(e.currentTarget as HTMLElement);
-    });
-    document.getElementById('btn-close-settings')!.addEventListener('click', () => {
+    click('btn-title-settings', openSettingsFrom);
+    click('btn-hud-settings', openSettingsFrom);
+    const closeSettings = (): void => {
       this.handlers.onUiClick?.();
       this.closeSettings();
-    });
-    document.getElementById('btn-close-settings-ok')!.addEventListener('click', () => {
-      this.handlers.onUiClick?.();
-      this.closeSettings();
-    });
+    };
+    click('btn-close-settings', closeSettings);
+    click('btn-close-settings-ok', closeSettings);
     this.settingsModal.addEventListener('click', (e) => {
-      if (e.target === this.settingsModal) {
-        this.handlers.onUiClick?.();
-        this.closeSettings();
-      }
+      if (e.target === this.settingsModal) closeSettings();
     });
     this.graphicsOptions.addEventListener('click', (e) => {
       const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-quality]');
       if (!btn) return;
-      const q = btn.dataset.quality as QualitySetting;
       this.handlers.onTabSwitch?.();
-      this.handlers.onSelectQuality(q);
+      this.handlers.onSelectQuality(btn.dataset.quality as QualitySetting);
     });
     this.graphicsOptions.addEventListener('keydown', (e) => {
       const btns = Array.from(this.graphicsOptions.querySelectorAll<HTMLButtonElement>('[data-quality]'));
@@ -344,110 +410,86 @@ export class GameUI {
       if (next >= 0) {
         e.preventDefault();
         btns[next].focus();
-        const q = btns[next].dataset.quality as QualitySetting;
         this.handlers.onTabSwitch?.();
-        this.handlers.onSelectQuality(q);
+        this.handlers.onSelectQuality(btns[next].dataset.quality as QualitySetting);
       }
     });
     this.btnWebglRetry.addEventListener('click', () => {
       location.reload();
     });
-    this.hudObjective.addEventListener('click', () => {
-      this.objectiveDismissedKey = this.lastObjectiveKey;
-      this.hudObjective.classList.add('hidden');
-      this.handlers.onUiClick?.();
-    });
 
-    document.getElementById('btn-close-shop')!.addEventListener('click', () => {
-      this.handlers.onCloseShop();
-    });
-    document.getElementById('btn-resume-lagoon')!.addEventListener('click', () => {
-      this.handlers.onCloseShop();
-    });
+    this.hudSaveWarning.addEventListener('click', () => this.queueNotice(SAVE_FAILED, 'red', 5));
+
+    click('btn-close-shop', () => this.handlers.onCloseShop());
+    click('btn-return-lagoon', () => this.handlers.onCloseShop());
     this.upgradeScreen.addEventListener('click', (e) => {
-      if (e.target === this.upgradeScreen) {
-        this.handlers.onCloseShop();
-      }
+      if (e.target === this.upgradeScreen) this.handlers.onCloseShop();
     });
 
-    this.tabCards.addEventListener('click', () => this.setShopTab('cards'));
     this.tabTree.addEventListener('click', () => this.setShopTab('tree'));
-    this.tabAchievements.addEventListener('click', () => this.setShopTab('achievements'));
+    this.tabJournal.addEventListener('click', () => this.setShopTab('journal'));
 
-    this.achChap1Btn.addEventListener('click', () => {
-      if (this.activeAchChapter !== 1) {
-        this.activeAchChapter = 1;
-        this.handlers.onTabSwitch?.();
-        if (this.currentProgress) this.renderAchievementsPanel(this.currentProgress);
-      }
-    });
-    this.achChap2Btn.addEventListener('click', () => {
-      if (this.activeAchChapter !== 2) {
-        this.activeAchChapter = 2;
-        this.handlers.onTabSwitch?.();
-        if (this.currentProgress) this.renderAchievementsPanel(this.currentProgress);
-      }
+    this.tabTree.parentElement!.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      event.preventDefault();
+      this.setShopTab(this.activeTab === 'tree' ? 'journal' : 'tree');
     });
 
-    // Event delegation for Cards grid buy buttons
-    this.cardsScroll.addEventListener('click', (e) => {
-      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-buy-id]');
-      if (!btn) return;
-      const id = btn.dataset.buyId as UpgradeId;
-      if (btn.disabled) {
-        this.handlers.onUiError?.();
-        showUiToast('Koin belum cukup atau syarat belum terbuka!', 'red', 1800);
-        return;
-      }
-      this.selectedNode = id;
-      this.handlers.onBuyUpgrade(id, btn);
+    const openPart = (part: JournalEntry['part']): void => {
+      if (this.activePart === part) return;
+      this.activePart = part;
+      this.handlers.onTabSwitch?.();
+      if (this.currentProgress) this.renderJournal(this.currentProgress);
+    };
+    this.journalPart1.addEventListener('click', () => openPart('cerita'));
+    this.journalPart2.addEventListener('click', () => openPart('patroli'));
+    this.journalPart1.parentElement!.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      event.preventDefault();
+      openPart(this.activePart === 'cerita' ? 'patroli' : 'cerita');
+      (this.activePart === 'cerita' ? this.journalPart1 : this.journalPart2).focus({ preventScroll: true });
     });
+    this.bindWorkshopEvents();
 
-    // Event delegation for Achievements claim buttons
-    this.achieveGrid.addEventListener('click', (e) => {
-      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-claim-id]');
-      if (!btn) return;
-      const id = btn.dataset.claimId!;
-      if (btn.disabled) {
-        this.handlers.onUiError?.();
-        showUiToast('Target pencapaian belum selesai!', 'red', 1600);
-        return;
-      }
-      this.handlers.onClaimAchievement(id, btn);
-    });
-
-    this.btnMute.addEventListener('click', () => {
-      this.handlers.onToggleMute();
-    });
-    document.getElementById('btn-reset-save')!.addEventListener('click', () => {
+    this.btnMute.addEventListener('click', () => this.handlers.onToggleMute());
+    click('btn-reset-save', () => {
       this.handlers.onUiClick?.();
-      if (window.confirm('Reset semua progres ALUN dan mulai ulang dari awal?')) {
-        this.lastKnownCoins = -1;
-        this.displayedCoins = 0;
-        this.objectiveDismissedKey = '';
-        this.handlers.onResetSave();
-      }
+      this.handlers.onResetSave();
     });
 
-    document.getElementById('btn-credits')!.addEventListener('click', () => {
+    this.btnConfirmNo.addEventListener('click', () => {
+      this.handlers.onUiClick?.();
+      this.closeConfirm();
+    });
+    this.btnConfirmYes.addEventListener('click', () => {
+      this.handlers.onUiClick?.();
+      const yes = this.confirmYes;
+      this.closeConfirm();
+      yes?.();
+    });
+    this.confirmModal.addEventListener('click', (e) => {
+      if (e.target === this.confirmModal) this.closeConfirm();
+    });
+
+    click('btn-credits', () => {
       this.handlers.onUiClick?.();
       this.creditsModal.classList.remove('hidden');
     });
-    const closeCredits = () => {
+    const closeCredits = (): void => {
       this.handlers.onUiClick?.();
       this.creditsModal.classList.add('hidden');
     };
-    document.getElementById('btn-close-credits')!.addEventListener('click', closeCredits);
-    document.getElementById('btn-close-credits-ok')!.addEventListener('click', closeCredits);
+    click('btn-close-credits', closeCredits);
+    click('btn-close-credits-ok', closeCredits);
     this.creditsModal.addEventListener('click', (e) => {
       if (e.target === this.creditsModal) closeCredits();
     });
 
-    document.getElementById('btn-endless')!.addEventListener('click', () => {
+    click('btn-endless', () => {
       this.handlers.onUiClick?.();
       this.handlers.onStartEndless();
     });
-    document.getElementById('btn-victory-tree')!.addEventListener('click', () => {
+    click('btn-victory-shop', () => {
       this.handlers.onUiClick?.();
       this.handlers.onOpenShopFromVictory();
     });
@@ -456,8 +498,15 @@ export class GameUI {
         this.handlers.onUiError?.();
         return;
       }
-      this.handlers.onBuyUpgrade(this.selectedNode, this.btnBuyNode);
+      if (this.selectedNode === 'unlock_boss') this.handlers.onAnswerCall(this.btnBuyNode);
+      else this.handlers.onBuyUpgrade(this.selectedNode, this.btnBuyNode);
     });
+  }
+
+  /** Why the workshop will not open yet, for whoever tries the door. */
+  public explainClosedShop(): void {
+    this.handlers.onUiError?.();
+    this.queueNotice(CLOSED_SHOP, 'red', 3);
   }
 
   public setMutedVisual(muted: boolean): void {
@@ -465,50 +514,7 @@ export class GameUI {
     this.btnMute.dataset.swatch = muted ? 'red' : 'dark';
   }
 
-  public setShopTab(tab: ShopTab, silent = false): void {
-    if (this.activeTab === tab && !silent) return;
-    this.activeTab = tab;
-    if (!silent) this.handlers.onTabSwitch?.();
-    this.applyShopTabVisuals();
-    if (this.currentProgress && this.currentStats) {
-      if (tab === 'cards') this.renderCardsPanel(this.currentProgress);
-      else if (tab === 'tree') {
-        this.renderSkillTree(this.currentProgress, this.currentStats);
-        this.renderInspector(this.currentProgress, this.currentStats);
-      } else if (tab === 'achievements') {
-        this.renderAchievementsPanel(this.currentProgress);
-      }
-    }
-  }
-
-  private applyShopTabVisuals(): void {
-    const isCards = this.activeTab === 'cards';
-    const isTree = this.activeTab === 'tree';
-    const isAch = this.activeTab === 'achievements';
-
-    this.panelCards.classList.toggle('hidden', !isCards);
-    this.panelTree.classList.toggle('hidden', !isTree);
-    this.panelAchievements.classList.toggle('hidden', !isAch);
-
-    this.tabCards.classList.toggle('is-active', isCards);
-    this.tabTree.classList.toggle('is-active', isTree);
-    this.tabAchievements.classList.toggle('is-active', isAch);
-
-    this.tabCards.dataset.swatch = isCards ? 'purple' : 'slate';
-    this.tabTree.dataset.swatch = isTree ? 'teal' : 'slate';
-    this.tabAchievements.dataset.swatch = isAch ? 'blue' : 'slate';
-
-    if (isCards) {
-      this.shopRibbon.dataset.swatch = 'orange';
-      this.shopRibbonTitle.textContent = 'Toko Kalibrasi A.L.U.N.';
-    } else if (isTree) {
-      this.shopRibbon.dataset.swatch = 'teal';
-      this.shopRibbonTitle.textContent = 'Pohon Evolusi Ombak';
-    } else {
-      this.shopRibbon.dataset.swatch = 'blue';
-      this.shopRibbonTitle.textContent = 'Pencapaian Pesisir';
-    }
-  }
+  /* ================================================================ windows */
 
   public isSettingsOpen(): boolean {
     return this.settingsOpen;
@@ -522,13 +528,37 @@ export class GameUI {
     this.creditsModal.classList.add('hidden');
   }
 
+  /** Asks before something is lost. The safe answer has the focus. */
+  public confirm(title: string, text: string, yesLabel: string, onYes: () => void): void {
+    this.confirmTitle.textContent = title;
+    this.confirmText.textContent = text;
+    this.btnConfirmYes.textContent = yesLabel;
+    this.confirmYes = onYes;
+    this.confirmReturnFocus = document.activeElement as HTMLElement | null;
+    this.confirmModal.classList.remove('hidden');
+    this.btnConfirmNo.focus();
+  }
+
+  public isConfirmOpen(): boolean {
+    return !this.confirmModal.classList.contains('hidden');
+  }
+
+  public closeConfirm(): void {
+    this.confirmYes = null;
+    this.confirmModal.classList.add('hidden');
+    this.confirmReturnFocus?.focus();
+    this.confirmReturnFocus = null;
+  }
+
   public openSettings(returnFocus?: HTMLElement | null): void {
     if (this.settingsOpen) return;
     this.settingsOpen = true;
+    this.syncHudVisibility();
     this.settingsReturnFocus = returnFocus ?? (document.activeElement as HTMLElement | null);
     this.settingsModal.classList.remove('hidden');
     this.handlers.onSettingsToggle?.(true);
-    const active = this.graphicsOptions.querySelector<HTMLButtonElement>('.graphics-opt.is-selected') ??
+    const active =
+      this.graphicsOptions.querySelector<HTMLButtonElement>('.graphics-opt.is-selected') ??
       this.graphicsOptions.querySelector<HTMLButtonElement>('[data-quality]');
     active?.focus();
   }
@@ -536,6 +566,7 @@ export class GameUI {
   public closeSettings(): void {
     if (!this.settingsOpen) return;
     this.settingsOpen = false;
+    this.syncHudVisibility();
     this.settingsModal.classList.add('hidden');
     this.handlers.onSettingsToggle?.(false);
     this.settingsReturnFocus?.focus();
@@ -557,7 +588,7 @@ export class GameUI {
 
   public showPerfHint(suggested: Tier): void {
     const label = TIER_LABELS[suggested];
-    showUiToast(`Performa terasa berat — coba grafis ${label} di Pengaturan [G]`, 'orange', 4200);
+    this.queueNotice(`Performa terasa berat. Coba grafis ${label} di Pengaturan [G]`, 'orange', 4.2);
   }
 
   public showWebglError(title: string, message: string, tip: string, showRetry = true): void {
@@ -566,56 +597,78 @@ export class GameUI {
     this.webglErrorTip.textContent = tip;
     this.btnWebglRetry.classList.toggle('hidden', !showRetry);
     this.webglErrorModal.classList.remove('hidden');
+    this.syncHudVisibility();
   }
 
   public hideWebglError(): void {
     this.webglErrorModal.classList.add('hidden');
+    this.syncHudVisibility();
   }
 
-  public showPhase(phase: GamePhase, hasSavedProgress: boolean): void {
+  private syncHudVisibility(): void {
+    const visible = this.app.dataset.phase === 'playing' && !this.settingsOpen &&
+      this.introOverlay.classList.contains('hidden') && this.webglErrorModal.classList.contains('hidden');
+    this.hud.classList.toggle('hidden', !visible);
+  }
+
+  public showPhase(phase: GamePhase): void {
+    this.app.dataset.phase = phase;
     this.titleScreen.classList.toggle('hidden', phase !== 'title');
     if (phase === 'intro' && this.introOverlay.classList.contains('hidden')) this.setIntroCaption('', '');
     this.introOverlay.classList.toggle('hidden', phase !== 'intro');
-    this.hud.classList.toggle('hidden', phase !== 'playing');
+    this.syncHudVisibility();
     this.upgradeScreen.classList.toggle('hidden', phase !== 'upgrade');
     this.victoryScreen.classList.toggle('hidden', phase !== 'victory');
-    this.btnContinue.classList.toggle('hidden', !hasSavedProgress);
+    if (phase === 'upgrade') {
+      // laid out now that it has a size, so the first frame is already the finished one
+      this.layoutShop();
+      (this.activeTab === 'tree' ? this.tabTree : this.tabJournal).focus({ preventScroll: true });
+    } else this.hideShopToast();
   }
+
+  /** With a story to continue, continuing is the big button; without one, starting is. */
+  public setTitleSave(chapter: string | null): void {
+    const has = chapter !== null;
+    this.btnContinue.classList.toggle('hidden', !has);
+    if (has) this.continueLabel.textContent = `Lanjutkan · ${chapter}`;
+    this.btnPlay.dataset.swatch = has ? 'blue' : 'green';
+    this.btnPlay.classList.toggle('ui-btn-lg', !has);
+    this.btnPlay.classList.toggle('t-stroke-md', !has);
+    this.btnPlay.classList.toggle('t-stroke-sm', has);
+  }
+
+  /** A new story or an erased one: nothing on screen may come from the old one. */
+  public forgetProgress(): void {
+    this.displayedCoins = -1;
+    this.lastHudCoinsText = '';
+    this.lastShopSig = '';
+    this.lastEcoPct = -1;
+    this.lastObjectiveKey = '';
+    this.messages.length = 0;
+    this.messageLeft = 0;
+    this.hud.removeAttribute('data-ready');
+    this.notice.classList.add('hidden');
+    this.radioToast.classList.add('hidden');
+    this.hudObjective.open = false;
+    this.activeTab = 'tree';
+    this.activePart = 'cerita';
+    this.freshPages.clear();
+    this.journalAnchor = { cerita: null, patroli: null };
+    this.selectedNode = 'wave_width';
+  }
+
+  public setSaveWarning(failed: boolean): void {
+    this.hudSaveWarning.classList.toggle('hidden', !failed);
+    if (failed) this.queueNotice(SAVE_FAILED, 'red', 6);
+  }
+
+  /* ================================================================ films and hints */
 
   /** Letterbox and subtitles over play, for a short film in the middle of the game; the HUD steps aside. */
   public setFilm(on: boolean): void {
     if (on && this.introOverlay.classList.contains('hidden')) this.setIntroCaption('', '');
     this.introOverlay.classList.toggle('hidden', !on);
-    this.hud.classList.toggle('hidden', on);
-  }
-
-  /** A mission that outranks the usual ones for a while (the dolphin), or `null` to go back to them. */
-  public setEventObjective(o: { title: string; sub: string; icon: UiIconName; swatch: UiSwatch } | null): void {
-    this.eventObjective = o;
-    this.lastObjectiveKey = '';
-  }
-
-  /** The "swipe like this" hint: a dot running from open water to the target, or `null` to hide it. */
-  public updateRescueHint(h: { ax: number; ay: number; bx: number; by: number } | null, time: number): void {
-    if (!h) {
-      if (!this.rescueHint.classList.contains('hidden')) this.rescueHint.classList.add('hidden');
-      return;
-    }
-    this.rescueHint.classList.remove('hidden');
-    const set = (el: Element, attrs: Record<string, number | string>): void => {
-      for (const k in attrs) el.setAttribute(k, String(attrs[k]));
-    };
-    set(this.rescueLine, { x1: h.ax.toFixed(1), y1: h.ay.toFixed(1), x2: h.bx.toFixed(1), y2: h.by.toFixed(1) });
-    const p = (time % 1.7) / 1.7;
-    const u = Math.min(1, p / 0.72);
-    const k = u * u * (3 - 2 * u);
-    set(this.rescueDot, {
-      cx: (h.ax + (h.bx - h.ax) * k).toFixed(1),
-      cy: (h.ay + (h.by - h.ay) * k).toFixed(1),
-      opacity: (p < 0.08 ? p / 0.08 : p > 0.82 ? Math.max(0, 1 - (p - 0.82) / 0.18) : 1).toFixed(2),
-    });
-    set(this.rescueRing, { cx: h.bx.toFixed(1), cy: h.by.toFixed(1), r: (34 + Math.sin(time * 5) * 5).toFixed(1) });
-    set(this.rescueLabel, { x: (h.ax - 26).toFixed(1), y: (h.ay + 7).toFixed(1) });
+    this.syncHudVisibility();
   }
 
   /** The opening's subtitle. Two empty strings fade it out. */
@@ -632,35 +685,113 @@ export class GameUI {
     this.introCaption.classList.remove('is-out');
   }
 
-  public showRadio(sender: string, text: string): void {
-    this.radioSender.textContent = sender;
-    this.radioText.textContent = text;
-    this.radioToast.classList.remove('hidden');
-    if (this.radioTimeout !== null) window.clearTimeout(this.radioTimeout);
-    this.radioTimeout = window.setTimeout(() => {
-      this.radioToast.classList.add('hidden');
-    }, 5200);
+  public showChapter(n: number): void {
+    this.hudObjective.open = n <= 4;
+    this.missionChapterTitle.hidden = n <= 4;
+    this.hudObjKicker.textContent = n >= PATROL ? 'Patroli' : `Bab ${n}`;
+    this.missionChapterTitle.textContent = chapterTitle(n);
+  }
+
+  /** Mark the start of the gesture and its direction on the same plane the input uses. */
+  public updateSwipeHint(h: { ax: number; ay: number; bx: number; by: number } | null): boolean {
+    const bounds = this.guideBounds;
+    const margin = 7;
+    const visible = h !== null &&
+      Math.min(h.ax, h.bx) >= bounds.left + margin && Math.max(h.ax, h.bx) <= bounds.right - margin &&
+      Math.min(h.ay, h.by) >= bounds.top + margin && Math.max(h.ay, h.by) <= bounds.bottom - margin;
+    this.swipeHint.classList.toggle('hidden', !visible);
+    if (!visible || !h) return false;
+    const ax = h.ax - bounds.left;
+    const ay = h.ay - bounds.top;
+    const bx = h.bx - bounds.left;
+    const by = h.by - bounds.top;
+    const set = (node: Element, attrs: Record<string, number | string>): void => {
+      for (const k in attrs) node.setAttribute(k, String(attrs[k]));
+    };
+    set(this.swipeLine, { x1: ax.toFixed(1), y1: ay.toFixed(1), x2: bx.toFixed(1), y2: by.toFixed(1) });
+    set(this.swipeDot, { cx: ax.toFixed(1), cy: ay.toFixed(1) });
+    const angle = Math.atan2(by - ay, bx - ax) * 180 / Math.PI;
+    this.swipeHead.setAttribute('transform', `translate(${bx.toFixed(1)} ${by.toFixed(1)}) rotate(${angle.toFixed(1)})`);
+    return true;
+  }
+
+  /** Only a target beyond the viewport needs an edge arrow. */
+  public updatePointer(p: { x: number; y: number } | null): void {
+    const r = this.guideBounds;
+    const visible = p !== null && r.width >= 80 && r.height >= 64;
+    this.pointer.classList.toggle('hidden', !visible);
+    if (!p || !visible) return;
+    const off = p.x < r.left || p.x > r.right || p.y < r.top || p.y > r.bottom;
+    const x = off ? Math.max(r.left + 26, Math.min(r.right - 26, p.x)) : p.x;
+    const y = off ? Math.max(r.top + 26, Math.min(r.bottom - 26, p.y)) : p.y;
+    this.pointer.style.transform = `translate(${(x - r.left).toFixed(1)}px, ${(y - r.top).toFixed(1)}px)`;
+    const turn = off ? Math.atan2(p.y - y, p.x - x) - Math.PI / 2 : 0;
+    this.pointerArrow.style.transform = `rotate(${turn.toFixed(3)}rad) translateY(-12px)`;
+  }
+
+  /* ================================================================ radio */
+
+  private enqueue(message: HudMessage): void {
+    if (this.messages.some((queued) => queued.text === message.text)) return;
+    if (this.messageLeft > 0 && message.text ===
+      (this.notice.classList.contains('hidden') ? this.radioText.textContent : this.notice.textContent)) return;
+    // Keep the latest events relevant when several rewards arrive during one conversation.
+    if (this.messages.length === 4) this.messages.shift();
+    this.messages.push(message);
+  }
+
+  public showRadio(sender: string, text: string, tutorial = false): void {
+    const message: HudMessage = { kind: 'radio', sender, text, seconds: radioTime(text) };
+    if (tutorial) {
+      // A player who has returned the chest should already hear the invitation to the workshop.
+      this.messages = this.messages.filter((m) => m.kind !== 'radio');
+      if (!this.radioToast.classList.contains('hidden')) this.messageLeft = 0;
+      this.messages.unshift(message);
+    } else this.enqueue(message);
+  }
+
+  private queueNotice(text: string, swatch: UiSwatch, seconds: number): void {
+    this.enqueue({ kind: 'notice', swatch, text, seconds });
+  }
+
+  public tick(dt: number): void {
+    if (document.hidden || this.hud.classList.contains('hidden')) return;
+    this.messageLeft = Math.max(0, this.messageLeft - dt);
+    if (this.messageLeft > 0) return;
+    const next = this.messages.shift();
+    this.radioToast.classList.toggle('hidden', next?.kind !== 'radio');
+    this.notice.classList.toggle('hidden', next?.kind !== 'notice');
+    if (!next) return;
+    this.messageLeft = next.seconds;
+    if (next.kind === 'radio') {
+      this.radioSender.textContent = next.sender;
+      this.radioSender.dataset.who = next.sender === 'A.L.U.N.' ? 'alun' : next.sender === 'BU SARI' ? 'sari' : 'warga';
+      this.radioText.textContent = next.text;
+    } else {
+      this.notice.dataset.swatch = next.swatch;
+      this.notice.textContent = next.text;
+    }
   }
 
   public celebrate(text: string, swatch: UiSwatch = 'green', originEl?: HTMLElement | null): void {
-    showUiToast(text, swatch, 2400);
-    spawnUiConfetti(originEl ?? null, 24);
+    // in the workshop the news shows over the map and the tool that changed pops; nothing else moves
+    if (originEl && !this.upgradeScreen.classList.contains('hidden')) {
+      this.showShopToast(text, swatch);
+      this.bumpNode(this.selectedNode);
+      return;
+    }
+    this.queueNotice(text, swatch, 2.8);
   }
 
   public showToast(text: string, swatch: UiSwatch = 'green'): void {
-    showUiToast(text, swatch, 2200);
+    this.queueNotice(text, swatch, 2.2);
   }
 
-  private spawnCoinDelta(amount: number): void {
-    const el = document.createElement('span');
-    el.className = 'ui-delta-float t-stroke-sm t-lime num';
-    el.textContent = `+${amount.toLocaleString('id-ID')}`;
-    this.hudCoinDeltas.appendChild(el);
-    window.setTimeout(() => el.remove(), 1100);
-
-    this.hudCoinPill.classList.remove('is-bump');
-    requestAnimationFrame(() => this.hudCoinPill.classList.add('is-bump'));
-    window.setTimeout(() => this.hudCoinPill.classList.remove('is-bump'), 190);
+  /** The shore took something: the health bar flinches. */
+  public pulseHealth(): void {
+    this.hudEcoWrap.classList.remove('is-hurt');
+    void this.hudEcoWrap.offsetWidth;
+    this.hudEcoWrap.classList.add('is-hurt');
   }
 
   public updateHud(
@@ -669,28 +800,25 @@ export class GameUI {
     tod: TimeOfDay,
     energy: number,
     maxEnergy: number,
-    comboMult: number,
     comboCount: number,
-    bossHpRatio: number | null
+    bossHpRatio: number | null,
+    objective: Objective
   ): void {
+    const wallet = progress.totalCoinsEarned > 0 || progress.coins > 0 || progress.shopUnlocked;
+    const waves = progress.totalWaves > 0 || progress.shopUnlocked;
+    const coast = progress.story.chapter >= 3 && bossHpRatio === null;
+    const weather = progress.story.chapter >= 6 && bossHpRatio === null;
+    this.hudCoinPill.classList.toggle('hidden', !wallet);
+    this.hudEnergy.classList.toggle('hidden', !waves);
+    this.hudEcoWrap.classList.toggle('hidden', !coast);
+    this.hudTimePill.classList.toggle('hidden', !weather);
+    if (!this.hud.hasAttribute('data-ready')) this.hud.dataset.ready = 'true';
     const exactCoins = Math.floor(progress.coins);
-    if (this.lastKnownCoins < 0) {
-      this.lastKnownCoins = exactCoins;
+    if (this.displayedCoins < 0 || exactCoins < this.displayedCoins) {
       this.displayedCoins = exactCoins;
-    } else if (exactCoins > this.lastKnownCoins) {
-      const gained = exactCoins - this.lastKnownCoins;
-      if (gained >= 1) this.spawnCoinDelta(gained);
-      this.lastKnownCoins = exactCoins;
-    } else if (exactCoins < this.lastKnownCoins) {
-      this.lastKnownCoins = exactCoins;
-      this.displayedCoins = exactCoins;
-    }
-
-    // Smooth rolling counter interpolation
-    if (this.displayedCoins !== exactCoins) {
-      const diff = exactCoins - this.displayedCoins;
-      const step = Math.abs(diff) <= 2 ? diff : Math.ceil(diff * 0.22);
-      this.displayedCoins += step;
+    } else if (exactCoins > this.displayedCoins) {
+      const remaining = exactCoins - this.displayedCoins;
+      this.displayedCoins += remaining <= 2 ? remaining : Math.ceil(remaining * 0.22);
     }
     const coinsText = Math.floor(this.displayedCoins).toLocaleString('id-ID');
     if (coinsText !== this.lastHudCoinsText) {
@@ -707,18 +835,12 @@ export class GameUI {
       this.hudDayLabel.textContent = meta.label;
     }
 
-    // Combo chip
-    const showCombo = comboCount >= 2;
-    if (showCombo !== this.lastComboShown) {
-      this.lastComboShown = showCombo;
-      this.hudComboPill.classList.toggle('hidden', !showCombo);
-    }
-    if (showCombo) {
-      const comboText = `x${comboMult.toFixed(2)}`;
-      if (comboText !== this.lastComboText) {
-        this.lastComboText = comboText;
-        this.hudComboVal.textContent = comboText;
-      }
+    // Combo chip: how many in a row, nothing more
+    const comboText = comboCount >= 2 ? `${comboCount}` : '';
+    if (comboText !== this.lastComboText) {
+      this.lastComboText = comboText;
+      this.hudComboPill.classList.toggle('hidden', comboText === '');
+      this.hudComboVal.textContent = comboText;
     }
 
     // Energy meter pill (compositor-only transform avoids per-frame layout/paint during wave regeneration)
@@ -740,15 +862,17 @@ export class GameUI {
       this.hudEnergyBar.dataset.swatch = energySwatch;
     }
 
-    // Eco slim bar
-    if (stats.ecoPercent !== this.lastEcoPct || progress.mangroves.length !== this.lastEcoMangroves) {
+    // Coastal health
+    if (stats.ecoPercent !== this.lastEcoPct) {
       this.lastEcoPct = stats.ecoPercent;
-      this.lastEcoMangroves = progress.mangroves.length;
+      const swatch = healthSwatch(stats.pollution);
       this.hudEcoBar.style.width = `${stats.ecoPercent}%`;
-      this.hudEcoPct.textContent = `${stats.ecoPercent}% · ${progress.mangroves.length} Pohon`;
+      this.hudEcoBar.dataset.swatch = swatch;
+      this.hudEcoIcon.dataset.swatch = swatch;
+      this.hudEcoPct.textContent = `Pesisir ${stats.ecoPercent}%`;
     }
 
-    // Boss slim bar
+    // Mother ship
     const showBoss = bossHpRatio !== null;
     if (showBoss !== this.lastBossShown) {
       this.lastBossShown = showBoss;
@@ -758,425 +882,907 @@ export class GameUI {
       const pct = Math.max(0, Math.min(100, Math.round(bossHpRatio * 100)));
       if (pct !== this.lastBossPct) {
         this.lastBossPct = pct;
-        this.hudBossVal.textContent = `KAPAL ${pct}%`;
+        this.hudBossVal.textContent = `Kapal induk ${pct}%`;
         this.hudBossBar.style.width = `${pct}%`;
       }
     }
 
-    // Shop / Kalibrasi Button (Locked until first affordable upgrade!)
-    const shopSig = `${progress.shopUnlocked ? 1 : 0}:${exactCoins}:${progress.totalWaves}:${progress.totalTrash}:${progress.totalRareTrash}:${progress.totalBoats}:${progress.totalFires}:${progress.totalResonances}:${progress.mangroves.length}:${progress.claimedAchievements.length}:${stats.ecoPercent}:${progress.victoryAchieved ? 1 : 0}`;
-    if (shopSig !== this.lastShopSig) {
-      this.lastShopSig = shopSig;
-      const claimableAch = countClaimableAchievements(progress);
-      if (!progress.shopUnlocked) {
-        const target = getMinUnlockableCost(progress);
-        this.btnOpenShop.disabled = true;
-        this.btnOpenShop.dataset.swatch = 'slate';
-        this.btnOpenShop.classList.remove('has-affordable');
-        if (this.lastShopUnlockedState !== false) {
-          this.lastShopUnlockedState = false;
-          this.shopBtnIcon.innerHTML = getUiIconSvg('lock');
-        }
-        this.shopBadge.classList.add('hidden');
-        this.shopBtnLabel.textContent = `KALIBRASI · ${exactCoins}/${target}`;
-        this.btnOpenAchieve.classList.add('hidden');
-      } else {
-        const affordable = countAffordableUpgrades(progress);
-        this.btnOpenShop.disabled = false;
-        this.btnOpenShop.dataset.swatch = affordable > 0 ? 'gold' : 'purple';
-        this.btnOpenShop.classList.toggle('has-affordable', affordable > 0);
-        if (this.lastShopUnlockedState !== true) {
-          this.lastShopUnlockedState = true;
-          this.shopBtnIcon.innerHTML = getUiIconSvg('shop');
-        }
-        this.shopBtnLabel.textContent = 'KALIBRASI';
-        this.shopBadge.classList.toggle('hidden', affordable === 0);
-        if (affordable > 0) this.shopBadge.textContent = String(affordable);
-
-        this.btnOpenAchieve.classList.remove('hidden');
-        this.achieveBadge.classList.toggle('hidden', claimableAch === 0);
-        if (claimableAch > 0) this.achieveBadge.textContent = String(claimableAch);
-      }
-    }
-
-    // Dynamic Objective Banner (Exact f_031 Objective Card, auto-hides when dismissed)
-    this.updateObjectiveBanner(progress, stats, showBoss);
+    this.updateShopButton(progress);
+    this.updateObjectiveBanner(objective);
   }
 
-  private updateObjectiveBanner(
-    progress: PlayerProgress,
-    stats: ComputedStats,
-    bossActive: boolean
-  ): void {
-    let key = '';
-    let icon: UiIconName = 'wave';
-    let title = '';
-    let sub = '';
-    let swatch: UiSwatch = 'orange';
+  private updateShopButton(progress: PlayerProgress): void {
+    const open = progress.shopUnlocked;
+    const call = open && progress.story.step === 'call' && !progress.story.callAnswered;
+    const visit = progress.story.step === 'workshop';
+    const affordable = open ? countAffordableUpgrades(progress) : 0;
+    const unread = open ? unreadPages(progress).length : 0;
+    const sig = `${open}:${visit}:${call}:${affordable}:${unread}`;
+    if (sig === this.lastShopSig) return;
+    this.lastShopSig = sig;
 
-    if (this.eventObjective) {
-      ({ title, sub, icon, swatch } = this.eventObjective);
-      key = `event:${title}:${sub}`;
-    } else if (!progress.shopUnlocked) {
-      key = 'unlock_shop';
-      icon = 'coin';
-      title = 'Kumpulkan 20 Koin';
-      sub = 'Klik & geser di air untuk menyapu limbah ke Jaring Desa!';
-      swatch = 'orange';
-    } else if (bossActive) {
-      key = 'defeat_boss';
-      icon = 'boss';
-      title = 'Usir Kapal Limbah!';
-      sub = 'Hantam dengan Ombak Pasang & Resonansi untuk pulihkan laguna!';
-      swatch = 'red';
-    } else if (progress.totalWaves < 14 && Object.values(progress.upgrades).reduce((a, b) => a + b, 0) <= 1) {
-      key = 'first_upgrade';
-      icon = 'shop';
-      title = 'Buka Kalibrasi [Tab]';
-      sub = 'Tingkatkan Bentang Ombak, Debit Muatan, & AI Arus Pemandu!';
-      swatch = 'gold';
-    } else if (!progress.victoryAchieved && stats.bossUnlocked) {
-      key = 'storm_active';
-      icon = 'storm';
-      title = 'Badai Muson Tiba';
-      sub = 'Siapkan ombak terbesar menghadapi Kapal Limbah Ilegal!';
-      swatch = 'purple';
-    } else {
-      key = '';
-    }
+    this.actionStack.classList.toggle('hidden', !open);
+    if (!open) return;
+    this.btnOpenShop.classList.toggle('is-guided', visit);
+    this.btnOpenShop.dataset.swatch = call ? 'red' : visit || affordable > 0 ? 'gold' : 'purple';
+    this.shopBtnIcon.innerHTML = getUiIconSvg(call ? 'radio' : 'shop');
+    this.shopBtnLabel.textContent = call ? 'Jawab radio' : 'Bengkel';
+    this.btnOpenShop.setAttribute('aria-label', call ? 'Jawab radio di bengkel' : 'Bengkel');
+    this.btnOpenShop.title = call ? 'Jawab radio (E)' : 'Bengkel (E)';
+    this.shopBadge.classList.toggle('hidden', affordable === 0);
+    if (affordable > 0) this.shopBadge.textContent = String(affordable);
 
-    if (!key || key === this.objectiveDismissedKey) {
-      this.hudObjective.classList.add('hidden');
-      return;
-    }
+    this.btnOpenJournal.classList.toggle('hidden', visit);
+    this.journalBadge.classList.toggle('hidden', unread === 0);
+    if (unread > 0) this.journalBadge.textContent = String(unread);
+  }
 
-    if (key !== this.lastObjectiveKey) {
-      this.lastObjectiveKey = key;
-      this.hudObjective.dataset.swatch = swatch;
-      this.hudObjIcon.innerHTML = getUiIconSvg(icon);
-      this.hudObjTitle.textContent = title;
-      this.hudObjSub.textContent = sub;
-    }
+  private updateObjectiveBanner(o: Objective): void {
+    const key = [o.key, o.title, o.progress, o.sub].join('|');
+    if (key === this.lastObjectiveKey) return;
+    this.lastObjectiveKey = key;
+    this.hudObjective.dataset.swatch = o.swatch;
+    if (this.hudObjTitle.textContent !== o.title) this.hudObjTitle.textContent = o.title;
+    this.hudObjProgress.textContent = o.progress ?? '';
+    this.hudObjSub.textContent = o.sub;
     this.hudObjective.classList.remove('hidden');
   }
 
-  public renderUpgradeScreen(progress: PlayerProgress, stats: ComputedStats, forceTab?: ShopTab): void {
+  /* ================================================================ workshop */
+
+  public setShopTab(tab: ShopTab): void {
+    if (this.activeTab === tab) return;
+    this.activeTab = tab;
+    this.handlers.onTabSwitch?.();
+    this.applyShopTabVisuals();
+    this.renderActiveTab();
+    (tab === 'tree' ? this.tabTree : this.tabJournal).focus({ preventScroll: true });
+  }
+
+  private applyShopTabVisuals(): void {
+    const tabs: [ShopTab, HTMLButtonElement, HTMLElement, UiSwatch][] = [
+      ['tree', this.tabTree, this.panelTree, 'teal'],
+      ['journal', this.tabJournal, this.panelJournal, 'blue'],
+    ];
+    for (const [id, tab, panel, swatch] of tabs) {
+      const on = this.activeTab === id;
+      panel.classList.toggle('hidden', !on);
+      tab.classList.toggle('is-active', on);
+      tab.setAttribute('aria-selected', String(on));
+      tab.tabIndex = on ? 0 : -1;
+      tab.dataset.swatch = on ? swatch : 'slate';
+    }
+    this.shopRibbon.dataset.swatch = this.activeTab === 'tree' ? 'teal' : 'blue';
+  }
+
+  public renderUpgradeScreen(progress: PlayerProgress, stats: ComputedStats, headline: string, forceTab?: ShopTab): void {
+    const entering = this.upgradeScreen.classList.contains('hidden');
     this.currentProgress = progress;
     this.currentStats = stats;
-
-    if (forceTab) {
-      this.activeTab = forceTab;
+    this.headline = headline;
+    if (entering) this.activeTab = forceTab ?? 'tree';
+    else if (forceTab) this.activeTab = forceTab;
+    if (entering) {
+      this.freshPages.clear();
+      this.sawWorkshopTools = false;
+      this.journalAnchor = { cerita: null, patroli: null };
+      this.selectedNode = this.pickTool(progress);
+      this.panToTools = true;
+      this.hideShopToast();
     }
     this.applyShopTabVisuals();
+    this.renderShopTop();
+    this.renderActiveTab();
+  }
 
+  private renderShopTop(): void {
+    const progress = this.currentProgress!;
+    const stats = this.currentStats!;
     this.upgradeCoins.textContent = Math.floor(progress.coins).toLocaleString('id-ID');
+    this.runSummaryChips.innerHTML = [
+      `<span class="shop-chip t-stroke-xs">${this.headline}</span>`,
+      `<span class="shop-chip chip-${healthSwatch(stats.pollution)} t-stroke-xs num">Pesisir ${stats.ecoPercent}%</span>`,
+    ].join('');
+    this.fitChips();
 
-    const chips: string[] = [
-      `<span class="shop-chip t-stroke-xs">Muatan: ${stats.maxTrashCount}</span>`,
-      `<span class="shop-chip chip-gold t-stroke-xs">Nilai x${stats.coinMultiplier.toFixed(2)}</span>`,
-      `<span class="shop-chip chip-eco t-stroke-xs">${progress.mangroves.length} Mangrove</span>`,
-    ];
-    if (stats.aiGuideStrength > 0) {
-      chips.push(`<span class="shop-chip chip-ai t-stroke-xs">AI Aktif</span>`);
-    }
-    this.runSummaryChips.innerHTML = chips.join('');
+    const affordable = countAffordableUpgrades(progress);
+    this.tabBadgeTree.classList.toggle('hidden', affordable === 0);
+    if (affordable > 0) this.tabBadgeTree.textContent = String(affordable);
+    this.refreshJournalBadge(progress);
+  }
 
-    // Notification badges on modal tabs
-    const affordableCount = countAffordableUpgrades(progress);
-    this.tabBadgeCards.classList.toggle('hidden', affordableCount === 0);
-    if (affordableCount > 0) this.tabBadgeCards.textContent = String(affordableCount);
-
-    const claimableCount = countClaimableAchievements(progress);
-    this.tabBadgeAchieve.classList.toggle('hidden', claimableCount === 0);
-    if (claimableCount > 0) this.tabBadgeAchieve.textContent = String(claimableCount);
-
-    // Eco progress inside Tree sidebar
-    this.inspEcoVal.textContent = `${stats.ecoPercent}%`;
-    this.inspEcoBar.style.width = `${stats.ecoPercent}%`;
-    this.inspEcoSub.textContent = progress.victoryAchieved
-      ? 'Pulau pulih sepenuhnya! Bebas maksimalkan seluruh kalibrasi.'
-      : stats.bossUnlocked
-        ? 'Badai Muson aktif di laguna! Kembali ke air untuk mengusir Kapal Limbah.'
-        : 'Buka Rimba & Pelampung AI untuk mengakses Misi Final Badai Muson.';
-
-    if (this.activeTab === 'cards') {
-      this.renderCardsPanel(progress);
-    } else if (this.activeTab === 'tree') {
-      this.renderSkillTree(progress, stats);
-      this.renderInspector(progress, stats);
-    } else {
-      this.renderAchievementsPanel(progress);
+  /** The chips beside the purse show whole or not at all; the chapter goes first. */
+  private fitChips(): void {
+    const box = this.runSummaryChips;
+    const chips = Array.from(box.children) as HTMLElement[];
+    for (const chip of chips) chip.hidden = false;
+    if (!box.clientWidth && !box.scrollWidth) return;
+    for (const chip of chips) {
+      if (box.scrollWidth <= box.clientWidth + 1) break;
+      chip.hidden = true;
     }
   }
 
-  private renderCardsPanel(progress: PlayerProgress): void {
-    const blocks: string[] = [];
-
-    for (const sec of CARD_SECTIONS) {
-      const cardsHtml: string[] = [];
-      for (const id of sec.ids) {
-        const def = UPGRADE_MAP[id];
-        const lv = progress.upgrades[id] ?? 0;
-        const unlocked = isUpgradeUnlocked(id, progress.upgrades);
-        const maxed = lv >= def.maxLevel;
-        const cost = getUpgradeCost(id, lv);
-        const canAfford = unlocked && !maxed && progress.coins >= cost;
-        const reqNames = def.requires.map((r) => UPGRADE_MAP[r].shortName).join(' + ');
-
-        cardsHtml.push(
-          renderUpgradeCard({
-            id: def.id,
-            title: def.name,
-            swatch: def.cardSwatch,
-            icon: def.icon,
-            level: lv,
-            maxLevel: def.maxLevel,
-            statLabel: def.statLabel,
-            statIcon: def.icon,
-            beforeText: def.statBefore(lv),
-            afterText: def.statAfter(lv),
-            desc: def.description,
-            cost,
-            unlocked,
-            canAfford,
-            maxed,
-            lockedReason: reqNames,
-            cornerTag: def.featuredTag,
-            featured: def.featured,
-          })
-        );
-      }
-
-      blocks.push(`
-        ${renderSectionDivider(sec.label, sec.icon)}
-        <div class="cards-grid">${cardsHtml.join('')}</div>
-      `);
-    }
-
-    this.cardsScroll.innerHTML = blocks.join('');
+  private refreshJournalBadge(progress: PlayerProgress): void {
+    const unread = unreadPages(progress).length;
+    this.tabBadgeJournal.classList.toggle('hidden', unread === 0);
+    if (unread > 0) this.tabBadgeJournal.textContent = String(unread);
   }
 
-  private renderSkillTree(progress: PlayerProgress, stats: ComputedStats): void {
-    const paths: string[] = [];
-    for (const def of UPGRADE_DEFS) {
-      for (const reqId of def.requires) {
-        const parent = UPGRADE_MAP[reqId];
-        const parentOwned = (progress.upgrades[reqId] ?? 0) > 0;
-        const childOwned = (progress.upgrades[def.id] ?? 0) > 0;
-        const unlocked = isUpgradeUnlocked(def.id, progress.upgrades);
-
-        const stateClass = childOwned
-          ? `link-owned branch-${def.branch}`
-          : unlocked && parentOwned
-            ? `link-open branch-${def.branch}`
-            : 'link-locked';
-
-        const mx = (parent.x + def.x) * 0.5;
-        const my = (parent.y + def.y) * 0.5;
-        const d = `M ${parent.x} ${parent.y} Q ${mx} ${parent.y} ${mx} ${my} T ${def.x} ${def.y}`;
-        paths.push(`<path class="tree-link-outline" d="${d}" />`);
-        paths.push(`<path class="tree-link ${stateClass}" d="${d}" />`);
-      }
-    }
-    this.treeLinks.innerHTML = paths.join('');
-
-    this.treeNodes.innerHTML = '';
-    for (const def of UPGRADE_DEFS) {
-      const lv = progress.upgrades[def.id] ?? 0;
-      const unlocked = isUpgradeUnlocked(def.id, progress.upgrades);
-      const maxed = lv >= def.maxLevel;
-      const cost = getUpgradeCost(def.id, lv);
-      const canAfford = unlocked && !maxed && progress.coins >= cost;
-
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.dataset.swatch = unlocked ? def.cardSwatch : 'dark';
-      btn.className = [
-        'tree-node',
-        lv > 0 ? 'owned' : '',
-        unlocked ? 'unlocked' : 'locked',
-        maxed ? 'maxed' : '',
-        canAfford ? 'affordable' : '',
-        this.selectedNode === def.id ? 'selected' : '',
-      ]
-        .filter(Boolean)
-        .join(' ');
-
-      btn.style.left = `${(def.x / 1000) * 100}%`;
-      btn.style.top = `${(def.y / 560) * 100}%`;
-
-      const badgeText =
-        def.id === 'core'
-          ? 'INTI'
-          : maxed
-            ? 'MAKS'
-            : unlocked
-              ? `${lv}/${def.maxLevel}`
-              : 'KUNCI';
-
-      btn.innerHTML = `
-        <span class="tree-node-lv t-stroke-xs num">${badgeText}</span>
-        ${getUiIconSvg(def.icon, 'tree-node-icon')}
-        <span class="tree-node-label t-stroke-xs">${def.shortName}</span>
-        ${unlocked && !maxed ? `<span class="tree-node-cost t-stroke-xs num">${cost}</span>` : ''}
-      `;
-
-      btn.addEventListener('mouseenter', () => {
-        if (this.selectedNode !== def.id) {
-          this.selectedNode = def.id;
-          this.updateSelectedNodeVisual();
-          this.renderInspector(progress, stats);
-        }
-      });
-
-      btn.addEventListener('click', () => {
-        this.selectedNode = def.id;
-        if (canAfford) {
-          this.handlers.onBuyUpgrade(def.id, btn);
-        } else {
-          this.updateSelectedNodeVisual();
-          this.renderInspector(progress, stats);
-          if (def.id !== 'core' && !maxed) {
-            this.handlers.onUiError?.();
-          }
-        }
-      });
-
-      this.treeNodes.appendChild(btn);
-    }
+  private renderActiveTab(): void {
+    const progress = this.currentProgress;
+    if (!progress) return;
+    if (this.activeTab === 'tree') {
+      this.renderTree(progress);
+      this.renderInspector(progress);
+    } else this.renderJournal(progress);
   }
 
-  private updateSelectedNodeVisual(): void {
-    const nodes = this.treeNodes.querySelectorAll('.tree-node');
-    UPGRADE_DEFS.forEach((def, idx) => {
-      nodes[idx]?.classList.toggle('selected', def.id === this.selectedNode);
+  /** Everything in the workshop that depends on its size, measured again. */
+  private layoutShop(): void {
+    if (this.upgradeScreen.classList.contains('hidden') || !this.currentProgress) return;
+    this.fitChips();
+    if (this.activeTab === 'tree') {
+      this.layoutTree();
+      this.fitPanel();
+    } else this.layoutJournal();
+  }
+
+  private bindWorkshopEvents(): void {
+    // one size pass per frame, whichever part changed size
+    const resize = new ResizeObserver(() => this.layoutShop());
+    for (const part of [this.treeMap, this.toolPanel, this.journalBook, this.runSummaryChips.parentElement!]) resize.observe(part);
+
+    this.treeNodes.addEventListener('click', (event) => {
+      const node = (event.target as HTMLElement).closest<HTMLElement>('[data-node]');
+      if (node) this.selectTool(node.dataset.node as UpgradeId);
+    });
+    // arrows walk the map to the nearest tool in that direction, and the map follows the keyboard
+    this.treeNodes.addEventListener('keydown', (event) => {
+      const step: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+      const dir = step[event.key];
+      const from = (event.target as HTMLElement).closest<HTMLElement>('[data-node]');
+      if (!dir || !from) return;
+      event.preventDefault();
+      const next = this.nearestTool(from.dataset.node as UpgradeId, dir[0], dir[1]);
+      if (next) this.selectTool(next, true);
+    });
+    this.treeNodes.addEventListener('focusin', (event) => {
+      const node = (event.target as HTMLElement).closest<HTMLElement>('[data-node]');
+      if (node?.matches(':focus-visible')) this.revealTool(node.dataset.node as UpgradeId);
+    });
+    this.bindMapPan();
+
+    this.journalPrev.addEventListener('click', () => this.flipJournal(-1));
+    this.journalNext.addEventListener('click', () => this.flipJournal(1));
+    // the wheel and a swipe turn pages, since there is nothing to scroll
+    this.journalBook.addEventListener(
+      'wheel',
+      (event) => {
+        event.preventDefault();
+        const now = performance.now();
+        if (now - this.journalWheelAt < 420) return;
+        this.journalWheel += event.deltaY + event.deltaX;
+        if (Math.abs(this.journalWheel) < 40) return;
+        const dir = Math.sign(this.journalWheel);
+        this.journalWheel = 0;
+        this.journalWheelAt = now;
+        this.flipJournal(dir);
+      },
+      { passive: false }
+    );
+    let swipe: { id: number; x: number; y: number } | null = null;
+    this.journalBook.addEventListener('pointerdown', (event) => {
+      swipe = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    });
+    this.journalBook.addEventListener('pointerup', (event) => {
+      if (!swipe || swipe.id !== event.pointerId) return;
+      const dx = event.clientX - swipe.x;
+      const dy = event.clientY - swipe.y;
+      swipe = null;
+      if (Math.abs(dx) > 44 && Math.abs(dx) > Math.abs(dy) * 1.2) this.flipJournal(dx < 0 ? 1 : -1);
+      else if (Math.abs(dy) > 44 && Math.abs(dy) > Math.abs(dx) * 1.2) this.flipJournal(dy < 0 ? 1 : -1);
+    });
+    this.journalBook.addEventListener('pointercancel', () => {
+      swipe = null;
     });
   }
 
-  private renderInspector(progress: PlayerProgress, stats: ComputedStats): void {
-    const def = UPGRADE_MAP[this.selectedNode];
-    const lv = progress.upgrades[def.id] ?? 0;
-    const unlocked = isUpgradeUnlocked(def.id, progress.upgrades);
-    const maxed = lv >= def.maxLevel;
-    const cost = getUpgradeCost(def.id, lv);
-    const canAfford = unlocked && !maxed && progress.coins >= cost;
+  /**
+   * A map larger than its window is moved by dragging it (mouse or finger) or with the wheel. A drag
+   * that ends on a tool does not pick it, and nothing else moves the map while the workshop is open,
+   * except the keyboard bringing a tool into view.
+   */
+  private bindMapPan(): void {
+    const map = this.treeMap;
+    let drag: { id: number; x: number; y: number; px: number; py: number; moved: boolean } | null = null;
+    map.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 || !map.classList.contains('can-pan')) return;
+      drag = { id: event.pointerId, x: event.clientX, y: event.clientY, px: this.pan.x, py: this.pan.y, moved: false };
+    });
+    map.addEventListener('pointermove', (event) => {
+      if (!drag || drag.id !== event.pointerId) return;
+      const s = layoutScale(map);
+      const dx = (event.clientX - drag.x) / s;
+      const dy = (event.clientY - drag.y) / s;
+      if (!drag.moved) {
+        if (Math.hypot(dx, dy) < 6) return;
+        drag.moved = true;
+        map.setPointerCapture(event.pointerId);
+        map.classList.add('is-dragging');
+      }
+      this.setPan(drag.px + dx, drag.py + dy);
+    });
+    const end = (event: PointerEvent): void => {
+      if (!drag || drag.id !== event.pointerId) return;
+      if (drag.moved) {
+        this.panDragged = true;
+        window.setTimeout(() => (this.panDragged = false), 0);
+      }
+      map.classList.remove('is-dragging');
+      drag = null;
+    };
+    map.addEventListener('pointerup', end);
+    map.addEventListener('pointercancel', end);
+    map.addEventListener(
+      'click',
+      (event) => {
+        if (!this.panDragged) return;
+        event.stopPropagation();
+        event.preventDefault();
+      },
+      true
+    );
+    map.addEventListener(
+      'wheel',
+      (event) => {
+        if (!map.classList.contains('can-pan')) return;
+        event.preventDefault();
+        const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? map.clientHeight : 1;
+        let dx = event.deltaX * unit;
+        let dy = event.deltaY * unit;
+        // a plain wheel moves sideways when the map only runs wide
+        if ((event.shiftKey || !this.panAxes.y) && dx === 0) [dx, dy] = [dy, 0];
+        this.setPan(this.pan.x - dx, this.pan.y - dy);
+      },
+      { passive: false }
+    );
+  }
 
-    this.inspHeaderCard.dataset.swatch = unlocked ? BRANCH_SWATCH[def.branch] : 'dark';
+  /** Keys the workshop answers besides its buttons: page keys and arrows turn the journal's pages. */
+  public handleShopKey(event: KeyboardEvent): boolean {
+    if (this.activeTab !== 'journal' || this.upgradeScreen.classList.contains('hidden')) return false;
+    if ((event.target as HTMLElement | null)?.closest?.('[role="tablist"]')) return false;
+    if (event.key === 'PageDown' || event.key === 'ArrowRight' || event.key === 'ArrowDown') return this.flipJournal(1) || true;
+    if (event.key === 'PageUp' || event.key === 'ArrowLeft' || event.key === 'ArrowUp') return this.flipJournal(-1) || true;
+    return false;
+  }
+
+  private isIntro(progress: PlayerProgress): boolean {
+    return progress.story.marks.workshopVisit === undefined && progress.story.step !== 'call';
+  }
+
+  /** The tool the panel opens on: the radio when it calls, Bentang on the first visit, else the last one picked. */
+  private pickTool(progress: PlayerProgress): UpgradeId {
+    if (progress.story.step === 'call' && !progress.story.callAnswered && this.nodeShown('unlock_boss', progress)) return 'unlock_boss';
+    if (this.isIntro(progress) && this.nodeShown('wave_width', progress)) return 'wave_width';
+    if (this.selectedNode !== 'core' && this.nodeShown(this.selectedNode, progress)) return this.selectedNode;
+    const shown = UPGRADE_DEFS.filter((d) => d.id !== 'core' && this.nodeShown(d.id, progress));
+    return (shown.find((d) => this.nodeState(d.id, progress).canBuy) ?? shown[0])?.id ?? 'core';
+  }
+
+  private nodeShown(id: UpgradeId, progress: PlayerProgress): boolean {
+    if (id === 'core') return true;
+    if (id === 'unlock_boss') return progress.story.flags.ops;
+    return isUpgradeShown(id, progress);
+  }
+
+  /** Shared availability for the map node and its detail panel. */
+  private nodeState(id: UpgradeId, progress: PlayerProgress) {
+    const def = UPGRADE_MAP[id];
+    const lv = progress.upgrades[id] ?? 0;
+    if (id === 'unlock_boss') {
+      const open = progress.story.flags.ops && !progress.story.flags.boss && !progress.story.callAnswered;
+      return { def, lv: 0, cost: 0, maxed: progress.story.flags.boss, forSale: open, canBuy: open };
+    }
+    const cost = getUpgradeCost(id, lv);
+    const forSale = isForSale(id, progress);
+    return { def, lv, cost, maxed: lv >= def.maxLevel, forSale, canBuy: forSale && progress.coins >= cost };
+  }
+
+  /** Updates the buttons on the map in place: a purchase changes their marks, never their places or focus. */
+  private renderTree(progress: PlayerProgress): void {
+    this.sawWorkshopTools = true;
+    if (!this.nodeShown(this.selectedNode, progress)) this.selectedNode = this.pickTool(progress);
+    const intro = this.isIntro(progress);
+    const shown = new Set(UPGRADE_DEFS.filter((d) => this.nodeShown(d.id, progress)).map((d) => d.id));
+    for (const [id, btn] of this.nodeEls) {
+      if (shown.has(id)) continue;
+      btn.remove();
+      this.nodeEls.delete(id);
+    }
+    UPGRADE_DEFS.forEach((def, i) => {
+      if (!shown.has(def.id)) return;
+      let btn = this.nodeEls.get(def.id);
+      if (!btn) {
+        btn = document.createElement('button');
+        btn.type = 'button';
+        btn.dataset.node = def.id;
+        btn.dataset.swatch = def.cardSwatch;
+        btn.setAttribute('aria-controls', 'tool-panel');
+        btn.innerHTML = `
+          <span class="tree-node-lv t-stroke-xs num"></span>
+          ${getUiIconSvg(def.icon, 'tree-node-icon')}
+          <span class="tree-node-label t-stroke-xs">${def.shortName}</span>
+        `;
+        // tab order follows the list of tools, whatever order they arrived in
+        const after = UPGRADE_DEFS.slice(i + 1).map((d) => this.nodeEls.get(d.id)).find(Boolean) ?? null;
+        this.treeNodes.insertBefore(btn, after);
+        this.nodeEls.set(def.id, btn);
+      }
+      const st = this.nodeState(def.id, progress);
+      const badge =
+        def.id === 'core'
+          ? 'INTI'
+          : def.id === 'unlock_boss'
+            ? st.maxed
+              ? 'SELESAI'
+              : progress.story.callAnswered ? 'DIJAWAB' : 'GRATIS'
+            : st.maxed
+              ? 'MAKS'
+              : `${st.lv}/${def.maxLevel}`;
+      const selected = def.id === this.selectedNode;
+      btn.classList.toggle('tree-node', true);
+      btn.classList.toggle('owned', st.lv > 0);
+      btn.classList.toggle('maxed', st.maxed);
+      btn.classList.toggle('affordable', st.canBuy);
+      btn.classList.toggle('is-selected', selected);
+      btn.classList.toggle('is-guided', intro && def.id === 'wave_width' && st.lv === 0);
+      btn.setAttribute('aria-pressed', String(selected));
+      btn.setAttribute('aria-label', `${def.name}, ${badge}`);
+      btn.querySelector('.tree-node-lv')!.textContent = st.maxed ? '✓' : badge;
+    });
+    this.layoutTree();
+  }
+
+  private selectTool(id: UpgradeId, focus = false): void {
+    const progress = this.currentProgress;
+    if (!progress || !this.nodeShown(id, progress)) return;
+    this.handlers.onUiClick?.();
+    this.selectedNode = id;
+    for (const [nodeId, btn] of this.nodeEls) {
+      const on = nodeId === id;
+      btn.classList.toggle('is-selected', on);
+      btn.setAttribute('aria-pressed', String(on));
+    }
+    this.renderInspector(progress);
+    if (focus) this.nodeEls.get(id)?.focus({ preventScroll: true });
+  }
+
+  /** The closest tool from `from` in a direction, favouring the straight line over the diagonal. */
+  private nearestTool(from: UpgradeId, dx: number, dy: number): UpgradeId | null {
+    const a = this.nodeAt.get(from);
+    if (!a) return null;
+    let best: UpgradeId | null = null;
+    let bestScore = Infinity;
+    for (const id of this.nodeEls.keys()) {
+      const b = this.nodeAt.get(id);
+      if (!b || id === from) continue;
+      const along = (b.x - a.x) * dx + (b.y - a.y) * dy;
+      if (along <= 4) continue;
+      const across = Math.abs((b.x - a.x) * dy - (b.y - a.y) * dx);
+      const score = along + across * 2.2;
+      if (score < bestScore) {
+        bestScore = score;
+        best = id;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Places the tools on the map at this size. The map is a 7 by 4 grid and every tool owns a cell, so a
+   * tool that appears or levels up never moves another one. Tools keep one shape and grow with the map;
+   * when the map is too small for names that still read, the grid stays at that size and the map pans.
+   */
+  private layoutTree(): void {
+    const map = this.treeMap;
+    const W = map.clientWidth;
+    const H = map.clientHeight;
+    if (W < 40 || H < 40) return;
+    const perPx = this.labelWidth(1);
+    // the level tag on the corner, the selection ring and the shadow need this much room at the edge
+    const padFor = (h: number): number => Math.max(h * 0.19, 13 + h * NODE_RATIO * 0.04) + 6;
+    const hMin = Math.max(NODE_MIN_FONT / 0.17, (NODE_MIN_FONT * perPx + 8) / NODE_RATIO);
+    const fitW = (W - 2 * padFor(NODE_MAX_H)) / (MAP_COLS * NODE_RATIO + (MAP_COLS - 1) * GAP_X[0]);
+    const fitH = (H - 2 * padFor(NODE_MAX_H)) / (MAP_ROWS + (MAP_ROWS - 1) * GAP_Y[0]);
+    const h = Math.min(NODE_MAX_H, Math.max(hMin, Math.min(fitW, fitH)));
+    const w = h * NODE_RATIO;
+    const font = Math.min(13.5, h * 0.17, (w - 8) / perPx);
+    const pad = padFor(h);
+    const spread = (room: number, n: number, size: number, [lo, hi]: [number, number]): number =>
+      Math.min(hi * h, Math.max(lo * h, (room - 2 * pad - n * size) / (n - 1)));
+    const gapX = spread(W, MAP_COLS, w, GAP_X);
+    const gapY = spread(H, MAP_ROWS, h, GAP_Y);
+    const cw = 2 * pad + MAP_COLS * w + (MAP_COLS - 1) * gapX;
+    const ch = 2 * pad + MAP_ROWS * h + (MAP_ROWS - 1) * gapY;
+
+    map.style.setProperty('--node-w', `${w.toFixed(1)}px`);
+    map.style.setProperty('--node-h', `${h.toFixed(1)}px`);
+    map.style.setProperty('--node-font', `${font.toFixed(2)}px`);
+    map.style.setProperty('--node-icon', `${(h * 0.4).toFixed(1)}px`);
+    // the drifting grid underneath is a square that covers the map at its tilt
+    map.style.setProperty('--grid-size', `${Math.ceil(Math.hypot(W, H) + 160)}px`);
+    this.treeCanvas.style.width = `${cw.toFixed(1)}px`;
+    this.treeCanvas.style.height = `${ch.toFixed(1)}px`;
+
+    for (const def of UPGRADE_DEFS) {
+      this.nodeAt.set(def.id, { x: pad + w / 2 + def.col * (w + gapX), y: pad + h / 2 + def.row * (h + gapY) });
+    }
+    for (const [id, btn] of this.nodeEls) {
+      const p = this.nodeAt.get(id)!;
+      btn.style.left = `${p.x.toFixed(1)}px`;
+      btn.style.top = `${p.y.toFixed(1)}px`;
+    }
+    const was = this.treeGeom;
+    const resized = was.vw !== W || was.vh !== H || was.cw !== cw || was.ch !== ch;
+    this.treeGeom = { w, h, gapX, pad, cw, ch, vw: W, vh: H };
+    if (this.panToTools || resized) this.aimMap();
+    else this.setPan(this.pan.x, this.pan.y);
+    this.panToTools = false;
+    this.drawLinks();
+  }
+
+  /** The part of the canvas the tools on show cover, with room for their tags and rings. */
+  private toolBounds(): { l: number; r: number; t: number; b: number } {
+    const g = this.treeGeom;
+    const box = { l: Infinity, r: -Infinity, t: Infinity, b: -Infinity };
+    for (const id of this.nodeEls.keys()) {
+      const p = this.nodeAt.get(id)!;
+      box.l = Math.min(box.l, p.x - g.w / 2 - g.pad);
+      box.r = Math.max(box.r, p.x + g.w / 2 + g.pad);
+      box.t = Math.min(box.t, p.y - g.h / 2 - g.pad);
+      box.b = Math.max(box.b, p.y + g.h / 2 + g.pad);
+    }
+    return box;
+  }
+
+  /** Opening view: all the tools on show when they fit, else the picked tool in the middle. */
+  private aimMap(): void {
+    const g = this.treeGeom;
+    const box = this.toolBounds();
+    const picked = this.nodeAt.get(this.selectedNode);
+    const cx = box.r - box.l <= g.vw || !picked ? (box.l + box.r) / 2 : picked.x;
+    const cy = box.b - box.t <= g.vh || !picked ? (box.t + box.b) / 2 : picked.y;
+    this.setPan(g.vw / 2 - cx, g.vh / 2 - cy, true);
+  }
+
+  /**
+   * Moves the canvas. A grid that fits the map sits centred and still. Otherwise the canvas goes only as
+   * far as the tools on show reach, and holds still when they all fit. The place it is at stays allowed
+   * until the player leaves it, so a tool appearing after a purchase never shifts the map; `aim` sets a
+   * new place outright, on opening or resizing.
+   */
+  private setPan(x: number, y: number, aim = false): void {
+    const g = this.treeGeom;
+    const box = this.toolBounds();
+    const axis = (want: number, now: number, view: number, size: number, lo: number, hi: number): [number, boolean] => {
+      if (size <= view) return [(view - size) / 2, false];
+      let min: number;
+      let max: number;
+      if (hi - lo > view) {
+        min = view - hi;
+        max = -lo;
+      } else {
+        min = max = view / 2 - (lo + hi) / 2;
+      }
+      if (!aim) {
+        min = Math.min(min, now);
+        max = Math.max(max, now);
+      }
+      return [Math.min(max, Math.max(min, want)), max - min > 0.5];
+    };
+    const [px, panX] = axis(x, this.pan.x, g.vw, g.cw, box.l, box.r);
+    const [py, panY] = axis(y, this.pan.y, g.vh, g.ch, box.t, box.b);
+    this.pan = { x: px, y: py };
+    this.panAxes = { x: panX, y: panY };
+    this.treeCanvas.style.transform = `translate3d(${px.toFixed(1)}px, ${py.toFixed(1)}px, 0)`;
+    const map = this.treeMap;
+    map.classList.toggle('can-pan', panX || panY);
+    // a soft edge with an arrow on every side that has part of a tool behind it, not just its margin
+    const inset = g.pad / 2;
+    map.classList.toggle('more-l', box.l + inset + px < -0.5);
+    map.classList.toggle('more-r', box.r - inset + px > g.vw + 0.5);
+    map.classList.toggle('more-t', box.t + inset + py < -0.5);
+    map.classList.toggle('more-b', box.b - inset + py > g.vh + 0.5);
+  }
+
+  /** Glides the map just far enough to show a tool reached with the keyboard. */
+  private revealTool(id: UpgradeId): void {
+    const p = this.nodeAt.get(id);
+    const g = this.treeGeom;
+    if (!p || !this.treeMap.classList.contains('can-pan')) return;
+    const mx = g.w / 2 + g.pad;
+    const my = g.h / 2 + g.pad;
+    const x = Math.min(Math.max(this.pan.x, mx - p.x), g.vw - mx - p.x);
+    const y = Math.min(Math.max(this.pan.y, my - p.y), g.vh - my - p.y);
+    if (Math.abs(x - this.pan.x) < 0.5 && Math.abs(y - this.pan.y) < 0.5) return;
+    this.treeCanvas.classList.add('is-gliding');
+    window.clearTimeout(this.panGlideTimer);
+    this.panGlideTimer = window.setTimeout(() => this.treeCanvas.classList.remove('is-gliding'), 320);
+    this.setPan(x, y);
+  }
+
+  /**
+   * Paths leave A.L.U.N. sideways, run along a shared trunk and branch off at right angles into each
+   * tool, so every route reads outward from the core. A route that is installed glows in its branch's
+   * colour and carries small lights moving away from the core.
+   */
+  private drawLinks(): void {
+    const progress = this.currentProgress;
+    if (!progress) return;
+    const g = this.treeGeom;
+    const svg = this.treeLinks;
+    svg.setAttribute('viewBox', `0 0 ${g.cw.toFixed(1)} ${g.ch.toFixed(1)}`);
+    svg.setAttribute('width', g.cw.toFixed(1));
+    svg.setAttribute('height', g.ch.toFixed(1));
+    const lw = Math.max(3, Math.min(5.5, g.h * 0.066));
+    svg.style.setProperty('--link-w', `${lw.toFixed(2)}px`);
+    svg.style.setProperty('--flow-gap', `${(lw * 5.5).toFixed(1)}px`);
+    const radius = Math.max(2, Math.min(12, g.gapX / 2 - 1, g.h * 0.16));
+    const outlines: string[] = [];
+    const quiet: string[] = [];
+    const lit: string[] = [];
+    const flows: string[] = [];
+    for (const id of this.nodeEls.keys()) {
+      for (const reqId of UPGRADE_MAP[id].requires) {
+        if (!this.nodeEls.has(reqId)) continue;
+        const d = this.linkPath(reqId, id, radius);
+        const st = this.nodeState(id, progress);
+        const on = st.lv > 0 || st.maxed || (id === 'unlock_boss' && progress.story.callAnswered);
+        const branch = reqId === 'core' ? 'core' : UPGRADE_MAP[id].branch;
+        outlines.push(`<path class="tree-link-outline" d="${d}"/>`);
+        (on ? lit : quiet).push(`<path class="tree-link ${on ? 'link-on' : 'link-open'} branch-${branch}" d="${d}"/>`);
+        if (on) flows.push(`<path class="tree-link-flow" d="${d}"/>`);
+      }
+    }
+    // the lit routes go on top, so a trunk shared with a lit route shows lit
+    svg.innerHTML = outlines.join('') + quiet.join('') + lit.join('') + flows.join('');
+  }
+
+  /** Side of `from` to side of `to`, turning at the middle of the gap between their columns. */
+  private linkPath(from: UpgradeId, to: UpgradeId, radius: number): string {
+    const a = this.nodeAt.get(from)!;
+    const b = this.nodeAt.get(to)!;
+    const { w, h } = this.treeGeom;
+    const f = (v: number): string => v.toFixed(1);
+    if (Math.abs(a.x - b.x) < 1) {
+      const s = Math.sign(b.y - a.y);
+      return `M ${f(a.x)} ${f(a.y + (s * h) / 2)} V ${f(b.y - (s * h) / 2)}`;
+    }
+    const s = Math.sign(b.x - a.x);
+    const x0 = a.x + (s * w) / 2;
+    const x1 = b.x - (s * w) / 2;
+    if (Math.abs(a.y - b.y) < 1) return `M ${f(x0)} ${f(a.y)} H ${f(x1)}`;
+    const mx = (x0 + x1) / 2;
+    const t = Math.sign(b.y - a.y);
+    const r = Math.min(radius, Math.abs(mx - x0), Math.abs(b.y - a.y) / 2);
+    return (
+      `M ${f(x0)} ${f(a.y)} H ${f(mx - s * r)} Q ${f(mx)} ${f(a.y)} ${f(mx)} ${f(a.y + t * r)} ` +
+      `V ${f(b.y - t * r)} Q ${f(mx)} ${f(b.y)} ${f(mx + s * r)} ${f(b.y)} H ${f(x1)}`
+    );
+  }
+
+  private labelCtx = document.createElement('canvas').getContext('2d');
+  private labelWidth(font: number): number {
+    const ctx = this.labelCtx;
+    if (!ctx) return font * 6.6;
+    ctx.font = `700 ${font}px Fredoka, Nunito, sans-serif`;
+    let widest = 0;
+    for (const def of UPGRADE_DEFS) widest = Math.max(widest, ctx.measureText(def.shortName).width);
+    return widest + font * 0.35;
+  }
+
+  private bumpNode(id: UpgradeId): void {
+    const btn = this.nodeEls.get(id);
+    if (!btn) return;
+    btn.classList.remove('is-bumped');
+    void btn.offsetWidth;
+    btn.classList.add('is-bumped');
+  }
+
+  /** The news pops up beside the tool that changed, inside the map, then fades; it covers nothing for long. */
+  private showShopToast(text: string, swatch: UiSwatch): void {
+    const toast = this.shopToast;
+    toast.textContent = text;
+    toast.dataset.swatch = swatch;
+    toast.classList.remove('is-on');
+    const node = this.nodeEls.get(this.selectedNode);
+    const map = this.treeMap;
+    if (node && map.clientWidth) {
+      const s = layoutScale(map);
+      const m = map.getBoundingClientRect();
+      const n = node.getBoundingClientRect();
+      const w = toast.offsetWidth;
+      const h = toast.offsetHeight;
+      // above the tool, or under it when the tool sits on the top row; never past the map's edges
+      const cx = (n.left + n.width / 2 - m.left) / s;
+      const x = Math.min(Math.max(cx, w / 2 + 6), map.clientWidth - w / 2 - 6);
+      let y = (n.top - m.top) / s - h - 8;
+      if (y < 6) y = (n.bottom - m.top) / s + 8;
+      toast.style.left = `${x}px`;
+      toast.style.top = `${Math.max(6, Math.min(y, map.clientHeight - h - 6))}px`;
+    } else {
+      toast.style.left = '';
+      toast.style.top = '';
+    }
+    void toast.offsetWidth;
+    toast.classList.add('is-on');
+    window.clearTimeout(this.toastTimer);
+    this.toastTimer = window.setTimeout(() => toast.classList.remove('is-on'), 2600);
+  }
+
+  private hideShopToast(): void {
+    window.clearTimeout(this.toastTimer);
+    this.shopToast.classList.remove('is-on');
+  }
+
+  /** The first visit's guidance, in the words of the workshop tutorial. */
+  private introNote(progress: PlayerProgress): string {
+    const cost = getUpgradeCost('wave_width', 0);
+    return progress.upgrades.wave_width > 0
+      ? 'Bentang sudah terpasang. Kamu bisa kembali ke laguna dan mencoba ombak yang lebih lebar.'
+      : progress.coins >= cost
+        ? `Pilih Bentang, lalu Pasang (${cost} koin) untuk memperlebar ombak. Kamu juga bisa menyimpan koinmu.`
+        : `Bentang memperlebar ombak. Kumpulkan ${Math.ceil(cost - progress.coins)} koin lagi dengan menyapu sampah ke jaring.`;
+  }
+
+  /** The picked tool. Its button sits at the foot of the panel whatever the tool, the text above it fits itself. */
+  private renderInspector(progress: PlayerProgress): void {
+    const st = this.nodeState(this.selectedNode, progress);
+    const def = st.def;
+    const boss = def.id === 'unlock_boss';
+    const core = def.id === 'core';
+
+    this.inspHeaderCard.dataset.swatch = BRANCH_SWATCH[def.branch];
     this.inspBranch.textContent = BRANCH_LABELS[def.branch];
     this.inspIcon.innerHTML = getUiIconSvg(def.icon);
     this.inspTitle.textContent = def.name;
     this.inspDesc.textContent = def.description;
+    // one star per level, filled as far as it is installed
+    this.inspPips.innerHTML = core || boss
+      ? ''
+      : Array.from({ length: def.maxLevel }, (_, i) => getUiIconSvg(i < st.lv ? 'star_on' : 'star_off', 'insp-pip')).join('');
+    this.inspPips.hidden = core || boss;
 
-    const reqNames = def.requires.map((r) => UPGRADE_MAP[r].shortName).join(' + ');
-    let extraHtml = '';
-    if (def.id === 'trash_rarity' || def.id === 'trash_density') {
-      const rw = stats.rarityWeights;
-      extraHtml = `
-        <div class="rarity-pills">
-          <span class="r-pill r-common">Umum ${rw.common}%</span>
-          <span class="r-pill r-uncommon">Hijau ${rw.uncommon}%</span>
-          ${rw.rare > 0 ? `<span class="r-pill r-rare">Langka ${rw.rare}%</span>` : ''}
-          ${rw.epic > 0 ? `<span class="r-pill r-epic">Epik ${rw.epic}%</span>` : ''}
-          ${rw.legendary > 0 ? `<span class="r-pill r-legendary">Legendaris ${rw.legendary}%</span>` : ''}
-        </div>
-      `;
-    }
-
-    const deltaText = maxed
-      ? def.statBefore(lv)
-      : `${def.statBefore(lv)} ➜ ${def.statAfter(lv)}`;
-
-    this.inspStats.innerHTML = `
-      <div class="insp-row"><span>Level</span><strong class="num">${lv} / ${def.maxLevel}</strong></div>
-      <div class="insp-row"><span>${def.statLabel}</span><strong class="num">${deltaText}</strong></div>
-      <div class="insp-row"><span>Efek</span><strong>${def.effectText(lv)}</strong></div>
-      ${!unlocked ? `<div class="insp-row req-warn"><span>Syarat</span><strong>${reqNames}</strong></div>` : ''}
-      ${extraHtml}
-    `;
-
-    if (def.id === 'core') {
-      this.btnBuyNode.classList.add('hidden');
+    const row =(label: string, value: string, warn = false): string =>
+      `<div class="insp-row${warn ? ' req-warn' : ''}"><span>${label}</span><strong class="num">${value}</strong></div>`;
+    let rows: string;
+    if (boss) {
+      rows = row('Panggilan', st.maxed ? 'Selesai' : progress.story.callAnswered ? 'Sudah dijawab' : 'Menunggu') + row('Biaya', 'Gratis');
+    } else if (core) {
+      rows = row(def.statLabel, def.statBefore(1)) + row('Efek', def.effectText(1));
     } else {
-      this.btnBuyNode.classList.remove('hidden');
-      this.btnBuyNode.disabled = !canAfford;
-      if (maxed) {
-        this.btnBuyNode.dataset.swatch = 'gold';
-        this.btnBuyNode.innerHTML = `${getUiIconSvg('check', 'ui-btn-icon')}<span>Sudah Maksimal</span>`;
-      } else if (!unlocked) {
-        this.btnBuyNode.dataset.swatch = 'slate';
-        this.btnBuyNode.innerHTML = `${getUiIconSvg('lock', 'ui-btn-icon')}<span>Terkunci</span>`;
-      } else {
-        this.btnBuyNode.dataset.swatch = canAfford ? 'green' : 'slate';
-        this.btnBuyNode.innerHTML = `${getUiIconSvg('coin', 'ui-btn-icon')}<span>Tingkatkan · ${cost.toLocaleString('id-ID')}</span>`;
-      }
+      // the stars above already count the levels
+      const delta = st.maxed || !st.forSale ? def.statBefore(st.lv) : `${def.statBefore(st.lv)} ➜ ${def.statAfter(st.lv)}`;
+      rows = row(def.statLabel, delta) + row('Efek', def.effectText(st.lv));
+      // an affordable price is on the button itself; a price out of reach is spelled out in red
+      if (st.forSale && !st.canBuy) rows += row('Harga', `${st.cost.toLocaleString('id-ID')} koin`, true);
     }
+    this.inspStats.innerHTML = rows;
+
+    // what to know before pressing: the first visit's guidance, or why a tool has to wait
+    const intro = this.isIntro(progress);
+    const supply = nextSupply(progress.story.flags);
+    const note = intro
+      ? this.introNote(progress)
+      : supply && !boss && !st.maxed && !st.forSale
+        ? core
+          ? `Pasokan berikutnya: ${supply}`
+          : `Tingkat berikutnya menunggu pasokan. ${supply}`
+        : '';
+    this.toolNote.textContent = note;
+    this.toolNote.hidden = note === '';
+    this.btnReturn.classList.toggle('hidden', !intro);
+
+    let swatch: UiSwatch = 'slate';
+    let icon: UiIconName = 'coin';
+    let label: string;
+    let enabled = false;
+    if (core) {
+      swatch = 'teal';
+      icon = 'check';
+      label = 'Selalu aktif';
+    } else if (st.maxed) {
+      swatch = 'gold';
+      icon = 'check';
+      label = boss ? 'Armada sudah pulang' : 'Sudah maksimal';
+    } else if (boss) {
+      swatch = st.canBuy ? 'green' : 'slate';
+      icon = 'radio';
+      label = st.canBuy ? 'Jawab · gratis' : 'Sudah dijawab';
+      enabled = st.canBuy;
+    } else if (!st.forSale) {
+      icon = 'lock';
+      label = 'Tunggu pasokan';
+    } else if (st.canBuy) {
+      swatch = 'green';
+      label = `${st.lv === 0 ? 'Pasang' : 'Tingkatkan'} · ${st.cost.toLocaleString('id-ID')}`;
+      enabled = true;
+    } else {
+      label = `Kurang ${Math.ceil(st.cost - progress.coins).toLocaleString('id-ID')} koin`;
+    }
+    const btn = this.btnBuyNode;
+    btn.disabled = !enabled;
+    btn.dataset.swatch = swatch;
+    btn.innerHTML = `${getUiIconSvg(icon, 'ui-btn-icon')}<span class="num">${label}</span>`;
+    this.fitPanel();
   }
 
-  private renderAchievementsPanel(progress: PlayerProgress): void {
-    const ch1Ready = countClaimableAchievements(progress, 1);
-    const ch2Ready = countClaimableAchievements(progress, 2);
-
-    this.achChap1Btn.classList.toggle('is-active', this.activeAchChapter === 1);
-    this.achChap2Btn.classList.toggle('is-active', this.activeAchChapter === 2);
-    this.achChap1Btn.dataset.swatch = this.activeAchChapter === 1 ? 'orange' : 'slate';
-    this.achChap2Btn.dataset.swatch = this.activeAchChapter === 2 ? 'orange' : 'slate';
-
-    this.achBadge1.classList.toggle('hidden', ch1Ready === 0);
-    if (ch1Ready > 0) this.achBadge1.textContent = String(ch1Ready);
-    this.achBadge2.classList.toggle('hidden', ch2Ready === 0);
-    if (ch2Ready > 0) this.achBadge2.textContent = String(ch2Ready);
-
-    const list = ACHIEVEMENT_DEFS.filter((a) => a.chapter === this.activeAchChapter);
-    let completed = 0;
-    let earnedCoins = 0;
-    let totalCoins = 0;
-
-    for (const def of list) {
-      totalCoins += def.rewardCoins;
-      const done = def.getValue(progress) >= def.target;
-      if (done) completed += 1;
-      if (progress.claimedAchievements.includes(def.id)) {
-        earnedCoins += def.rewardCoins;
-      }
+  /** Steps the panel down until all it shows is whole; the buttons keep their size and place throughout. */
+  private fitPanel(): void {
+    const panel = this.toolPanel;
+    if (!panel.clientHeight) return;
+    // the description only gives way to a note that says what to do
+    const steps = this.toolNote.hidden ? PANEL_FIT.filter((s) => s.desc !== false) : PANEL_FIT;
+    let level = 0;
+    for (; level < steps.length; level++) {
+      const s = steps[level];
+      panel.style.setProperty('--k', String(s.k));
+      panel.classList.toggle('no-pips', s.pips === false);
+      panel.classList.toggle('no-desc', s.desc === false);
+      if (this.panelFits()) break;
     }
+    panel.dataset.fit = String(Math.min(level, steps.length - 1));
+    fitLine(this.btnBuyNode, true);
+    fitLine(this.btnReturn);
+  }
 
-    this.achCountLabel.textContent = `${completed} / ${list.length}`;
-    this.achOverallBar.style.width = `${Math.round((completed / Math.max(1, list.length)) * 100)}%`;
-    this.achCoinsLabel.textContent = `${earnedCoins.toLocaleString('id-ID')} / ${totalCoins.toLocaleString('id-ID')}`;
+  /** True when the foot of the panel ends inside it: with the foot pushed down, the buttons would move. */
+  private panelFits(): boolean {
+    const panel = this.toolPanel;
+    const cs = getComputedStyle(panel);
+    // the padding is in layout pixels and the boxes in screen pixels; they differ while the modal zooms in
+    const pad = (parseFloat(cs.paddingBottom) + parseFloat(cs.borderBottomWidth)) * layoutScale(panel);
+    const floor = panel.getBoundingClientRect().bottom - pad;
+    return this.toolBottom.getBoundingClientRect().bottom <= floor + 0.05 && panel.scrollWidth <= panel.clientWidth + 1;
+  }
 
-    // Sort claimable achievements to the top for instant dopamine!
-    const sorted = [...list].sort((a, b) => {
-      const aClaimable = isAchievementClaimable(a, progress) ? 0 : progress.claimedAchievements.includes(a.id) ? 2 : 1;
-      const bClaimable = isAchievementClaimable(b, progress) ? 0 : progress.claimedAchievements.includes(b.id) ? 2 : 1;
-      return aClaimable - bClaimable;
+  private renderJournal(progress: PlayerProgress): void {
+    for (const e of unreadPages(progress, this.activePart)) this.freshPages.add(e.id);
+    // the part on screen counts as read: its pages keep their BARU mark, its count goes
+    this.handlers.onReadJournal(this.activePart);
+    const badge = (node: HTMLElement, part: JournalEntry['part']): void => {
+      const n = unreadPages(progress, part).length;
+      node.classList.toggle('hidden', n === 0);
+      if (n > 0) node.textContent = String(n);
+    };
+    badge(this.journalBadge1, 'cerita');
+    badge(this.journalBadge2, 'patroli');
+
+    const story = this.activePart === 'cerita';
+    this.journalPart1.classList.toggle('is-active', story);
+    this.journalPart2.classList.toggle('is-active', !story);
+    this.journalPart1.setAttribute('aria-selected', String(story));
+    this.journalPart2.setAttribute('aria-selected', String(!story));
+    this.journalPart1.tabIndex = story ? 0 : -1;
+    this.journalPart2.tabIndex = story ? -1 : 0;
+    this.journalPart1.dataset.swatch = story ? 'orange' : 'slate';
+    this.journalPart2.dataset.swatch = story ? 'slate' : 'orange';
+
+    const list = JOURNAL.filter((e) => e.part === this.activePart);
+    const written = list.filter((e) => isWritten(e, progress)).length;
+    this.journalCount.textContent = `${written} / ${list.length}`;
+    this.journalBar.style.width = `${Math.round((written / Math.max(1, list.length)) * 100)}%`;
+
+    // open on the news, else on the page that is still being written
+    if (this.journalAnchor[this.activePart] === null) {
+      const fresh = list.findIndex((e) => this.freshPages.has(e.id));
+      const open = list.findIndex((e) => !isWritten(e, progress));
+      this.journalAnchor[this.activePart] = fresh >= 0 ? fresh : Math.max(0, open);
+    }
+    this.journalCards = list.map((e) => {
+      const done = isWritten(e, progress);
+      return renderJournalCard({
+        title: e.title,
+        text: done ? e.note : e.hint,
+        swatch: e.swatch,
+        icon: e.icon,
+        current: e.value(progress),
+        target: e.target,
+        written: done,
+        fresh: this.freshPages.has(e.id),
+      });
     });
+    this.layoutJournal();
+    this.refreshJournalBadge(progress);
+  }
 
-    this.achieveGrid.innerHTML = sorted
-      .map((def) =>
-        renderAchievementCard({
-          id: def.id,
-          title: def.title,
-          desc: def.desc,
-          swatch: def.swatch,
-          icon: def.icon,
-          current: def.getValue(progress),
-          target: def.target,
-          rewardCoins: def.rewardCoins,
-          claimed: progress.claimedAchievements.includes(def.id),
-        })
-      )
-      .join('');
+  /** Cuts the open part into pages that fit the book at this size: nothing scrolls and no card is cut. */
+  private layoutJournal(): void {
+    const book = this.journalBook;
+    const W = book.clientWidth;
+    const H = book.clientHeight;
+    if (W < 40 || H < 40 || !this.journalCards.length) return;
+    const css = getComputedStyle(this.journalGrid);
+    const gap = parseFloat(css.rowGap) || 0;
+    const colGap = parseFloat(css.columnGap) || 0;
+    const padX = (parseFloat(css.paddingLeft) || 0) + (parseFloat(css.paddingRight) || 0);
+    const padY = (parseFloat(css.paddingTop) || 0) + (parseFloat(css.paddingBottom) || 0);
+    const kb = parseFloat(getComputedStyle(book).getPropertyValue('--kb')) || 1;
+    const scale = layoutScale(book);
+    const measure = this.journalMeasure;
+    const n = this.journalCards.length;
+    // as many columns as leave a card wide enough to read
+    const maxCols = Math.max(1, Math.min(3, Math.floor((W - padX + colGap) / (270 * kb + colGap))));
+    // the fewest pages in type of 11.5px or more; smaller type only when not even one card would fit
+    let best = { level: 0, cols: 1, rows: 0, cardH: 0, pages: Infinity };
+    for (let level = 0; level < JOURNAL_FIT.length; level++) {
+      if (level > 0 && best.rows >= 1 && 14 * kb * JOURNAL_FIT[level] < 11.5) break;
+      book.dataset.fit = String(level);
+      for (let cols = 1; cols <= maxCols; cols++) {
+        measure.style.setProperty('--cols', String(cols));
+        measure.innerHTML = this.journalCards.join('');
+        const tallest = Math.max(...Array.from(measure.children, (c) => (c as HTMLElement).getBoundingClientRect().height));
+        const cardH = Math.ceil(tallest / scale - 0.01);
+        const rows = Math.floor((H - padY + gap) / (cardH + gap));
+        const pages = rows >= 1 ? Math.ceil(n / (rows * cols)) : Infinity;
+        const take = rows >= 1
+          ? best.rows < 1 || pages < best.pages
+          : best.rows < 1 && (best.cardH === 0 || cardH < best.cardH);
+        if (take) best = { level, cols, rows, cardH, pages };
+      }
+      if (best.pages === 1) break;
+    }
+    measure.innerHTML = '';
+    book.dataset.fit = String(best.level);
+    const cols = best.cols;
+    const rows = Math.max(1, best.rows);
+    const cardH = best.cardH;
+    const perPage = rows * cols;
+    const pages = Math.max(1, Math.ceil(n / perPage));
+    const page = Math.min(pages - 1, Math.floor((this.journalAnchor[this.activePart] ?? 0) / perPage));
+    this.journalPerPage = perPage;
+    this.journalPages = pages;
+    this.journalPageIndex = page;
+
+    const grid = this.journalGrid;
+    grid.style.setProperty('--cols', String(cols));
+    grid.style.setProperty('--card-h', `${cardH}px`);
+    grid.innerHTML = this.journalCards.slice(page * perPage, (page + 1) * perPage).join('');
+    this.journalPageLabel.textContent = `${page + 1} / ${pages}`;
+    this.journalPrev.disabled = page === 0;
+    this.journalNext.disabled = page >= pages - 1;
+  }
+
+  /** Turns the journal one page; false when there is no page that way. */
+  public flipJournal(delta: number): boolean {
+    if (this.activeTab !== 'journal' || this.upgradeScreen.classList.contains('hidden')) return false;
+    const next = this.journalPageIndex + delta;
+    if (next < 0 || next >= this.journalPages) return false;
+    this.journalAnchor[this.activePart] = next * this.journalPerPage;
+    this.handlers.onTabSwitch?.();
+    this.layoutJournal();
+    return true;
   }
 
   public renderVictory(progress: PlayerProgress): void {
+    const s = progress.story;
+    const minutes = Math.floor(s.clock / 60);
+    const seconds = Math.floor(s.clock % 60);
     this.victoryStats.innerHTML = [
-      renderStatTile('Total Ombak', progress.totalWaves.toLocaleString('id-ID'), 'wave', 'blue'),
-      renderStatTile('Muatan Bersih', progress.totalTrash.toLocaleString('id-ID'), 'net', 'green'),
-      renderStatTile('Muatan Langka+', progress.totalRareTrash.toLocaleString('id-ID'), 'rarity', 'purple'),
-      renderStatTile('Mangrove Tumbuh', `${progress.mangroves.length} Pohon`, 'mangrove', 'teal'),
-      renderStatTile('Perahu & Api', `${progress.totalBoats} / ${progress.totalFires}`, 'boat', 'orange'),
-      renderStatTile('Total Koin', progress.totalCoinsEarned.toLocaleString('id-ID'), 'coin', 'gold'),
+      renderStatTile('Waktu cerita', `${minutes}:${String(seconds).padStart(2, '0')}`, 'sun', 'blue'),
+      renderStatTile('Rongsok terangkat', progress.totalTrash.toLocaleString('id-ID'), 'net', 'green'),
+      renderStatTile('Keranjang selamat', s.saved.baskets.toLocaleString('id-ID'), 'basket', 'orange'),
+      renderStatTile('Lumba-lumba dibantu', s.saved.dolphins.toLocaleString('id-ID'), 'dolphin', 'teal'),
+      renderStatTile('Kesehatan pesisir', `${Math.round(100 - s.pollution)}%`, 'eco', healthSwatch(s.pollution)),
+      renderStatTile('Koin terkumpul', progress.totalCoinsEarned.toLocaleString('id-ID'), 'coin', 'gold'),
     ].join('');
     spawnUiConfetti(null, 42);
   }
+}
+
+/** Green while the coast is healthy, then orange, then red: the same three bands the lagoon shows. */
+function healthSwatch(p: number): 'green' | 'orange' | 'red' {
+  return p >= P_DIRTY ? 'red' : p >= P_HEALTHY ? 'orange' : 'green';
 }

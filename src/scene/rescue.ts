@@ -1,20 +1,21 @@
 import * as THREE from 'three';
-import type { GameSimulation } from '../simulation';
-import type { ComputedStats, Entity, EntityKind, TrashRarity } from '../types';
+import { isTrashKind, type GameSimulation } from '../simulation';
+import type { Entity, EntityKind } from '../types';
 import { DOLPHIN_SPOT } from '../world';
 import type { Actors } from './actors';
 import { Build, hex, type Vec } from './build';
 import type { Director, Pose } from './director';
+import { striped } from './fleet';
 import type { Fx } from './fx';
-import { outlineMaterial, toon, type ToonOpts } from './gfx';
+import { outlineMaterial, toon, type ToonOpts, type ToonPair } from './gfx';
 import { inked, mesh } from './kit';
 import { clamp, lerp, rng, simX, simY, smooth, toX, toZ } from './space';
-import { MODE, SP } from './sprites';
 import type { Water } from './water';
 
 /**
- * A dolphin caught in a ghost net: the camera is pulled away to it, the player tears the net off with
- * waves, and it leaps away. The pieces of net and rubbish that come off land in the water as trash.
+ * The mother dolphin, caught in a trawl net at the end of the rope: the camera is pulled away to her,
+ * the player tears the net off with waves, and she leaps away. What comes off lands in the water as
+ * salvage, out of the same supply as everything else. Without films she is freed from the overhead view.
  */
 
 export interface RescueHooks {
@@ -35,12 +36,12 @@ const ARRIVE = 7;
 const LEAVE = 7.4;
 
 const ARRIVE_CAPTIONS: [number, number, string, string][] = [
-  [0.5, 3.6, 'DARURAT!', 'Seekor lumba-lumba terjerat jaring dan sampah!'],
-  [3.8, 6.9, 'A.L.U.N.', 'Ayo bantu! Lepaskan jaringnya dengan ombak.'],
+  [0.5, 3.6, 'DI UJUNG TALI', 'Induk lumba-lumba terjerat sisa jaring pukat!'],
+  [3.8, 6.9, 'A.L.U.N.', 'Ayo bantu! Robek tiga lilitannya dengan ombak.'],
 ];
 const LEAVE_CAPTIONS: [number, number, string, string][] = [
-  [0.4, 4.3, 'LUMBA-LUMBA SELAMAT!', 'Ia kembali bebas ke laut lepas.'],
-  [4.5, 7.3, '', 'Sapu sisa jaringnya ke Jaring Desa, ya!'],
+  [0.4, 4.2, 'INDUK LUMBA-LUMBA BEBAS', 'Ia lolos lewat celah karang, diikuti ikan-ikan kecil.'],
+  [4.4, 7.3, 'BU SARI', 'Pelampung bergaris itu... milik kapal pukat dari luar.'],
 ];
 
 /** Caught facing north-north-east, so both the close-ups and the play view see its flank. */
@@ -78,11 +79,11 @@ function radiusAt(x: number): number {
 }
 
 /** How far a point is down the tail: drives the fluke beat in the shader. */
-const tailOf = (p: THREE.Vector3): number => smooth(-0.3, -2.1, p.x);
+export const tailOf = (p: THREE.Vector3): number => smooth(-0.3, -2.1, p.x);
 
 const _c = new THREE.Color();
 
-function dolphin(): THREE.BufferGeometry {
+export function dolphin(): THREE.BufferGeometry {
   const b = new Build(510);
   const lathe = new THREE.LatheGeometry(
     PROFILE.map(([x, r]) => new THREE.Vector2(r, x)),
@@ -119,6 +120,25 @@ function dolphin(): THREE.BufferGeometry {
     b.tube([[1.5, -0.05, s * 0.18], [1.75, -0.07, s * 0.13], [1.98, -0.03, s * 0.07]], () => 0.018, { color: '#26384a', seg: 4, rings: 6 });
   }
   return b.geo(true);
+}
+
+export interface SwimUniforms {
+  uFlap: { value: number };
+  uAmp: { value: number };
+  uHit: { value: number };
+}
+
+/** The skin a dolphin swims in: she beats her tail up and down, and the body follows a little behind the flukes. */
+export function swimSkin(u: SwimUniforms): { pair: ToonPair; ink: THREE.ShaderMaterial } {
+  const opts: ToonOpts = {
+    side: THREE.DoubleSide,
+    uniforms: { ...u },
+    vHead: 'uniform float uFlap; uniform float uAmp;',
+    vLocal: 'float sw = aFx.y; p.y += sin(uFlap - sw * 2.4) * sw * sw * uAmp; p.z += sin(uFlap * .5 + 1.3) * sw * uAmp * .22;',
+    fHead: 'uniform float uHit;',
+    fAlbedo: 'alb = mix(alb, vec3(1.), uHit * .55); emis += uHit * .35;',
+  };
+  return { pair: toon(opts), ink: outlineMaterial(1.3, '#15202c', { uniforms: opts.uniforms, vHead: opts.vHead, vLocal: opts.vLocal }) };
 }
 
 /** A ring of rope round the body at `x`, a little loose and a little crooked. */
@@ -184,7 +204,7 @@ function netMiddle(): THREE.BufferGeometry {
   b.cyl(0.11, 0.11, 0.44, { color: '#a9e4ff', pos: [0.32, -0.74, 0.72], rot: lay, seg: 10, gloss: 0.9 });
   b.cyl(0.115, 0.115, 0.14, { color: '#2479d8', pos: [0.3, -0.73, 0.72], rot: lay, seg: 10 });
   b.cyl(0.06, 0.06, 0.1, { color: '#f0453a', pos: [0.49, -0.86, 0.74], rot: lay, seg: 8 });
-  b.ball(0.17, { color: '#ff8a2a', pos: [-0.25, 0.1, -0.66], seg: 9, gloss: 0.4 });
+  striped(b, [-0.25, 0.12, -0.68], 0.2);
   return b.geo(true);
 }
 
@@ -208,7 +228,8 @@ function netHead(): THREE.BufferGeometry {
       { color: ROPE[k % 3], seg: 4, rings: 8 }
     );
   }
-  b.ball(0.16, { color: '#fff6e4', pos: [1.05, 0.62, -0.1], seg: 9, gloss: 0.4 });
+  // the float that gives its owner away
+  striped(b, [1.02, 0.7, -0.12], 0.24);
   return b.geo(true);
 }
 
@@ -219,15 +240,16 @@ const LAYER_AT: Vec[] = [
   [1.0, 0.3, 0],
 ];
 /** What each layer becomes once it is in the water. */
-const LAYER_DEBRIS: { kind: EntityKind; rarity: TrashRarity; variant: number }[][] = [
-  [{ kind: 'trash_bag', rarity: 'common', variant: 0 }],
-  [{ kind: 'trash_bottle', rarity: 'common', variant: 0 }],
-  [{ kind: 'trash_net', rarity: 'uncommon', variant: 0 }],
+const LAYER_DEBRIS: { kind: EntityKind; variant: number }[] = [
+  { kind: 'trash_bag', variant: 0 },
+  { kind: 'trash_bottle', variant: 0 },
+  { kind: 'trash_net', variant: 0 },
 ];
 
 /* ================================================================== the event */
 
-type State = 'idle' | 'arrive' | 'help' | 'leave';
+/** 'still' and 'away' are the same event without its films. */
+type State = 'idle' | 'arrive' | 'help' | 'leave' | 'still' | 'away';
 
 export class Rescue {
   readonly group = new THREE.Group();
@@ -246,6 +268,9 @@ export class Rescue {
   private nextCall = 0;
   private start: Pose | null = null;
   private wasAbove = false;
+  private away = 0;
+  /** Where she is on her way out, for the small fish that follow. */
+  readonly trail = { on: false, t: 0, x: 0, z: 0, dx: 1, dz: 0 };
   private r = rng(77);
   private T = new THREE.Vector3(toX(DOLPHIN_SPOT.x), 0, toZ(DOLPHIN_SPOT.y));
   /** The way out to sea once it is free: south of the rocks and out over the reef. */
@@ -259,17 +284,7 @@ export class Rescue {
     private actors: Actors,
     private director: Director
   ) {
-    const opts: ToonOpts = {
-      side: THREE.DoubleSide,
-      uniforms: { uFlap: this.flap, uAmp: this.amp, uHit: this.hitU },
-      vHead: 'uniform float uFlap; uniform float uAmp;',
-      // a dolphin beats its tail up and down; the body follows a little behind the flukes
-      vLocal: 'float sw = aFx.y; p.y += sin(uFlap - sw * 2.4) * sw * sw * uAmp; p.z += sin(uFlap * .5 + 1.3) * sw * uAmp * .22;',
-      fHead: 'uniform float uHit;',
-      fAlbedo: 'alb = mix(alb, vec3(1.), uHit * .55); emis += uHit * .35;',
-    };
-    const pair = toon(opts);
-    const ink = outlineMaterial(1.3, '#15202c', { uniforms: opts.uniforms, vHead: opts.vHead, vLocal: opts.vLocal });
+    const { pair, ink } = swimSkin({ uFlap: this.flap, uAmp: this.amp, uHit: this.hitU });
     const add = (g: THREE.BufferGeometry): THREE.Mesh => {
       const m = inked(mesh(g, pair), ink);
       m.frustumCulled = false;
@@ -302,30 +317,24 @@ export class Rescue {
     };
   }
 
-  /** The swipe the hint shows: a short one from open water in front of the camera to the dolphin. */
-  hint(): { from: THREE.Vector3; to: THREE.Vector3 } | null {
-    if (this.state !== 'help' || this.torn > 0) return null;
-    return { from: new THREE.Vector3(this.T.x - 5.6, 0.2, this.T.z - 1.9), to: new THREE.Vector3(this.T.x, 0.4, this.T.z) };
-  }
-
   /** Pulls the camera away to the dolphin. `id` is its entity in the sim. */
   begin(sim: GameSimulation, id: number, hooks: RescueHooks): void {
     this.sim = sim;
     this.id = id;
     this.hooks = hooks;
     this.state = 'arrive';
-    this.torn = 0;
     this.shown = -1;
     this.start = null;
     this.nextCall = 0.4;
     this.r = rng(77);
     const e = sim.entities.find((x) => x.id === id);
-    this.total = e ? e.maxHp : 3;
+    this.restoreKnots(e);
     if (e) {
       this.T.set(toX(e.x), 0, toZ(e.y));
       // the close-ups are a few metres from it: whatever is floating right there drifts out of the shot
       for (const o of sim.entities) {
-        if (o === e || o.kind === 'fire') continue;
+        if (!isTrashKind(o.kind) && o.kind !== 'mangrove_seed') continue;
+        if (o.snagged || o.stranded) continue;
         const dx = o.x - e.x;
         const dy = o.y - e.y;
         const d = Math.hypot(dx, dy);
@@ -335,7 +344,6 @@ export class Rescue {
         o.y = e.y + (d > 1 ? dy : 0) * k;
       }
     }
-    for (const l of this.layers) l.visible = true;
     this.body.scale.setScalar(1);
     this.group.visible = true;
     this.director.film(
@@ -343,6 +351,25 @@ export class Rescue {
       () => this.arrived()
     );
     this.director.focus(this.view());
+  }
+
+  /** Takes up the event where no film did. */
+  private attach(sim: GameSimulation, e: Entity): void {
+    this.sim = sim;
+    this.id = e.id;
+    this.hooks = {};
+    this.state = 'still';
+    this.restoreKnots(e);
+    this.shown = -1;
+    this.T.set(toX(e.x), 0, toZ(e.y));
+    this.group.visible = true;
+  }
+
+  /** Restored knots have already shed their salvage. Only a new hit should tear a layer. */
+  private restoreKnots(e?: Entity): void {
+    this.total = e?.maxHp ?? 3;
+    this.torn = this.total - (e?.hp ?? this.total);
+    this.layers.forEach((layer, i) => { layer.visible = i >= this.torn; });
   }
 
   private arrived(): void {
@@ -487,8 +514,15 @@ export class Rescue {
 
   /* ---------------------------------------------------------------- every frame */
 
-  update(dt: number, time: number, swell: number, stats: ComputedStats): void {
-    if (this.state === 'idle' || !this.sim) return;
+  update(dt: number, time: number, swell: number, sim: GameSimulation): void {
+    this.trail.on = false;
+    if (this.state === 'idle') {
+      // no film took her (the player asked for less motion): she is caught all the same
+      const e = sim.entities.find((x) => x.kind === 'dolphin');
+      if (!e || e.actionTimer <= 0) return;
+      this.attach(sim, e);
+    }
+    if (!this.sim) return;
     const clock = this.director.clock;
 
     if (this.state === 'leave') {
@@ -496,9 +530,23 @@ export class Rescue {
       this.swimAway(dt, clock < 0 ? 99 : clock, time, swell);
       return;
     }
+    if (this.state === 'away') {
+      this.away += dt;
+      this.swimAway(dt, this.away, time, swell);
+      if (this.away > 5.4) this.reset();
+      return;
+    }
 
     const e = this.entity();
     if (!e) {
+      if (this.state === 'still' && sim.progress?.story.flags.dolphin) {
+        // the last knot went, and the job took her out of the water's hands
+        while (this.torn < this.layers.length) this.tear(this.torn++);
+        this.state = 'away';
+        this.away = 0;
+        this.wasAbove = false;
+        return;
+      }
       // the lagoon was reset under us: nothing to film any more
       this.cancel();
       return;
@@ -507,7 +555,7 @@ export class Rescue {
 
     const torn = this.total - e.hp;
     if (torn > this.torn) {
-      while (this.torn < Math.min(torn, this.layers.length)) this.tear(this.torn++, stats);
+      while (this.torn < Math.min(torn, this.layers.length)) this.tear(this.torn++);
       this.hooks.hit?.(e.hp, this.total);
     }
     if (e.hp <= 0) {
@@ -542,36 +590,28 @@ export class Rescue {
       this.fx.burst(tail.x, h + 0.25, tail.z, 4, 2.6 + jerk * 2, 0, 0.11);
     }
 
-    // a marker the player can find from the play camera, and a cry for help now and then
-    if (this.state === 'help') {
-      const sp = this.fx.sprites;
-      const pulse = (time * 0.7) % 1;
-      sp.push(T.x, h + 0.12, T.z, 3.4 + pulse * 3, 3.4 + pulse * 3, 0, 1.4, 1.05, 0.35, (1 - pulse) * 0.55, SP.ring, MODE.flat, 0.8);
-      sp.push(T.x, h + 0.1, T.z, 3.6, 3.6, -time * 0.6, 1.3, 1.0, 0.4, 0.5, SP.dash, MODE.flat, 0.8);
-    }
     this.nextCall -= dt;
     if (this.nextCall <= 0) {
-      this.nextCall = this.state === 'help' ? 4.5 + this.r() * 2 : 2.6;
+      this.nextCall = this.state === 'arrive' ? 2.6 : 4.5 + this.r() * 2;
       this.hooks.sound?.('distress', 1);
     }
   }
 
-  /** One layer of net comes off and lands in the water as trash the player can sweep up. */
-  private tear(i: number, stats: ComputedStats): void {
+  /** One layer of net comes off, and what the tide still has room for lands as salvage. */
+  private tear(i: number): void {
     const layer = this.layers[i];
     if (!layer || !this.sim) return;
     layer.visible = false;
     const at = this.body.localToWorld(this.v.set(...LAYER_AT[i]));
     this.water.splash({ x: at.x, z: at.z, radius: 2, foam: 1, impulse: 1.6 });
     this.fx.burst(at.x, Math.max(0.3, at.y), at.z, 12, 4.5, 0, 0.14);
-    for (const d of LAYER_DEBRIS[i]) {
-      // thrown clear toward the lagoon side, where the play camera can see them drift
+    const sim = this.sim;
+    if (sim.story.arrive()) {
+      const d = LAYER_DEBRIS[i];
+      // thrown clear toward the lagoon side, where the play camera can see it drift
       const a = Math.PI + (this.r() - 0.5) * 1.8;
       const dist = lerp(4.5, 7, this.r());
-      const e = this.sim.createTrash(stats, false, d.rarity, simX(this.T.x + Math.cos(a) * dist), simY(this.T.z + Math.sin(a) * dist));
-      e.kind = d.kind;
-      e.variant = d.variant;
-      const sim = this.sim;
+      const e = sim.createTrash(d.kind, simX(this.T.x + Math.cos(a) * dist), simY(this.T.z + Math.sin(a) * dist), d.variant);
       this.actors.toss(e, at, new THREE.Vector3(toX(e.x), 0.25, toZ(e.y)), 0.85, 3.2, () => {
         e.age = 0.45;
         e.vx = Math.cos(a) * 18;
@@ -620,6 +660,13 @@ export class Rescue {
       this.hooks.sound?.('leap', above ? 0.8 : 1);
     }
     this.group.visible = t < 5.2;
+    const tr = this.trail;
+    tr.on = t > 0.7 && t < 5.6;
+    tr.t = t;
+    tr.x = this.v.x;
+    tr.z = this.v.z;
+    tr.dx = this.D.x;
+    tr.dz = this.D.z;
   }
 
   private finish(): void {

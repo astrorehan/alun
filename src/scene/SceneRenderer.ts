@@ -27,6 +27,9 @@ import { Fx, TextLayer } from './fx';
 import { Actors } from './actors';
 import { Opening, type OpeningHooks } from './opening';
 import { Rescue, type RescueHooks } from './rescue';
+import { Ending, type EndingHooks } from './ending';
+import { coastLook, murkOf } from './health';
+import { StoryLayer } from './story';
 import { shoreAt, simX, simY, toX, toZ, UNIT } from './space';
 
 const REFRESH_BANDS = 16;
@@ -180,6 +183,8 @@ export class SceneRenderer {
   private actors: Actors;
   private opening: Opening;
   private rescue: Rescue;
+  private story: StoryLayer;
+  private ending: Ending;
   private text: TextLayer;
 
   private canvas: HTMLCanvasElement;
@@ -296,15 +301,22 @@ export class SceneRenderer {
     this.actors.onCatch = () => this.village.cheer();
     this.opening = new Opening(this.water, this.fx, this.actors);
     this.rescue = new Rescue(this.water, this.fx, this.actors, this.director);
+    this.story = new StoryLayer(this.water, this.fx);
+    this.story.onCheer = () => this.village.cheer();
+    this.actors.guests = this.story.guests;
+    this.ending = new Ending(this.story, this.fx);
+    this.staticGroup.add(this.story.staticGroup);
 
     this.underDynGroup.add(this.reef.dynGroup);
     this.underDynGroup.add(this.actors.underGroup);
+    this.underDynGroup.add(this.story.underGroup);
 
     this.dynGroup.add(this.flora.dynGroup);
     this.dynGroup.add(this.village.dynGroup);
     this.dynGroup.add(this.beach.dynGroup);
     this.dynGroup.add(this.net.group);
     this.dynGroup.add(this.actors.group);
+    this.dynGroup.add(this.story.group);
     this.dynGroup.add(this.opening.group);
     this.dynGroup.add(this.rescue.group);
 
@@ -472,6 +484,7 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     this.director.use2DShift = Q.cached;
     this.reef.setCachedMode(Q.cached);
     this.actors.setCachedMode(Q.cached);
+    this.story.setCachedMode(Q.cached);
     this.net.setCachedMode(Q.cached);
     G.uCachedUnder.value = Q.cached ? 1 : 0;
     const wantRefract = Q.waterDetail >= 1;
@@ -553,8 +566,8 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     const first = this.phase === null;
     this.phase = phase;
     this.forceNextFrame = true;
-    // the opening flies the camera itself
-    if (phase === 'intro') return;
+    // the opening flies the camera itself, and so does a dolphin's film a save was in the middle of
+    if (phase === 'intro' || this.rescue.filming || this.ending.active) return;
     const mode = phase === 'title' ? 'title' : 'play';
     if (first) this.director.snap(mode);
     else this.director.setMode(mode, 2.8);
@@ -588,6 +601,38 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     return this.opening.active;
   }
 
+  /** The closing film. `done` runs once, at its end or when it is skipped. */
+  playEnding(_sim: GameSimulation, hooks: EndingHooks, done: () => void): void {
+    this.ending.end();
+    this.ending.begin(hooks);
+    this.director.film(
+      (t, out) => this.ending.shoot(t, out, this.director.playPose),
+      () => {
+        this.ending.end();
+        done();
+      }
+    );
+    this.forceNextFrame = true;
+  }
+
+  skipEnding(): void {
+    if (this.ending.active) this.director.skip();
+  }
+
+  /** Where a place in the lagoon is on the page, in CSS pixels. Off to the side of the screen still has a direction. */
+  worldToScreen(x: number, y: number): { x: number; y: number } | null {
+    if (!this.director.isSettled()) return null;
+    const cam = this.director.camera;
+    const r = this.canvas.getBoundingClientRect();
+    const sh = this.director.screenShift;
+    this.probe.set(toX(x), 0, toZ(y)).project(cam);
+    if (this.probe.z < -1 || this.probe.z > 1) return null;
+    const u = (this.probe.x * 0.5 - sh.x) * sh.z + 0.5;
+    const v = (this.probe.y * 0.5 - sh.y) * sh.z + 0.5;
+    return { x: r.left + u * r.width, y: r.top + (1 - v) * r.height };
+  }
+  private probe = new THREE.Vector3();
+
   /**
    * Pulls the camera away to the tangled dolphin (entity `id`, see GameSimulation.spawnDolphin) and
    * keeps play there until it is free, then films it leaping away and comes back to the lagoon.
@@ -610,26 +655,6 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
 
   get rescueActive(): boolean {
     return this.rescue.active;
-  }
-
-  /** Where to draw the "swipe like this" hint, in CSS pixels, while the player has not hit the net yet. */
-  rescueHint(): { ax: number; ay: number; bx: number; by: number } | null {
-    const h = this.rescue.hint();
-    if (!h || this.director.inCutscene) return null;
-    const cam = this.director.camera;
-    const r = this.canvas.getBoundingClientRect();
-    const sh = this.director.screenShift;
-    const toScreen = (v: THREE.Vector3): [number, number] | null => {
-      v.project(cam);
-      if (v.z > 1) return null;
-      // undo the 2D parallax shift the same way screenToWorld does, but in reverse
-      const u = (v.x * 0.5 + 0.5 - 0.5 - sh.x) * sh.z + 0.5;
-      const w = (v.y * 0.5 + 0.5 - 0.5 - sh.y) * sh.z + 0.5;
-      return [r.left + u * r.width, r.top + (1 - w) * r.height];
-    };
-    const a = toScreen(h.from);
-    const b = toScreen(h.to);
-    return a && b ? { ax: a[0], ay: a[1], bx: b[0], by: b[1] } : null;
   }
 
   setSettingsOpen(open: boolean): void {
@@ -797,7 +822,7 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     this.post.resize(pw, ph);
     this.text.resize(w, h, Math.min(2, window.devicePixelRatio || 1));
     G.uRes.value.set(pw, ph);
-    this.director.fit(w / h);
+    this.director.fit(w / h, w > h && window.matchMedia('(pointer: coarse)').matches);
     this.staticValid = false;
     this.refreshStage = -1;
     this.forceNextFrame = true;
@@ -943,9 +968,10 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
 
     // the title shows the lagoon as it should be; pressing play reveals the one you are handed
     const onTitle = this.phase === 'title';
-    const tod = this.forceTod ?? (onTitle ? 'dawn' : sim.getTimeOfDay(progress, stats));
+    const tod = this.forceTod ?? (onTitle ? 'dawn' : sim.getTimeOfDay(progress));
+    const coast = coastLook(stats.pollution) * 100;
     // the opening starts from the lagoon of the title and spoils it as the rubbish goes in
-    const ecoNow = this.opening.active ? this.opening.eco(stats.ecoPercent) : onTitle ? Math.max(85, stats.ecoPercent) : stats.ecoPercent;
+    const ecoNow = this.opening.active ? this.opening.eco(coast) : onTitle ? Math.max(85, coast) : coast;
     const ecoTarget = (this.forceEco ?? ecoNow) / 100;
     if (this.lastTod === null) {
       this.look = cloneLook(LOOKS[tod]);
@@ -987,13 +1013,24 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
       this.refreshStage = -1;
       this.shadow.invalidateStatic();
     }
+    // none of it has happened yet on the title, nor on the first morning of the opening
+    const veiled = onTitle || this.opening.pristine;
+    this.story.veiled = veiled || (this.opening.active && !this.opening.closed);
+    this.actors.veiled = veiled;
+    if (sim !== this.storySim || sim.lagoonId !== this.storyId) {
+      this.storySim = sim;
+      this.storyId = sim.lagoonId;
+      this.story.reset();
+    }
     this.fx.update(dt, this.time, sim, stats, this.look, cam.position, cine);
+    // after the sprite batch is opened, so the marker rings make it to the screen
+    if (this.ending.active) this.ending.update(Math.max(0, this.director.clock));
+    this.story.update(dt, this.time, sim, this.look, this.rescue);
     this.actors.update(dt, this.time, sim, stats, this.look, cam.position, cine);
-    // after the sprite batch is opened, so its marker rings make it to the screen
-    this.rescue.update(dt, this.time, this.look.swell, stats);
+    this.rescue.update(dt, this.time, this.look.swell, sim);
     this.fx.sprites.end();
-    this.village.applyLamps([...this.actors.lamps, ...this.net.lamps], this.time);
-    this.flora.update(this.time, progress, stats.mangroveLevel > 0, stats.forestLevel > 0 || stats.ecoPercent >= 45 ? 1 : 0.2);
+    this.village.applyLamps([...this.story.lamps, ...this.actors.lamps, ...this.net.lamps], this.time);
+    this.flora.update(this.time, progress, stats.mangroveLevel > 0, stats.forestLevel > 0 || this.eco >= 0.45 ? 1 : 0.2);
     this.water.update(this.gl, this.fs, dt, sim, cam.position, cine);
 
     const wu = this.water.material.uniforms;
@@ -1127,6 +1164,9 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     this.text.draw(sim, cam, isPlaying ? 1 - cine : 0, sh);
   }
 
+  private storySim: GameSimulation | null = null;
+  private storyId = -1;
+
   private hitShore = new Map<number, number>();
   /** Turns waves reaching the sand into run-up, so the beach answers every swipe. */
   private trackShore(sim: GameSimulation, _stats: ComputedStats): void {
@@ -1151,7 +1191,7 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
 
   private applyLook(flashAlpha: number): void {
     const l = this.look;
-    const murk = Math.max(0, 1 - this.eco / 0.5);
+    const murk = murkOf(this.eco);
     G.uTime.value = this.time;
     G.uSunDir.value.copy(l.sunDir);
     G.uSunCol.value.copy(l.sun);
@@ -1160,7 +1200,9 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     G.uRimCol.value.copy(l.rim);
     G.uFogCol.value.copy(l.fog);
     G.uFogSunCol.value.copy(l.fog).lerp(l.glow, 0.5);
-    G.uFog.value.set(170, l.fogDensity, 0, 0);
+    // an upright screen puts the camera far back; the lagoon is as clear from there
+    const { pos, look } = this.director.playPose;
+    G.uFog.value.set(Math.max(170, pos.distanceTo(look) + 1), l.fogDensity, 0, 0);
     G.uCloud.value.set(l.cloudShadow, 0.5, 0);
     G.uWind.value.set(0.94, 0.34, l.wind);
     G.uLampI.value = l.lamp;

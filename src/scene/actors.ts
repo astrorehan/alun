@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { isTrashKind, type GameSimulation } from '../simulation';
 import type { ComputedStats, Entity, EntityKind } from '../types';
 import { Build, hex, matrixOf, type Vec } from './build';
+import { striped } from './fleet';
 import type { Fx } from './fx';
 import { G, GLSL_CACHED_UNDERWATER, GLSL_GRADE_LDR, GLSL_LIGHT, GLSL_UNDERWATER_END, GLSL_UNIFORMS, outlineMaterial, registerDirectLdr, toon } from './gfx';
 import { inked, instanced, mesh, setCount } from './kit';
@@ -9,6 +10,7 @@ import type { Look } from './look';
 import type { Net } from './net';
 import { clamp, groundAt, lerp, noise3, rng, shoreAt, smooth, toX, toZ, UNIT } from './space';
 import { MODE, SP } from './sprites';
+import type { Guest } from './story';
 import { perahu, person } from './village';
 import { FLOAT_HEAD, type Water } from './water';
 
@@ -331,6 +333,20 @@ function trawler(): THREE.BufferGeometry {
     if (i % 2) b.box(s * 1.4, s, s * 1.1, { color: junk[i % 6], pos: [x, y, z], rot: [r(), r() * 6, r()], r: 0.05 });
     else b.ball(s * 0.7, { color: junk[i % 6], pos: [x, y, z], seg: 8, rough: 0.1 });
   }
+  // and the gear of the whole fleet: drums along the sides, striped floats on the rails
+  for (const s of [-1, 1]) {
+    for (let k = 0; k < 4; k++) {
+      const x = 0.7 + k * 1.15;
+      const z = s * (1.75 - k * 0.12);
+      b.cyl(0.5, 0.5, 1.2, { color: '#f7c51d', pos: [x, 2.5, z], seg: 14, gloss: 0.35 });
+      b.cyl(0.515, 0.515, 0.3, { color: '#20242c', pos: [x, 2.5, z], seg: 14 });
+      for (const y of [1.93, 3.07]) b.cyl(0.54, 0.54, 0.09, { color: '#b8891a', pos: [x, y, z], seg: 14 });
+    }
+    for (let k = 0; k < 4; k++) {
+      const p = prof(0.12 + k * 0.1);
+      striped(b, [p.x, p.gun + 0.45, s * (p.w + 0.16)], 0.46);
+    }
+  }
   // rails, anchor, floodlights
   for (const s of [-1, 1]) {
     const pts: Vec[] = [];
@@ -411,6 +427,8 @@ function kindOf(e: { kind: EntityKind; variant: number }): Kind | null {
     case 'trash_bag':
       return (['bag0', 'bag1', 'bag2'] as const)[e.variant % 3];
     case 'trash_net':
+    case 'drift_net':
+    case 'ghost_net':
       return 'net';
     case 'trash_crate':
       return 'crate';
@@ -468,6 +486,8 @@ interface Toss {
 }
 
 const SCALE: Record<Kind, number> = { bottle0: 1.02, bottle1: 1.05, bottle2: 1.0, bag0: 1.12, bag1: 1.12, bag2: 1.0, net: 1.08, crate: 1.02, battery: 1.12, relic: 1.15, seed: 1.2, boat0: 1.12, boat1: 1.12 };
+/** The story's nets are the same tangle, bigger: adrift in the lane, or draped over the coral. */
+const BIG: Partial<Record<EntityKind, number>> = { drift_net: 1.5, ghost_net: 1.75 };
 const SINK: Record<Kind, number> = { bottle0: 0.16, bottle1: 0.14, bottle2: 0.12, bag0: 0.2, bag1: 0.2, bag2: 0.1, net: 0.12, crate: 0.1, battery: 0.22, relic: 0.36, seed: 0.1, boat0: 0.16, boat1: 0.16 };
 
 export class Actors {
@@ -476,6 +496,10 @@ export class Actors {
   readonly overGroup = new THREE.Group();
   readonly lamps: { p: THREE.Vector3; r: number; c: THREE.Vector3 }[] = [];
   onCatch: (() => void) | null = null;
+  /** Fishing boats the simulation does not have in the water right now. */
+  guests: readonly Guest[] = [];
+  /** The title and the first morning of the opening: no oil, no nets. */
+  veiled = false;
   private im = {} as Record<Kind, THREE.InstancedMesh>;
   private data = {} as Record<Kind, THREE.InstancedBufferAttribute>;
   private n = {} as Record<Kind, number>;
@@ -764,6 +788,7 @@ void main(){
     for (const e of sim.entities) {
       const x = toX(e.x);
       const z = toZ(e.y);
+      if (this.veiled && (e.source !== undefined || e.kind === 'boat')) continue;
       if (e.kind === 'oil') {
         this.drawOil(e, oilN++, x, z);
         continue;
@@ -786,7 +811,7 @@ void main(){
       const hit = clamp(e.hitFlash / 0.14, 0, 1);
       const squash = 1 + Math.sin(hit * Math.PI) * 0.22;
       const bob = Math.sin(e.bobPhase) * 0.07;
-      const scale = SCALE[k] * pop;
+      const scale = SCALE[k] * pop * (BIG[e.kind] ?? 1);
       const wob = Math.sin(e.bobPhase * 0.8) * 0.12;
       this.put(k, x, h + SINK[k] + bob, z, -e.rotation, scale, squash, e.id * 0.137, hit * 0.75 * (1 - cine * 0.9), true, wob, wob * 0.6);
       const prev = this.seen.get(e.id);
@@ -825,6 +850,13 @@ void main(){
         const p = (t * 0.9 + e.id * 0.13) % 1;
         sp.push(x, h + 0.12, z, rad * (1.4 + p * 1.1), rad * (1.4 + p * 1.1), 0, c[0], c[1], c[2], (1 - p) * 0.7, SP.ring, MODE.flat, 0.8);
       }
+    }
+
+    for (const b of this.guests) {
+      const h = this.floatAt(b.x, b.z, t, swell, 1.4);
+      const w = Math.sin(t * 1.15 + b.z);
+      this.put(b.variant % 2 ? 'boat1' : 'boat0', b.x, h + SINK.boat0 + w * 0.05, b.z, b.yaw, SCALE.boat0, 1, b.variant * 0.37, 0, true, w * 0.06, w * 0.03);
+      sp.push(b.x, h + 0.06, b.z, 2.7, 2.45, b.yaw, 1, 1, 1, 0.3 * (1 - look.bio * 0.5), SP.ring, MODE.flat, 0, 0.9);
     }
 
     /* ---- anything that vanished inside the weir gets carried to a bin */
@@ -1027,6 +1059,8 @@ void main(){
       this.birds.setMatrixAt(i, matrixOf([x, y, z], [clamp(w * 3.2, -0.5, 0.5), -Math.atan2(vz, vx), 0.0], 0.9));
     }
     this.birds.instanceMatrix.needsUpdate = true;
+    // the birds go where the fish are
+    this.birds.count = Math.round(lerp(1, 6, smooth(0.14, 0.62, G.uEco.value)));
     this.birds.visible = up > 0;
 
     const on = smooth(0.3, 0.5, G.uEco.value);

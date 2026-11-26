@@ -26,24 +26,27 @@ export interface UpgradeCardProps {
   afterText: string;
   desc: string;
   cost: number;
-  unlocked: boolean;
   canAfford: boolean;
   maxed: boolean;
-  lockedReason?: string;
-  cornerTag?: string;
-  featured?: boolean;
+  /** As far as the workshop can install it for now: the next level waits for supplies. */
+  waiting: boolean;
 }
 
-export interface AchievementCardProps {
-  id: string;
+export interface JournalCardProps {
   title: string;
-  desc: string;
+  text: string;
   swatch: UiSwatch;
   icon: UiIconName;
   current: number;
   target: number;
-  rewardCoins: number;
-  claimed: boolean;
+  written: boolean;
+  fresh: boolean;
+}
+
+export interface RadioCardProps {
+  title: string;
+  text: string;
+  answered: boolean;
 }
 
 /** Section divider pill: ─── ✦ CATEGORY ─── */
@@ -73,10 +76,9 @@ export function renderStarRow(level: number, maxLevel: number): string {
 export function renderUpgradeCard(p: UpgradeCardProps): string {
   const classes = [
     'ui-upgrade-card',
-    !p.unlocked ? 'is-locked' : '',
-    p.featured ? 'is-featured' : '',
     p.canAfford ? 'is-affordable' : '',
     p.maxed ? 'is-maxed' : '',
+    p.waiting ? 'is-waiting' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -84,15 +86,13 @@ export function renderUpgradeCard(p: UpgradeCardProps): string {
   let cornerHtml = '';
   if (p.maxed) {
     cornerHtml = `<span class="ui-corner-tag tag-max t-stroke-xs">MAKS!</span>`;
-  } else if (!p.unlocked) {
-    cornerHtml = `<span class="ui-corner-tag tag-lock t-stroke-xs">KUNCI</span>`;
-  } else if (p.cornerTag) {
-    cornerHtml = `<span class="ui-corner-tag t-stroke-xs">${p.cornerTag}</span>`;
-  } else if (p.level === 0 && p.canAfford) {
+  } else if (p.waiting) {
+    cornerHtml = `<span class="ui-corner-tag tag-lock t-stroke-xs num">Lv ${p.level} penuh</span>`;
+  } else if (p.level === 0) {
     cornerHtml = `<span class="ui-corner-tag t-stroke-xs">BARU!</span>`;
   }
 
-  const showSunburst = p.featured || p.canAfford || p.maxed;
+  const showSunburst = p.canAfford || p.maxed;
 
   let ctaSwatch: UiSwatch = 'slate';
   let ctaContent = '';
@@ -102,9 +102,9 @@ export function renderUpgradeCard(p: UpgradeCardProps): string {
     ctaSwatch = 'gold';
     ctaContent = `${getUiIconSvg('check', 'ui-btn-icon')}<span>MAKSIMAL</span>`;
     ctaDisabled = 'disabled';
-  } else if (!p.unlocked) {
+  } else if (p.waiting) {
     ctaSwatch = 'slate';
-    ctaContent = `${getUiIconSvg('lock', 'ui-btn-icon')}<span>${p.lockedReason ?? 'TERKUNCI'}</span>`;
+    ctaContent = `${getUiIconSvg('lock', 'ui-btn-icon')}<span>Tunggu pasokan</span>`;
     ctaDisabled = 'disabled';
   } else if (p.canAfford) {
     ctaSwatch = 'green';
@@ -116,7 +116,7 @@ export function renderUpgradeCard(p: UpgradeCardProps): string {
     ctaDisabled = 'disabled';
   }
 
-  const statDeltaHtml = p.maxed
+  const statDeltaHtml = p.maxed || p.waiting
     ? `<span class="t-stroke-sm t-gold">${p.beforeText}</span>`
     : `
       <span class="t-stroke-sm">${p.beforeText}</span>
@@ -133,8 +133,7 @@ export function renderUpgradeCard(p: UpgradeCardProps): string {
       <div class="ui-card-stage">
         ${showSunburst ? '<div class="ui-sunburst"></div>' : ''}
         ${cornerHtml}
-        ${p.featured || p.canAfford ? getUiIconSvg('sparkle', 'ui-sparkle sp-1') : ''}
-        ${p.featured ? getUiIconSvg('sparkle', 'ui-sparkle sp-2') : ''}
+        ${p.canAfford ? getUiIconSvg('sparkle', 'ui-sparkle sp-1') : ''}
         ${getUiIconSvg(p.icon, 'ui-card-art')}
         ${renderStarRow(p.level, p.maxLevel)}
       </div>
@@ -161,46 +160,66 @@ export function renderUpgradeCard(p: UpgradeCardProps): string {
   `;
 }
 
-/** Reusable Achievement Milestone Row Card (Exact Achievements Template) */
-export function renderAchievementCard(p: AchievementCardProps): string {
-  const clamped = Math.min(p.target, Math.floor(p.current));
-  const pct = Math.max(0, Math.min(100, (clamped / Math.max(1, p.target)) * 100));
-  const complete = clamped >= p.target;
-  const canClaim = complete && !p.claimed;
+/** The free call on the workshop radio. It is a card like the others, only wider, and it costs nothing. */
+export function renderRadioCard(p: RadioCardProps): string {
+  return `
+    <article class="ui-radio-card" data-swatch="red">
+      <div class="ui-radio-art">${getUiIconSvg('radio')}</div>
+      <div class="ui-radio-copy">
+        <span class="ui-radio-kicker t-stroke-xs t-gold">RADIO BENGKEL · GRATIS</span>
+        <span class="ui-radio-title t-stroke-md">${p.title}</span>
+        <span class="ui-radio-text">${p.text}</span>
+      </div>
+      <button
+        type="button"
+        class="ui-btn t-stroke-md ui-radio-btn"
+        data-swatch="${p.answered ? 'slate' : 'green'}"
+        data-answer-call
+        ${p.answered ? 'disabled' : ''}
+      >
+        ${getUiIconSvg(p.answered ? 'check' : 'radio', 'ui-btn-icon')}<span>${p.answered ? 'Sudah dijawab' : 'Jawab panggilan'}</span>
+      </button>
+    </article>
+  `;
+}
 
-  const btnSwatch: UiSwatch = p.claimed ? 'teal' : canClaim ? 'green' : 'slate';
-  const btnLabel = p.claimed
-    ? `${getUiIconSvg('check', 'ui-btn-icon')}<span>Diklaim</span>`
-    : canClaim
-      ? `<span>Klaim</span>${getUiIconSvg('coin', 'ui-btn-icon')}<span class="num">+${p.rewardCoins}</span>`
-      : `${getUiIconSvg('coin', 'ui-btn-icon')}<span class="num">+${p.rewardCoins}</span>`;
+/** What the workshop is still waiting for, one line. */
+export function renderSupplyLine(text: string): string {
+  return `
+    <div class="ui-supply-line">
+      ${getUiIconSvg('basket', 'ui-supply-icon')}
+      <span class="ui-supply-kicker t-stroke-xs t-gold">PASOKAN BERIKUTNYA</span>
+      <span class="ui-supply-text">${text}</span>
+    </div>
+  `;
+}
+
+/** A page of the village journal: what happened, or what has yet to happen. */
+export function renderJournalCard(p: JournalCardProps): string {
+  const clamped = Math.max(0, Math.min(p.target, Math.floor(p.current)));
+  const pct = Math.max(0, Math.min(100, (clamped / Math.max(1, p.target)) * 100));
+  const foot = p.written
+    ? `<span class="ui-journal-done t-stroke-xs">${getUiIconSvg('check')}<span>Tercatat</span></span>`
+    : p.target > 1
+      ? `<div class="ui-prog-pill">
+            <div class="ui-prog-fill" style="width:${pct.toFixed(1)}%"></div>
+            <span class="ui-prog-text t-stroke-xs num">${clamped.toLocaleString('id-ID')} / ${p.target.toLocaleString('id-ID')}</span>
+          </div>`
+      : '';
 
   return `
-    <article class="ui-achieve-card ${p.claimed ? 'is-claimed' : ''}" data-swatch="${p.swatch}">
+    <article class="ui-achieve-card ui-journal-card ${p.written ? '' : 'is-blank'} ${p.fresh ? 'is-fresh' : ''}" data-swatch="${p.written ? p.swatch : 'dark'}">
       <div class="ui-achieve-medallion">
         ${getUiIconSvg(p.icon)}
       </div>
       <div class="ui-achieve-body">
         <div>
           <div class="ui-achieve-title t-stroke-md">${p.title}</div>
-          <div class="ui-achieve-desc t-stroke-xs">${p.desc}</div>
+          <div class="ui-achieve-desc t-stroke-xs">${p.text}</div>
         </div>
-        <div class="ui-achieve-actions">
-          <div class="ui-prog-pill">
-            <div class="ui-prog-fill" style="width:${pct.toFixed(1)}%"></div>
-            <span class="ui-prog-text t-stroke-xs num">${clamped.toLocaleString('id-ID')} / ${p.target.toLocaleString('id-ID')}</span>
-          </div>
-          <button
-            type="button"
-            class="ui-btn ui-claim-btn t-stroke-xs"
-            data-swatch="${btnSwatch}"
-            data-claim-id="${p.id}"
-            ${canClaim ? '' : 'disabled'}
-          >
-            ${btnLabel}
-          </button>
-        </div>
+        ${foot ? `<div class="ui-journal-foot">${foot}</div>` : ''}
       </div>
+      ${p.fresh ? '<span class="ui-corner-tag ui-journal-new t-stroke-xs">BARU!</span>' : ''}
     </article>
   `;
 }
@@ -274,20 +293,4 @@ export function spawnUiConfetti(originEl?: HTMLElement | null, count = 26): void
     );
     anim.onfinish = () => el.remove();
   }
-}
-
-/** Pop a crisp glossy floating pill toast at bottom-center */
-let toastTimer: number | null = null;
-
-export function showUiToast(text: string, swatch: UiSwatch = 'green', durationMs = 2400): void {
-  const host = document.getElementById('ui-toast-host');
-  if (!host) return;
-
-  host.innerHTML = `<div class="ui-toast t-stroke-sm" data-swatch="${swatch}">${text}</div>`;
-  host.classList.remove('hidden');
-
-  if (toastTimer !== null) window.clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => {
-    host.classList.add('hidden');
-  }, durationMs);
 }

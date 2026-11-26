@@ -142,13 +142,17 @@ export class Director {
     return clamp(this.cur.pos.distanceTo((this.focusPose ?? this.play).pos) / 60, 0, 1);
   }
 
-  fit(aspect: number): void {
+  fit(aspect: number, compact = false): void {
     const cam = new THREE.PerspectiveCamera(this.fov, aspect, 1, 1400);
+    // On a handheld screen fit the playable coast, leaving out the deep inland scenery.
+    const west = compact ? 180 : 20;
+    const south = compact ? 700 : 712;
+    const north = compact ? 36 : 20;
     const pts = [
-      new THREE.Vector3(toX(20), 0, toZ(20)),
-      new THREE.Vector3(toX(1274), 0, toZ(20)),
-      new THREE.Vector3(toX(52), 0, toZ(712)),
-      new THREE.Vector3(toX(1274), 0, toZ(712)),
+      new THREE.Vector3(toX(west), 0, toZ(north)),
+      new THREE.Vector3(toX(1274), 0, toZ(north)),
+      new THREE.Vector3(toX(compact ? west : 52), 0, toZ(south)),
+      new THREE.Vector3(toX(1274), 0, toZ(south)),
     ];
     const p = (this.pitch * Math.PI) / 180;
     const yaw = (this.yaw * Math.PI) / 180;
@@ -178,11 +182,13 @@ export class Director {
       const need = Math.max((x1 - x0) / 2, (y1 - y0) / 2);
       dist *= 1 + (need - 0.995) * 0.7;
     }
+    const previousPlay = this.play;
     this.play = {
       pos: target.clone().addScaledVector(dir, dist),
       look: target.clone(),
       fov: this.fov,
     };
+    if (this.to === previousPlay) this.to = this.play;
     this.camera.aspect = aspect;
     if (!this.started) {
       this.started = true;

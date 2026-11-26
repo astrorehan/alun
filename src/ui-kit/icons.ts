@@ -46,7 +46,19 @@ export type UiIconName =
   | 'info'
   | 'swipe'
   | 'settings'
-  | 'dolphin';
+  | 'dolphin'
+  | 'wrench'
+  | 'rope'
+  | 'raider'
+  | 'float'
+  | 'drum'
+  | 'pad'
+  | 'basket'
+  | 'beacon'
+  | 'radio'
+  | 'eco'
+  | 'journal'
+  | 'warn';
 
 const INK = '#0d121d';
 
@@ -340,6 +352,109 @@ export function getUiIconSvg(name: UiIconName, className = ''): string {
         <path d="M11 21.4C16 22.8 23 21.4 27.4 17.6" stroke="#d8f4ff" stroke-width="2" stroke-linecap="round"/>
         <path d="M18.2 19.8Q19.4 23.6 16.2 25.6Q16.4 22 15.4 20.2Z" fill="#3f9fd6" stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"/>
         <circle cx="26.2" cy="14.2" r="1.3" fill="${INK}"/>
+      </svg>`;
+
+    case 'wrench':
+      return `<svg${cls} viewBox="0 0 40 40" fill="none">
+        <path d="M31.5 5.5L26.4 10.6L29.4 13.6L34.5 8.5C36.6 13 34.4 18.2 29.6 19.4C28 19.8 26.4 19.7 25 19.2L12.6 31.6C10.8 33.4 8 33.4 6.4 31.6C4.6 30 4.6 27.2 6.4 25.4L18.8 13C17.6 9 20 4.6 24.6 3.6C27 3 29.6 3.8 31.5 5.5Z" fill="#cfe0ee" stroke="${INK}" stroke-width="3" stroke-linejoin="round"/>
+        <circle cx="9.6" cy="28.6" r="2.2" fill="${INK}"/>
+        <path d="M22 8C23.4 6.6 25 6 26.6 6" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round"/>
+      </svg>`;
+
+    case 'rope':
+      return `<svg${cls} viewBox="0 0 40 40" fill="none">
+        <path d="M5 12C13 4 19 20 27 12C31 8 35 10 36 14" stroke="${INK}" stroke-width="8.4" stroke-linecap="round"/>
+        <path d="M5 12C13 4 19 20 27 12C31 8 35 10 36 14" stroke="#e2b56a" stroke-width="4.6" stroke-linecap="round"/>
+        <path d="M5 27C13 19 19 35 27 27C31 23 35 25 36 29" stroke="${INK}" stroke-width="8.4" stroke-linecap="round"/>
+        <path d="M5 27C13 19 19 35 27 27C31 23 35 25 36 29" stroke="#c8924a" stroke-width="4.6" stroke-linecap="round"/>
+        <path d="M9 10.5L12 13M18 13L21 15.4M9 25.5L12 28M18 28L21 30.4" stroke="#7a5426" stroke-width="2" stroke-linecap="round"/>
+      </svg>`;
+
+    case 'raider':
+      return `<svg${cls} viewBox="0 0 40 40" fill="none">
+        <path d="M4 26H36L31 34H9L4 26Z" fill="#7a3a2a" stroke="${INK}" stroke-width="3.2" stroke-linejoin="round"/>
+        <path d="M19 4V26" stroke="${INK}" stroke-width="3.4" stroke-linecap="round"/>
+        <path d="M19 5L33 8L29 12L33 15L28 18L31 22H19V5Z" fill="#e0453a" stroke="${INK}" stroke-width="2.8" stroke-linejoin="round"/>
+        <path d="M17 9L8 20L12 19L11 23H17V9Z" fill="#c8c0ae" stroke="${INK}" stroke-width="2.6" stroke-linejoin="round"/>
+      </svg>`;
+
+    case 'float':
+      return `<svg${cls} viewBox="0 0 40 40" fill="none">
+        <path d="M20 6V2.5" stroke="${INK}" stroke-width="3.2" stroke-linecap="round"/>
+        <ellipse cx="20" cy="20" rx="12.5" ry="14" fill="#ff7a2a" stroke="${INK}" stroke-width="3.2"/>
+        <path d="M8 16.5C15 19.5 25 19.5 32 16.5V23.5C25 26.5 15 26.5 8 23.5V16.5Z" fill="#fff6e4" stroke="${INK}" stroke-width="2.4" stroke-linejoin="round"/>
+        <path d="M13 11.5C14.6 9.8 16.6 8.8 19 8.6" stroke="#ffd0a8" stroke-width="2.4" stroke-linecap="round"/>
+        <path d="M6 34C12 31 16 37 20 34C24 31 28 37 34 34" stroke="#4ce3ff" stroke-width="3" stroke-linecap="round"/>
+      </svg>`;
+
+    case 'drum':
+      return `<svg${cls} viewBox="0 0 40 40" fill="none">
+        <path d="M9 9V31C9 34 14 36 20 36C26 36 31 34 31 31V9" fill="#f2b62c" stroke="${INK}" stroke-width="3.2"/>
+        <ellipse cx="20" cy="9" rx="11" ry="4.6" fill="#ffd95e" stroke="${INK}" stroke-width="3"/>
+        <path d="M9 16.5C12 19 28 19 31 16.5M9 25.5C12 28 28 28 31 25.5" stroke="${INK}" stroke-width="2.6"/>
+        <path d="M20 18.5C23 22 24 23.4 24 25.2A4 4 0 0 1 16 25.2C16 23.4 17 22 20 18.5Z" fill="#2b2236" stroke="${INK}" stroke-width="1.6"/>
+      </svg>`;
+
+    case 'pad':
+      return `<svg${cls} viewBox="0 0 40 40" fill="none">
+        <rect x="4" y="12" width="32" height="17" rx="6" fill="#f2f7fb" stroke="${INK}" stroke-width="3.2"/>
+        <path d="M11 12V29M18 12V29M25 12V29M32 13V28" stroke="#a9c3d6" stroke-width="2.4"/>
+        <path d="M8 16.5H30" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M20 31.5C22.6 34.4 23.4 35.6 23.4 36.6A3.4 3.4 0 0 1 16.6 36.6C16.6 35.6 17.4 34.4 20 31.5Z" fill="#2b2236"/>
+      </svg>`;
+
+    case 'basket':
+      return `<svg${cls} viewBox="0 0 40 40" fill="none">
+        <path d="M10 17C10 7 30 7 30 17" stroke="${INK}" stroke-width="6"/>
+        <path d="M10 17C10 7 30 7 30 17" stroke="#c8924a" stroke-width="2.6"/>
+        <path d="M5 17H35L31 34H9L5 17Z" fill="#e2b56a" stroke="${INK}" stroke-width="3.2" stroke-linejoin="round"/>
+        <path d="M8 23H32M9 28.5H31M14 18L16 33M26 18L24 33" stroke="#8a5a24" stroke-width="2.2"/>
+        <path d="M12 16C14 11 20 11 22 15L26 12V18H12Z" fill="#8fd0f0" stroke="${INK}" stroke-width="2.4" stroke-linejoin="round"/>
+      </svg>`;
+
+    case 'beacon':
+      return `<svg${cls} viewBox="0 0 40 40" fill="none">
+        <path d="M6 10L14 13M6 18L14 16M34 10L26 13M34 18L26 16" stroke="#ffe45a" stroke-width="3" stroke-linecap="round"/>
+        <path d="M14 35L16 19H24L26 35Z" fill="#fff6e4" stroke="${INK}" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M15.2 25H24.8L25.4 30H14.6Z" fill="#e0453a"/>
+        <rect x="14" y="9" width="12" height="10" rx="2" fill="#ffd94a" stroke="${INK}" stroke-width="3"/>
+        <path d="M12.5 9.5L20 3.5L27.5 9.5Z" fill="#e0453a" stroke="${INK}" stroke-width="2.8" stroke-linejoin="round"/>
+        <path d="M9 35.5H31" stroke="${INK}" stroke-width="3.6" stroke-linecap="round"/>
+      </svg>`;
+
+    case 'radio':
+      return `<svg${cls} viewBox="0 0 40 40" fill="none">
+        <path d="M11 13L27 4" stroke="${INK}" stroke-width="3.2" stroke-linecap="round"/>
+        <rect x="5" y="13" width="30" height="21" rx="5" fill="#d8843a" stroke="${INK}" stroke-width="3.2"/>
+        <circle cx="14" cy="23.5" r="6" fill="#3a2a1c" stroke="${INK}" stroke-width="2.4"/>
+        <circle cx="14" cy="23.5" r="2.6" fill="#8a6a4a"/>
+        <rect x="23" y="17.5" width="9" height="5" rx="1.5" fill="#9ff0c0" stroke="${INK}" stroke-width="2"/>
+        <circle cx="25.5" cy="28" r="2" fill="#fff6e4" stroke="${INK}" stroke-width="1.6"/>
+        <circle cx="31" cy="28" r="2" fill="#ff6a5a" stroke="${INK}" stroke-width="1.6"/>
+      </svg>`;
+
+    case 'eco':
+      return `<svg${cls} viewBox="0 0 40 40" fill="none">
+        <path d="M4 30C10 26 14 32 20 29C26 26 30 32 36 29V35H4V30Z" fill="#f2d28a" stroke="${INK}" stroke-width="2.8" stroke-linejoin="round"/>
+        <path d="M20 29C11 27 8 19 11 8C21 8 27 14 24 24C23.4 26 22 28 20 29Z" fill="#5fd86a" stroke="${INK}" stroke-width="3.2" stroke-linejoin="round"/>
+        <path d="M14 12C17 17 19 22 20 28" stroke="${INK}" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M27 24C28 19 31 16 35 15C36 20 34 25 28 27" fill="#9bea6a" stroke="${INK}" stroke-width="2.8" stroke-linejoin="round"/>
+      </svg>`;
+
+    case 'journal':
+      return `<svg${cls} viewBox="0 0 40 40" fill="none">
+        <rect x="7" y="4" width="27" height="32" rx="4" fill="#2f8fc8" stroke="${INK}" stroke-width="3.2"/>
+        <path d="M13 4V36" stroke="${INK}" stroke-width="2.8"/>
+        <rect x="17" y="10" width="13" height="9" rx="2" fill="#fff6e4" stroke="${INK}" stroke-width="2.4"/>
+        <path d="M20 13.2H27M20 16H25" stroke="#8a6a4a" stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M4.5 11H9M4.5 20H9M4.5 29H9" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+      </svg>`;
+
+    case 'warn':
+      return `<svg${cls} viewBox="0 0 40 40" fill="none">
+        <path d="M20 5L37 34H3L20 5Z" fill="#ffd94a" stroke="${INK}" stroke-width="3.2" stroke-linejoin="round"/>
+        <path d="M20 15V24" stroke="${INK}" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="20" cy="29" r="2.4" fill="${INK}"/>
       </svg>`;
 
     case 'settings':

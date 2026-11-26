@@ -3,13 +3,12 @@
  * Every coastal landmark derives from getShoreX(y) so visuals and collisions align to the pixel.
  */
 
+import type { EntityKind, Point } from './types';
+
+export type { Point } from './types';
+
 export const WORLD_W = 1280;
 export const WORLD_H = 720;
-
-export interface Point {
-  x: number;
-  y: number;
-}
 
 export interface SeaRock {
   x: number;
@@ -96,6 +95,61 @@ export const MANGROVE_SLOTS: Point[] = MANGROVE_YS.map((y, idx) => ({
 
 /** Where the dolphin gets caught: the south-east of the lagoon, in the lee of the small rocks. */
 export const DOLPHIN_SPOT: Point = { x: 880, y: 560 };
+
+/** The end of the pier, where Bu Sari stands and takes things in hand. */
+export const PIER_END: Point = { x: 362, y: 474 };
+
+/** The mooring pole off the pier. The tool chest is caught under it, and its rope lets it go no further. */
+export const MOORING: Point = { x: 486, y: 450 };
+export const MOORING_ROPE = 150;
+
+/** The six pieces that close the pier: one group before the net, one around the mooring. */
+export const OPENING_TRASH: { kind: EntityKind; variant: number; x: number; y: number }[] = [
+  { kind: 'trash_bottle', variant: 0, x: 462, y: 352 },
+  { kind: 'trash_bag', variant: 0, x: 500, y: 306 },
+  { kind: 'trash_bottle', variant: 1, x: 512, y: 392 },
+  { kind: 'trash_bottle', variant: 2, x: 446, y: 462 },
+  { kind: 'trash_bag', variant: 1, x: 494, y: 452 },
+  { kind: 'trash_bottle', variant: 0, x: 528, y: 492 },
+];
+
+/** Where Pak Damar waits for a way in, and the gap in the reef he comes through. */
+export const WAITING_SPOT: Point = { x: 1196, y: 432 };
+export const REEF_GAP: Point = { x: 1096, y: 432 };
+
+/** The spawning ground: the trawl drags the school out of it, and the dolphins come home along it. */
+export const SPAWNING_GROUND: Point = { x: 872, y: 226 };
+export const TRAWL_STATION: Point = { x: 970, y: 238 };
+
+/** An old blotch of oil on the lee side of the big rock, and where the drum carrier means to add to it. */
+export const OLD_BLOTCH: Point = { x: 1006, y: 300 };
+export const DUMP_STATION: Point = { x: 1150, y: 372 };
+export const DUMP_SPOT: Point = { x: 1046, y: 392 };
+
+/** Where a lost trawl settles on the coral. */
+export const GHOST_SPOTS: Point[] = [
+  { x: 912, y: 132 },
+  { x: 1092, y: 618 },
+];
+
+/** Where a leak settles when there is no room left at the usual place. */
+export const SPILL_SPOTS: Point[] = [
+  { x: 1046, y: 392 },
+  { x: 930, y: 330 },
+  { x: 960, y: 452 },
+];
+
+/** Deposits under the tide line, in the order the fishers point them out. */
+export const DEPOSIT_SPOTS: Point[] = [252, 292, 568, 612, 206, 650, 160, 540].map((y) => ({
+  x: Math.round(getShoreX(y) + 12),
+  y,
+}));
+
+/** Where the raiders drop anchor: across the mouth of the net, between it and the pier. */
+export const RAID_ANCHORS: Point[] = [
+  { x: 452, y: 414 },
+  { x: 446, y: 318 },
+];
 
 /** Strategic lagoon coordinates for Autonomous AI Buoys */
 export const AI_BUOY_SLOTS: Point[] = [

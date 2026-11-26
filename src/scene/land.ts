@@ -396,6 +396,13 @@ export function buildLand(): THREE.Mesh {
       alb *= mix(vec3(1.), vec3(.64, .56, .5), wet);
       gloss = max(gloss, wet * .75);
       gloss = max(gloss, puddle * .7 * step(0., y));
+
+      // ---- past 60 the oil reaches the beach: tarry tongues along the tide line
+      float oily = smoothstep(.25, .15, uEco) * step(-.5, y) * smoothstep(1.15, .5, y) * (1. - floorm) * (1. - fringe);
+      float tar = smoothstep(.47, .6, n1 * .55 + n2 * .35 + n3 * .2) * smoothstep(.95, .3, y + (n2 - .5) * .9) * oily;
+      alb = mix(alb, ${c('#1d1620')} * (.7 + .6 * n4), tar * .86);
+      alb = mix(alb, ${c('#5a4a34')}, oily * .22 * smoothstep(.4, .7, n2));
+      gloss = max(gloss, tar * .8);
       ao *= mix(1., .55, floorm);
     `,
     fEnd: /* glsl */ `

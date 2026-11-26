@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { CORAL_CLUSTERS, SEA_ROCKS } from '../world';
 import type { GameSimulation } from '../simulation';
 import { Build, boulder, hex, matrixOf, type Vec } from './build';
-import { GLSL_CACHED_UNDERWATER, GLSL_UNDERWATER_END, outlineMaterial, toon } from './gfx';
+import { G, GLSL_CACHED_UNDERWATER, GLSL_UNDERWATER_END, outlineMaterial, toon } from './gfx';
 import { inked, instanced, mesh, type Inst } from './kit';
 import { Q } from './quality';
 import { clamp, groundAt, lerp, noise3, rng, smooth, toX, toZ, UNIT } from './space';
@@ -317,7 +317,7 @@ function star(seed: number): THREE.BufferGeometry {
 
 /** Recovers from bone-white to full colour, each colony at its own pace, as the ecosystem heals. */
 const CORAL_ALBEDO = /* glsl */ `
-  float recov = .34 + .7 * uEco;
+  float recov = mix(.04, 1.06, smoothstep(.04, .8, uEco));
   float heal = smoothstep(vInst.y - .12, vInst.y + .1, recov);
   if (vInst.z > .5 && vInst.z < 1.5){
     vec3 q3 = vLP * 5.5;
@@ -538,6 +538,9 @@ export class Reef {
   update(t: number, sim: GameSimulation): void {
     const p = this.vp;
     const s = this.vs;
+    // the wild schools thin out with the coast, and are gone where it is at its worst
+    const wild = smooth(0.1, 0.6, G.uEco.value) * 1.2 - 0.1;
+    const n = this.school.length;
     this.school.forEach((f, i) => {
       const a = f.a + t * f.sp;
       const rr = f.r * (1 + Math.sin(t * 0.7 + f.ph) * 0.16);
@@ -545,11 +548,12 @@ export class Reef {
       const head = Math.atan2(-Math.cos(a) * Math.sign(f.sp) * 0.85, -Math.sin(a) * Math.sign(f.sp));
       this.e.set(0, head, 0);
       this.q.setFromEuler(this.e);
-      s.setScalar(f.s);
+      const on = (i * 0.618) % 1;
+      s.setScalar(f.s * smooth(on - 0.1, on + 0.1, wild));
       this.m4.compose(p, this.q, s);
       this.fish.setMatrixAt(i, this.m4);
     });
-    let k = this.school.length;
+    let k = n;
     let mi = 0;
     for (const f of sim.ambientFish) {
       const head = Math.atan2(-f.vy, f.vx);
@@ -563,7 +567,7 @@ export class Reef {
       p.set(toX(f.x), -0.85, toZ(f.y));
       this.e.set(0, head, 0);
       this.q.setFromEuler(this.e);
-      s.setScalar(f.size * 0.1 * 0.95);
+      s.setScalar(f.size * 0.1 * 0.95 * smooth(((k - n) / 18) * 0.9 - 0.1, ((k - n) / 18) * 0.9 + 0.1, wild));
       this.m4.compose(p, this.q, s);
       if (k < this.fish.count) this.fish.setMatrixAt(k++, this.m4);
     }

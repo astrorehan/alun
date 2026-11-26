@@ -12,9 +12,10 @@ import { perahu, person, propPair } from './village';
 import type { Water } from './water';
 
 /**
- * The opening: a drone tour of the lagoon as it was, a boat of tourists who leave it full of rubbish,
- * and A.L.U.N. waking up to the mess. Everything is the live scene with the camera flown by hand, and
- * the rubbish thrown overboard is the very trash the player starts with.
+ * The opening: a drone tour of the lagoon as it was, a boat of tourists who leave their rubbish in it,
+ * and A.L.U.N. waking up to a closed pier. Everything is the live scene with the camera flown by hand.
+ * Four bottles and two bags go over the side; by the last shot the current has carried those six to
+ * where the player finds them.
  */
 
 export interface OpeningHooks {
@@ -34,14 +35,18 @@ export const OPENING_LENGTH = 32.5;
 const CAPTIONS: { from: number; to: number; kicker: string; line: string }[] = [
   { from: 0.7, to: 5.0, kicker: 'PAGI DI PESISIR', line: 'Laguna Alun, jernih dan tenang.' },
   { from: 6.0, to: 9.6, kicker: 'DESA NELAYAN', line: 'Warga hidup dari laut yang bersih.' },
-  { from: 10.6, to: 14.2, kicker: 'TERUMBU KARANG', line: 'Karang berwarna-warni tumbuh di bawah air.' },
+  { from: 10.6, to: 14.2, kicker: 'TEMPAT PEMIJAHAN', line: 'Di sekitar karang inilah ikan bertelur.' },
   { from: 15.2, to: 18.9, kicker: 'TAMU DATANG', line: 'Rombongan wisatawan menyeberang ke laguna...' },
   { from: 19.6, to: 25.2, kicker: 'TAPI...', line: '...sampahnya dibuang begitu saja ke laut.' },
-  { from: 26.0, to: 31.2, kicker: 'A.L.U.N. · SISTEM AKTIF', line: 'Laguna tercemar! Ayo kita bersihkan.' },
+  { from: 25.9, to: 31.6, kicker: 'BU SARI MENGHIDUPKAN A.L.U.N.', line: 'Dermaga tertutup. Pak Damar menunggu di laut.' },
 ];
 
 /** When A.L.U.N. comes online. */
 const WAKE_AT = 26.2;
+/** The cut to A.L.U.N.: the current has had its way, and the six pieces lie where they close the pier. */
+const DRIFTED_AT = 25.5;
+/** Until then this is the lagoon of the first morning: no old oil, nobody waiting outside. */
+const SPOILED_AT = 19.4;
 
 /* ================================================================== smooth curves through timed keys */
 
@@ -239,6 +244,8 @@ interface Throw {
   dur: number;
   arc: number;
   dump: boolean;
+  /** A sackful is bags, a throw is a bottle. */
+  variant: number;
   thrown: boolean;
 }
 
@@ -257,6 +264,10 @@ export class Opening {
   private shown = -1;
   private woke = false;
   private dumped = false;
+  /** The current has carried the rubbish to the pier. */
+  private drifted = false;
+  /** What the film put in the water itself. */
+  private loose = new Set<number>();
   private r = rng(4242);
   private p = new THREE.Vector3();
   private h = new THREE.Vector3();
@@ -336,13 +347,15 @@ export class Opening {
     this.shown = -1;
     this.woke = false;
     this.dumped = false;
+    this.drifted = false;
+    this.loose.clear();
     this.r = rng(4242);
     this.bag.visible = true;
     this.plan = [];
 
-    const total = sim.startingTrashCount(stats);
-    const dumps = Math.min(3, Math.max(0, total - 4));
-    const singles = total - dumps;
+    // the six pieces that close the pier: four bottles by hand, two bags out of the sack
+    const dumps = 2;
+    const singles = sim.startingTrashCount() - dumps;
     const t0 = 19.8;
     const t1 = 24.1;
     for (let i = 0; i < singles; i++) {
@@ -361,6 +374,7 @@ export class Opening {
         dur: near ? lerp(0.65, 0.8, this.r()) : lerp(0.8, 1.0, this.r()),
         arc: near ? lerp(1.3, 1.8, this.r()) : lerp(2.6, 3.4, this.r()),
         dump: false,
+        variant: i % 3,
         thrown: false,
       });
     }
@@ -374,6 +388,7 @@ export class Opening {
         dur: lerp(0.5, 0.7, this.r()),
         arc: lerp(1.0, 1.6, this.r()),
         dump: true,
+        variant: i % 2,
         thrown: false,
       });
     }
@@ -383,7 +398,17 @@ export class Opening {
   /** The lagoon's health over the film: as it should be, then as the player is handed it. */
   eco(base: number): number {
     const clean = Math.max(85, base);
-    return lerp(clean, base, smooth(19.4, 26, this.clock));
+    return lerp(clean, base, smooth(SPOILED_AT, 26, this.clock));
+  }
+
+  /** Still the first morning: nothing of the story's is in the water yet. */
+  get pristine(): boolean {
+    return this.active && this.clock < SPOILED_AT;
+  }
+
+  /** The last shot: the pier is closed, and Pak Damar can be seen waiting outside. */
+  get closed(): boolean {
+    return this.drifted;
   }
 
   /** The camera, one pose per frame. False when the film is over. */
@@ -486,6 +511,7 @@ export class Opening {
   update(t: number, dt: number, time: number, swell: number, cam: THREE.Vector3): void {
     if (!this.sim || !this.stats) return;
     this.clock = t;
+    if (t >= DRIFTED_AT) this.carry();
 
     /* subtitles */
     let cap = -1;
@@ -609,29 +635,21 @@ export class Opening {
   private release(th: Throw, live: boolean): void {
     const sim = this.sim!;
     const to = this.landing(th, new THREE.Vector3());
-    const e = sim.createTrash(this.stats!, false, 'common', simX(to.x), simY(to.z));
-    if (th.dump && e.kind === 'trash_bottle' && this.r() < 0.6) {
-      // a sack of rubbish is mostly bags and takeaway boxes
-      e.kind = 'trash_bag';
-      e.value = 8;
-      e.radius = 13.5;
-      e.mass = 0.9;
-    }
+    const e = sim.createTrash(th.dump ? 'trash_bag' : 'trash_bottle', simX(to.x), simY(to.z), th.variant);
     to.set(toX(e.x), 0.25, toZ(e.y));
     const sp = speedAt(th.at);
     headingAt(th.at, this.h);
     const land = (): void => {
+      // a hiccup can put the splash after the cut, when this piece is already at the pier
+      if (this.drifted) return;
       e.age = 0.45;
       e.vx = this.h.x * sp * 2.2 + (this.r() - 0.5) * 8;
       e.vy = this.h.z * sp * 2.2 + (this.r() - 0.5) * 8;
+      this.loose.add(e.id);
       sim.entities.push(e);
-      if (live) this.hooks.sound?.('splash', th.dump ? 0.7 : 1);
+      this.hooks.sound?.('splash', th.dump ? 0.7 : 1);
     };
-    if (!live) {
-      e.vx = e.vy = 0;
-      land();
-      return;
-    }
+    if (!live) return;
     if (th.dump) {
       this.dumped = true;
       this.bag.visible = false;
@@ -643,23 +661,31 @@ export class Opening {
     if (!th.dump) this.hooks.sound?.('throw', 1);
   }
 
-  /** Jumps to the end: every throw lands where it would have, the boat is gone, the captions clear. */
+  /** The current takes what they threw to the pier, where it stays caught until the player sweeps it. */
+  private carry(): void {
+    const sim = this.sim;
+    if (this.drifted || !sim) return;
+    this.drifted = true;
+    this.actors.landAll();
+    sim.entities = sim.entities.filter((e) => !this.loose.has(e.id));
+    this.loose.clear();
+    sim.story.layOpening();
+    for (const e of sim.entities) if (e.opening) e.age = 1;
+  }
+
+  /** Jumps to the end: the rubbish is at the pier, the boat is gone, the captions clear. */
   finish(): void {
     if (!this.sim) return;
     // what is still in the air lands quietly: a skip should not end on a dozen splashes
     this.hooks = { caption: this.hooks.caption, motor: this.hooks.motor };
-    this.actors.landAll();
-    for (const th of this.plan) {
-      if (th.thrown) continue;
-      th.thrown = true;
-      this.release(th, false);
-    }
+    this.carry();
     this.end();
   }
 
   /** Puts everything away. */
   end(): void {
     if (!this.sim) return;
+    this.carry();
     this.sim = null;
     this.stats = null;
     this.clock = -1;

@@ -1,6 +1,6 @@
 # ALUN: Gema Pesisir Tropis
 
-Game incremental satu mekanik di laguna tropis. Sapu ombak, dorong sampah ke jaring desa, lalu pulihkan pesisir sampai terumbu karang berwarna lagi. Dibuat untuk **IT RUSH 2026 Game Jam (Universitas Bengkulu)**, tema *Only One Mechanics in a Tropical*.
+ALUN adalah permainan dengan satu mekanik di laguna tropis. Saat sampah menutup dermaga dan Pak Damar tertahan di laut, Bu Sari menghidupkan A.L.U.N. untuk membuka jalur pulang. Dalam delapan bab, sapuan ombak yang sama dipakai untuk mengangkat sampah, membebaskan lumba-lumba, menjaga muatan ikan, dan menghadang kapal induk saat muson. Dibuat untuk **IT RUSH 2026 Game Jam (Universitas Bengkulu)**, tema *Only One Mechanics in a Tropical*.
 
 ![Laguna di pagi hari](docs/main.jpg)
 
@@ -10,25 +10,28 @@ Game incremental satu mekanik di laguna tropis. Sapu ombak, dorong sampah ke jar
 
 ## Cara main
 
-Semua dilakukan dengan satu gerakan: **klik dan geser di air** untuk mengirim ombak. Tahan sebelum dilepas untuk mengisi gelombang pasang.
+Klik atau sentuh air, geser ke sasaran, lalu lepas untuk mengirim ombak. Ketuk tujuan di kiri atas untuk membaca petunjuk bab. Di HP, mainkan dalam posisi horizontal. Ketika suatu pekerjaan gagal, akibatnya terlihat di laguna dan kesempatan berikutnya datang setelah air tenang.
 
 | Input | Fungsi |
 |---|---|
-| Klik + geser | Kirim ombak |
-| Tahan, lalu lepas | Gelombang pasang besar |
-| Tab / E | Buka Kalibrasi (upgrade) |
-| 1 / 2 / 3 | Ganti tab Kalibrasi |
+| Klik atau sentuh + geser | Kirim ombak |
+| Tahan sebelum melepas | Isi tenaga ombak |
+| Tab / E | Buka bengkel saat bermain |
+| 1 / 2 | Pilih pohon alat atau jurnal di bengkel |
+| Esc | Kembali dari bengkel |
 | G | Pengaturan grafis |
-| M | Suara |
-| Esc / Enter / Spasi | Lewati intro |
+| M | Matikan atau nyalakan suara |
+| Esc / Enter / Spasi | Lewati film |
 
-Permainan baru dibuka dengan intro singkat: drone menyisir laguna yang masih bersih, rombongan wisatawan datang dan membuang sampah ke laut, lalu A.L.U.N. aktif. Sampah yang mereka buang adalah sampah yang kamu bersihkan. Pemain yang mengaktifkan *reduce motion* di sistemnya langsung masuk ke permainan.
+Sapu enam sampah pertama ke Jaring Desa, lalu dorong peti perkakas ke ujung dermaga. Bu Sari membuka Bengkel Kalibrasi dan menawarkan Bentang Ombak serta Kapasitas Energi. Pilih simpul di pohon alat untuk melihat efek dan harga. Koin membayar pemasangan, sedangkan cetak biru dan batas tingkat mengikuti kemajuan cerita. Semua bab bisa ditamatkan dengan ombak dasar.
 
-Setelah sekitar 40 detik bermain, seekor lumba-lumba terjerat jaring hantu (sekali per save). Kamera beralih ke lokasinya, lalu kirim ombak ke arahnya sampai tiga lapis jaringnya lepas. Potongan jaring dan sampahnya jatuh ke air dan bisa disapu ke Jaring Desa.
+Setelah jaga malam selesai dan pencemaran turun ke 30 atau kurang, jawab panggilan Operasi Badai Muson di bengkel saat siap. Sesudah fajar, Patroli Laguna melanjutkan permainan dengan saldo, peralatan, dan keadaan pesisir yang sama. Jurnal menyimpan riwayat pekerjaan desa.
 
-Kicauan burung mengikuti keadaan laguna: makin ramai saat laguna pulih, hilang saat badai, dan terdiam saat sampah dibuang di intro.
+Progres tersimpan otomatis di browser. Pilih **Lanjutkan** pada layar judul untuk kembali ke bab yang sedang dimainkan. Pengaturan kurangi gerakan pada perangkat melewati film dan langsung menampilkan tujuan permainan.
 
-Koin dari sampah dipakai untuk upgrade. Waktu hari dan kesehatan laguna berubah mengikuti kemajuan, dari pagi sampai badai muson dan kapal limbah.
+## Audio
+
+Efek suara dan sampel suasana dimuat sebagai MP3 lokal dari `public/audio/`. Web Audio mencampur sampel sesuai cuaca dan posisi di laguna. Suara prosedural tetap tersedia saat sampel belum siap.
 
 ## Menjalankan
 
@@ -39,34 +42,29 @@ npm install
 npm run dev      # server pengembangan
 npm run build    # hasil di dist/
 npm run preview  # mencoba hasil build
+npm run uji      # uji alur, ekonomi, dan simpanan tanpa browser
 ```
 
-Game butuh browser dengan WebGL2 (Chrome, Edge, atau Firefox terbaru). `lab.html` hanya untuk pengembangan: mengatur waktu hari, kesehatan laguna, dan mencoba cutscene, intro (tombol Opening), serta penyelamatan lumba-lumba (tombol Dolphin).
+Game memerlukan browser dengan WebGL2. Buka `/lab.html` di server pengembangan untuk mencoba bab 1–9, film pembuka dan penutup, waktu hari, serta kondisi pesisir.
 
 ## Pengaturan grafis
 
 Otomatis, Rendah, Sedang, Tinggi, dan Ultra, bisa diganti saat bermain. Rendah dan Sedang menyimpan latar statis di resolusi asli dan hanya menggambar ulang air serta objek bergerak, jadi tetap tajam di GPU terintegrasi.
 
-Pengukuran di 1919x948:
-
-| GPU | Tier | Diam | Saat ombak |
-|---|---|---|---|
-| Intel UHD (16 EU) | Rendah | 71 fps | 67 fps |
-| Intel UHD (16 EU) | Sedang (tanpa vsync) | 48 fps | 41 fps |
-| RTX 4050 Laptop | Tinggi | 141 fps | 129 fps |
-
 ## Struktur
 
 | Path | Isi |
 |---|---|
-| `src/simulation.ts` | Simulasi: ombak, sampah, jaring, kapal, cuaca |
-| `src/upgrades.ts`, `src/achievements.ts` | Upgrade dan pencapaian |
-| `src/audio.ts` | Suara yang disintesis dengan Web Audio |
+| `src/simulation.ts`, `src/world.ts` | Simulasi ombak dan peta laguna |
+| `src/story/` | Bab, kejadian patroli, pasokan rongsok, pencemaran, dan pembayaran |
+| `src/upgrades.ts`, `src/journal.ts` | Cetak biru bengkel, tingkat alat, dan catatan desa |
+| `src/save.ts` | Simpanan lokal v3 dan migrasi v2 |
+| `src/audio.ts`, `public/audio/` | Pencampuran Web Audio dan sampel MP3 |
 | `src/ui.ts`, `src/ui-kit/` | Antarmuka |
-| `src/scene/` | Renderer 3D, air, hutan, terumbu, desa, post-processing, cutscene |
-| `src/scene/opening.ts` | Intro permainan baru: tur drone, kapal wisata yang membuang sampah, A.L.U.N. aktif |
-| `src/scene/rescue.ts` | Lumba-lumba terjerat jaring: model, kamera, lapisan jaring, lompatan saat bebas |
-| `src/scene/quality.ts` | Definisi tier grafis |
+| `src/scene/` | Renderer 3D, air, hutan, terumbu, desa, dan tingkatan grafis |
+| `src/scene/opening.ts`, `src/scene/rescue.ts`, `src/scene/ending.ts` | Film pembuka, penyelamatan induk, dan kepulangan saat fajar |
+| `src/scene/story.ts`, `src/scene/fleet.ts`, `src/scene/health.ts`, `src/scene/plates.ts` | Visual cerita, armada, perubahan pesisir, dan label kejadian |
+| `tests/` | Skenario uji, bot pemain, dan peluncur `npm run uji` |
 | `concepts/` | Klip adegan 3D dan contoh UI kit |
 
 Simulasi berjalan di bidang 2D dan terpisah dari renderer.
@@ -75,5 +73,6 @@ Simulasi berjalan di bidang 2D dan terpisah dari renderer.
 
 - [Three.js](https://threejs.org), lisensi MIT
 - [Fredoka](https://fonts.google.com/specimen/Fredoka) dan [Nunito](https://fonts.google.com/specimen/Nunito), SIL Open Font License
+- Musik latar: *Bassa Island Game Loop* & *Island Meet and Greet* oleh Kevin MacLeod ([incompetech.com](https://incompetech.com)), lisensi [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
 
 Pekerjaan yang belum selesai ada di tab [Issues](../../issues).

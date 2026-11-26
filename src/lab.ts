@@ -3,8 +3,9 @@ import { GameSimulation } from './simulation';
 import { INTRO } from './scene/director';
 import type { Tier } from './scene/quality';
 import { SceneRenderer } from './scene/SceneRenderer';
+import { createStory, whereAt } from './story/state';
 import { computeStats, createInitialProgress } from './upgrades';
-import type { PlayerProgress, TimeOfDay, TrashRarity, UpgradeId } from './types';
+import type { Entity, EntityKind, PlayerProgress, StoryFlag, TimeOfDay, UpgradeId } from './types';
 
 /** Scene lab: the real simulation inside the 3D renderer, with knobs. Dev only, not part of the build. */
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -13,7 +14,21 @@ const audio = new TropicalAudio();
 const renderer = new SceneRenderer(canvas);
 const progress: PlayerProgress = createInitialProgress();
 progress.shopUnlocked = true;
-const sim = new GameSimulation(audio, () => {}, () => {}, () => {});
+let filming = false;
+const say = (kicker: string, line: string): void => {
+  $('caption').innerHTML = line ? `${kicker ? `<b>${kicker}</b>` : ''}${line}` : '';
+};
+const sim = new GameSimulation(audio, {
+  radio: (who, text) => console.log(`[${who}] ${text}`),
+  coins: () => {},
+  save: () => {},
+  chapter: (n) => console.log(`bab ${n}`),
+  celebrate: () => {},
+  dolphin: (e) => rescue(e),
+  filming: () => filming,
+  worsen: () => {},
+  ending: () => ending(),
+});
 
 const setUp = (u: Partial<Record<UpgradeId, number>>): void => {
   Object.assign(progress.upgrades, u);
@@ -27,47 +42,66 @@ const step = (dt: number): void => {
   // under the opening the lagoon only drifts, the same as in the game
   if (film) {
     sim.updateAmbientOnly(dt, progress, stats);
-    sim.drift(dt);
+    sim.bob(dt);
   } else sim.update(dt * renderer.director.speed, progress, stats);
   renderer.render(sim, progress, stats, !film);
 };
 
 /** The dolphin event as the game plays it: watch, then free it with waves from the close view. */
-const rescue = (): void => {
+function rescue(e: Entity): boolean {
   const stage = $('stage');
-  const caption = $('caption');
-  const e = sim.spawnDolphin();
+  filming = true;
   stage.classList.add('film');
   renderer.playRescue(sim, e.id, {
-    caption: (kicker, line) => {
-      caption.innerHTML = line ? `${kicker ? `<b>${kicker}</b>` : ''}${line}` : '';
-    },
+    caption: say,
     help: () => stage.classList.remove('film'),
     freed: () => stage.classList.add('film'),
-    done: () => stage.classList.remove('film'),
+    done: () => {
+      filming = false;
+      stage.classList.remove('film');
+      sim.story.afterDolphin();
+    },
   });
+  return true;
+}
+
+function ending(): void {
+  const stage = $('stage');
+  stage.classList.add('film');
+  renderer.playEnding(sim, { caption: say }, () => stage.classList.remove('film'));
+}
+
+/** Everything before a chapter is done; its own event is about to begin. */
+const PROOFS: StoryFlag[][] = [[], [], ['toolbox'], ['dolphin', 'seedling'], ['damar'], ['cargo'], ['trawl'], ['waste'], ['calf', 'night', 'ops'], ['boss', 'ending']];
+const chapter = (n: number): void => {
+  const s = createStory();
+  for (let i = 0; i <= n; i++) for (const f of PROOFS[i]) s.flags[f] = true;
+  s.openingLeft = n > 1 ? 0 : 6;
+  if (n > 1) {
+    s.box = 'home';
+    s.pollution -= 12;
+  }
+  if (n === 8) s.beacon = s.callAnswered = true;
+  Object.assign(s, whereAt(s.flags, s.openingLeft));
+  progress.story = s;
+  progress.shopUnlocked = n > 1;
+  renderer.cancelRescue();
+  filming = false;
+  renderer.forceEco = null;
+  renderer.forceTod = null;
+  sim.initLagoon(progress, computeStats(progress));
 };
 
 /** The opening as the game plays it, from an empty lagoon. */
 const opening = (): void => {
   const stage = $('stage');
-  const caption = $('caption');
   const stats = computeStats(progress);
   // the opening sets the lagoon's health and light itself
   renderer.forceEco = null;
   renderer.forceTod = null;
   sim.initLagoon(progress, stats, true);
   stage.classList.add('film');
-  renderer.playOpening(
-    sim,
-    stats,
-    {
-      caption: (kicker, line) => {
-        caption.innerHTML = line ? `${kicker ? `<b>${kicker}</b>` : ''}${line}` : '';
-      },
-    },
-    () => stage.classList.remove('film')
-  );
+  renderer.playOpening(sim, stats, { caption: say }, () => stage.classList.remove('film'));
 };
 
 const api = {
@@ -88,7 +122,8 @@ const api = {
     renderer.forceTod = t;
   },
   opening,
-  rescue,
+  ending,
+  chapter,
 };
 /** A wave big enough to fill the frame, whatever the upgrades say. */
 const bigWave = (x: number, y: number, tilt: number, width: number, charge: number): void => {
@@ -98,10 +133,8 @@ const bigWave = (x: number, y: number, tilt: number, width: number, charge: numb
   progress.upgrades = keep;
 };
 const flotsam = (n: number, x0: number, x1: number, y0: number, y1: number): void => {
-  const any = sim as unknown as Record<string, (...a: unknown[]) => void>;
   for (let i = 0; i < n; i++) {
-    any.spawnSingleTrash(computeStats(progress), true, i % 6 === 4 ? 'rare' : i % 3 === 2 ? 'uncommon' : 'common');
-    const e = sim.entities[sim.entities.length - 1];
+    const e = sim.addTrash(i % 6 === 4 ? 'trash_crate' : i % 3 === 2 ? 'trash_net' : i % 2 ? 'trash_bag' : 'trash_bottle', 900, 300);
     e.x = x0 + ((i * 0.618) % 1) * (x1 - x0);
     e.y = y0 + ((i * 0.382 + 0.1) % 1) * (y1 - y0);
     e.vx = e.vy = 0;
@@ -208,15 +241,21 @@ onButtons('cam', 'cam', (v) => {
   else d.setMode(v as 'play' | 'title', 2.8);
 });
 
-const RARE: TrashRarity[] = ['uncommon', 'rare', 'epic', 'legendary'];
+const RARE: EntityKind[] = ['trash_net', 'trash_crate', 'trash_battery', 'trash_relic'];
 onButtons('spawn', 's', (v) => {
-  const any = sim as unknown as Record<string, (...a: unknown[]) => void>;
   if (v === 'buoy') {
     progress.upgrades.ai_buoy = ((progress.upgrades.ai_buoy ?? 0) % 3) + 1;
-    any.syncAiBuoys(computeStats(progress));
-  } else if (v === 'loot') for (const r of RARE) any.spawnSingleTrash(computeStats(progress), true, r);
-  else if (v === 'dolphin') rescue();
-  else any[`spawn${v}`]();
+    sim.onUpgradePurchased('ai_buoy', computeStats(progress));
+  } else if (v === 'loot') for (const k of RARE) sim.addTrash(k, 760 + Math.random() * 240, 160 + Math.random() * 400);
+  else if (v === 'spill') sim.story.leak({ x: 900 + Math.random() * 120, y: 250 + Math.random() * 250 });
+  else if (v === 'ghost') sim.story.loseTrawl();
+  else if (v === 'deposit') sim.story.showDeposit();
+  else if (v === 'fire') sim.add('fire', 250, 258, { radius: 24, mass: 99, hp: 2.6, maxHp: 2.6 });
+  else if (v === 'ending') ending();
+});
+onButtons('chapters', 'n', (v, b) => {
+  pick('chapters', b);
+  chapter(+v);
 });
 
 window.addEventListener('keydown', (e) => {

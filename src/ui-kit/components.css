@@ -416,17 +416,9 @@
     0 16px 32px var(--sw-glow);
 }
 
-.ui-upgrade-card.is-locked {
-  filter: saturate(0.26) brightness(0.76);
-}
-
-.ui-upgrade-card.is-featured {
-  box-shadow:
-    inset 0 0 0 2.5px rgba(255, 245, 168, 0.78),
-    var(--gloss-top),
-    inset 0 -6px 0 rgba(8, 12, 24, 0.26),
-    var(--shadow-card),
-    0 0 28px rgba(255, 214, 70, 0.38);
+/* as far as it goes until the next supplies arrive */
+.ui-upgrade-card.is-waiting {
+  filter: saturate(0.55) brightness(0.86);
 }
 
 .ui-card-head {
@@ -460,13 +452,6 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-}
-
-.ui-upgrade-card.is-featured .ui-card-stage {
-  border-color: #fff08d;
-  box-shadow:
-    0 0 0 3px var(--ink),
-    inset 0 0 20px rgba(255, 245, 175, 0.38);
 }
 
 .ui-sunburst {
@@ -509,15 +494,7 @@
   left: 14px;
 }
 
-.ui-sparkle.sp-2 {
-  bottom: 30px;
-  right: 14px;
-  width: 17px;
-  height: 17px;
-  animation-delay: 0.9s;
-}
-
-/* Corner Ribbon Tag (NEW! / OP! / MAKS) */
+/* Corner Ribbon Tag (BARU / PENUH / MAKS) */
 .ui-corner-tag {
   position: absolute;
   top: 8px;
@@ -607,7 +584,7 @@
   text-shadow: 0 1.8px 0 rgba(13, 18, 29, 0.9);
   min-height: 36px;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -618,7 +595,91 @@
   font-size: 22px;
 }
 
-/* ================= TEMPLATE 6: ACHIEVEMENT CARD (EXACT BOLD V2 STYLE) ================= */
+/* ================= THE FREE CALL ON THE RADIO, AND WHAT THE WORKSHOP WAITS FOR ================= */
+.ui-radio-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 18px;
+  border-radius: var(--radius-card);
+  border: var(--border-xl) solid var(--ink);
+  background-image:
+    var(--pattern-checker-white),
+    linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  background-size: 26px 26px, 100% 100%;
+  box-shadow: var(--gloss-top), inset 0 -6px 0 rgba(8, 12, 24, 0.26), var(--shadow-card);
+}
+
+.ui-radio-art {
+  width: 74px;
+  height: 74px;
+}
+
+.ui-radio-art svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 4px 0 rgba(13, 18, 29, 0.48));
+}
+
+.ui-radio-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.ui-radio-kicker {
+  font-size: 14px;
+  letter-spacing: 0.06em;
+}
+
+.ui-radio-title {
+  font-size: 26px;
+  line-height: 1.08;
+}
+
+.ui-radio-text {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.34;
+  color: #ffffff;
+  text-shadow: 0 1.8px 0 rgba(13, 18, 29, 0.9);
+}
+
+.ui-supply-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px 11px 12px;
+  border-radius: 17px;
+  border: 3px dashed rgba(255, 224, 114, 0.55);
+  background: rgba(13, 18, 29, 0.42);
+}
+
+.ui-supply-icon {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+}
+
+.ui-supply-kicker {
+  font-size: 14px;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.ui-supply-text {
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.3;
+  color: #eef6ff;
+}
+
+/* ================= TEMPLATE 6: JOURNAL CARD ================= */
 .ui-achieve-card {
   position: relative;
   display: flex;
@@ -642,8 +703,44 @@
   transform: translateY(-2px);
 }
 
-.ui-achieve-card.is-claimed {
-  filter: saturate(0.42) brightness(0.74);
+.ui-journal-card.is-blank {
+  filter: brightness(0.9);
+}
+
+.ui-journal-card.is-fresh {
+  box-shadow:
+    0 0 0 3px #fff180,
+    var(--gloss-top),
+    inset 0 -5px 0 rgba(8, 12, 24, 0.28),
+    0 6px 0 var(--ink);
+}
+
+.ui-journal-new {
+  top: -9px;
+  left: auto;
+  right: 14px;
+}
+
+.ui-journal-foot {
+  display: flex;
+  align-items: center;
+}
+
+.ui-journal-foot .ui-prog-pill {
+  width: min(220px, 100%);
+  height: 32px;
+}
+
+.ui-journal-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.ui-journal-done svg {
+  width: 20px;
+  height: 20px;
 }
 
 .ui-achieve-medallion {
@@ -689,13 +786,6 @@
   margin-top: 2px;
 }
 
-.ui-achieve-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: 2px;
-}
-
 .ui-prog-pill {
   position: relative;
   height: 40px;
@@ -721,19 +811,6 @@
   position: relative;
   z-index: 2;
   font-size: 16.5px;
-}
-
-.ui-claim-btn {
-  height: 40px;
-  padding: 0 12px 2px;
-  border-radius: var(--radius-pill);
-  font-size: 16px;
-  gap: 6px;
-}
-
-.ui-claim-btn .ui-btn-icon {
-  width: 20px;
-  height: 20px;
 }
 
 /* ================= TEMPLATE 7: HUD WIDGETS (BOLD IN-GAME SCALE) ================= */
@@ -960,6 +1037,34 @@
   transition: width 0.25s var(--ease-snappy);
 }
 
+/* where healthy begins */
+.ui-slim-bar-mark {
+  position: absolute;
+  left: 70%;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  margin-left: -1.5px;
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 0 0 1px rgba(13, 18, 29, 0.45);
+}
+
+.ui-slim-bar-wrap.is-hurt {
+  animation: uiHurt 0.5s ease;
+}
+
+@keyframes uiHurt {
+  0%, 100% {
+    transform: translateX(0) scale(1);
+  }
+  25% {
+    transform: translateX(-7px) scale(1.07);
+  }
+  55% {
+    transform: translateX(6px) scale(1.07);
+  }
+}
+
 .ui-slim-bar-val {
   position: relative;
   z-index: 2;
@@ -988,28 +1093,26 @@
   height: 22px;
 }
 
-/* ================= TEMPLATE 8: OBJECTIVE BANNER (BOLD f_031 STYLE) ================= */
+/* ================= TEMPLATE 8: OBJECTIVE BANNER ================= */
+/* swipes go straight through it: only the chapter tab on its edge can be pressed, to fold it */
 .ui-objective-banner {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 15px;
-  padding: 16px 26px 14px 18px;
-  border-radius: 19px;
+  gap: 13px;
+  padding: 15px 22px 12px 14px;
+  border-radius: 18px;
   border: var(--border-xl) solid var(--ink);
   background-image:
     var(--pattern-checker-white),
     linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
   background-size: 26px 26px, 100% 100%;
   box-shadow: var(--gloss-top), var(--lip-bot-md), var(--shadow-pill);
-  pointer-events: auto;
-  cursor: pointer;
-  animation: uiPopBounce 0.34s var(--ease-bounce) both;
-  transition: transform 0.15s var(--ease-bounce);
+  pointer-events: none;
 }
 
-.ui-objective-banner:hover {
-  transform: translateY(-2px) scale(1.02);
+.ui-objective-banner.is-new {
+  animation: uiPopBounce 0.34s var(--ease-bounce) both;
 }
 
 .ui-objective-kicker {
@@ -1017,24 +1120,25 @@
   top: 0;
   left: 50%;
   transform: translate(-50%, -56%);
-  padding: 3px 18px 4px;
+  padding: 3px 16px 4px;
   border-radius: var(--radius-pill);
   border: 3px solid var(--ink);
   background: linear-gradient(180deg, #ffec59 0%, #f49b16 100%);
   box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.55), 0 3px 0 var(--ink);
-  font-size: 13.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 12.5px;
+  letter-spacing: 0.05em;
   white-space: nowrap;
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 .ui-objective-icon {
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   border: var(--border-lg) solid var(--ink);
-  background: linear-gradient(180deg, #62d7ff 0%, #2474ed 100%);
-  box-shadow: inset 0 2.5px 0 rgba(255, 255, 255, 0.48), 0 3px 0 var(--ink);
+  background: linear-gradient(180deg, #24406e 0%, #16264a 100%);
+  box-shadow: inset 0 2.5px 0 rgba(255, 255, 255, 0.28), 0 3px 0 var(--ink);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1042,8 +1146,8 @@
 }
 
 .ui-objective-icon svg {
-  width: 34px;
-  height: 34px;
+  width: 31px;
+  height: 31px;
 }
 
 .ui-objective-copy {
@@ -1053,13 +1157,27 @@
 }
 
 .ui-objective-title {
-  font-size: 23px;
-  line-height: 1.08;
+  font-size: 20.5px;
+  line-height: 1.1;
 }
 
 .ui-objective-sub {
-  font-size: 15px;
-  line-height: 1.25;
+  font-size: 14.5px;
+  line-height: 1.24;
+}
+
+.ui-objective-banner.is-mini .ui-objective-sub {
+  display: none;
+}
+
+.ui-objective-banner.is-mini .ui-objective-icon {
+  width: 34px;
+  height: 34px;
+}
+
+.ui-objective-banner.is-mini .ui-objective-icon svg {
+  width: 22px;
+  height: 22px;
 }
 
 /* ================= TEMPLATE 9: COMIC SPEECH BUBBLE + PILL TOAST ================= */
@@ -1111,6 +1229,15 @@
   font-size: 12.5px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+/* who is talking can be told from the colour, with the sound off too */
+.ui-speech-sender[data-who='sari'] {
+  background: linear-gradient(180deg, #ffc048 0%, #ef6114 100%);
+}
+
+.ui-speech-sender[data-who='warga'] {
+  background: linear-gradient(180deg, #74f664 0%, #1db43c 100%);
 }
 
 .ui-speech-text {
@@ -1198,7 +1325,7 @@
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 90;
+  z-index: 10;
   overflow: hidden;
 }
 

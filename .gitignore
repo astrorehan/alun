@@ -4,3 +4,5 @@ dist/
 .DS_Store
 Thumbs.db
 .vscode/
+# Local secrets written by `elevenlabs onboard`
+/.env.local

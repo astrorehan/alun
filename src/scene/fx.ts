@@ -3,6 +3,7 @@ import type { GameSimulation } from '../simulation';
 import type { ComputedStats } from '../types';
 import { G, GLSL_GRADE_LDR, GLSL_UNIFORMS, registerDirectLdr } from './gfx';
 import type { Look } from './look';
+import { platesFor, type Plate, type PlateTone } from './plates';
 import { clamp, groundAt, lerp, rng, shoreAt, smooth, toX, toZ, UNIT } from './space';
 import { MODE, SP, Sprites } from './sprites';
 import { FLOAT_HEAD, type Water } from './water';
@@ -460,6 +461,15 @@ void main(){
 /* ================================================================== floating text */
 
 /** Score pops are drawn on a 2D canvas above the scene: crisp type, thick ink, coin included. */
+/** Edge and fill of each kind of plate. */
+const PLATE_TONES: Record<PlateTone, [string, string]> = {
+  foe: ['#ff9b8a', 'rgba(13, 30, 42, 0.9)'],
+  busy: ['#ffd27a', 'rgba(139, 20, 34, 0.94)'],
+  open: ['#fff1a8', 'rgba(196, 72, 8, 0.95)'],
+  friend: ['#8fe8db', 'rgba(8, 58, 66, 0.9)'],
+  care: ['#ffe08a', 'rgba(46, 32, 66, 0.9)'],
+};
+
 export class TextLayer {
   readonly canvas = document.createElement('canvas');
   private ctx = this.canvas.getContext('2d')!;
@@ -468,6 +478,9 @@ export class TextLayer {
   private h = 1;
   private v = new THREE.Vector3();
   private dirty = false;
+  /** What the canvas is showing, so that labels nothing has moved are not drawn again. */
+  private shown = '';
+  private lastPlates = 0;
 
   constructor(host: HTMLCanvasElement) {
     Object.assign(this.canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
@@ -482,6 +495,7 @@ export class TextLayer {
     this.canvas.width = Math.round(w * dpr);
     this.canvas.height = Math.round(h * dpr);
     this.dirty = false;
+    this.shown = '';
     // Touch the 2D backing store once on resize so the first floating score pop does not stall on allocation.
     this.ctx.clearRect(0, 0, 1, 1);
   }
@@ -497,26 +511,78 @@ export class TextLayer {
     return [u * this.w, (1 - v) * this.h];
   }
 
-  draw(sim: GameSimulation, cam: THREE.Camera, fade: number, shift: THREE.Vector3): void {
-    let hasBars = false;
-    if (fade > 0.01) {
-      for (const e of sim.entities) {
-        if (e.maxHp >= 2 && e.hp < e.maxHp) {
-          hasBars = true;
-          break;
-        }
-      }
-    }
-    const needDraw = fade > 0.01 && (hasBars || sim.floatingTexts.length > 0);
+  /** One name plate, with what its owner is up to under it. */
+  private plate(p: Plate, x: number, y: number, u: number): void {
     const g = this.ctx;
-    if (!needDraw) {
+    const size = Math.max(11, 15.5 * u);
+    g.font = `700 ${size.toFixed(1)}px Fredoka, "Baloo 2", "Trebuchet MS", sans-serif`;
+    const w = Math.max(g.measureText(p.text).width + size * 1.1, p.work >= 0 || p.hull >= 0 ? size * 6 : 0);
+    const h = size * 1.48;
+    const px = clamp(x, w / 2 + 6, Math.max(w / 2 + 6, this.w - w / 2 - 6));
+    const py = Math.min(y, this.h - h - size);
+    const [edge, fill] = PLATE_TONES[p.tone];
+    g.fillStyle = fill;
+    g.strokeStyle = edge;
+    g.lineWidth = Math.max(1.4, size * 0.13);
+    g.beginPath();
+    g.roundRect(px - w / 2, py - h / 2, w, h, h * 0.42);
+    g.fill();
+    g.stroke();
+    g.fillStyle = '#ffffff';
+    g.fillText(p.text, px, py + size * 0.06);
+    let top = py + h / 2 + size * 0.22;
+    const bar = (k: number, color: string): void => {
+      const bh = size * 0.5;
+      g.fillStyle = '#0d2230';
+      g.beginPath();
+      g.roundRect(px - w / 2, top, w, bh, bh / 2);
+      g.fill();
+      const in_ = Math.max(1, size * 0.1);
+      const full = w - in_ * 2;
+      g.fillStyle = color;
+      g.beginPath();
+      g.roundRect(px - w / 2 + in_, top + in_, Math.max(bh - in_ * 2, full * clamp(k, 0, 1)), bh - in_ * 2, bh / 2);
+      g.fill();
+      top += bh + size * 0.12;
+    };
+    if (p.work >= 0) bar(p.work, '#ffb02e');
+    if (p.hull >= 0) bar(p.hull, p.tone === 'friend' ? '#5fe0c8' : p.tone === 'care' ? '#b58cff' : '#ff5d4a');
+  }
+
+  draw(sim: GameSimulation, cam: THREE.Camera, fade: number, shift: THREE.Vector3): void {
+    const live = fade > 0.01;
+    const plates = live ? platesFor(sim) : [];
+    // fire and the netted dolphin carry a bar of their own
+    const bars = live ? sim.entities.filter((e) => (e.kind === 'fire' || e.kind === 'dolphin') && e.maxHp >= 2 && e.hp < e.maxHp) : [];
+    const texts = live && sim.floatingTexts.length > 0;
+    const g = this.ctx;
+    if (!texts && plates.length === 0 && bars.length === 0) {
       if (this.dirty) {
         g.setTransform(1, 0, 0, 1, 0, 0);
         g.clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.dirty = false;
+        this.shown = '';
       }
       return;
     }
+    const spots: [Plate, number, number][] = [];
+    let sign = `${fade.toFixed(2)}`;
+    for (const p of plates) {
+      const q = this.project(cam, toX(p.x), 0.2, toZ(p.y) + p.drop, shift);
+      if (!q || q[0] < -60 || q[0] > this.w + 60 || q[1] < -20 || q[1] > this.h + 20) continue;
+      spots.push([p, q[0], q[1]]);
+      sign += `|${p.text}${Math.round(q[0] * 2)},${Math.round(q[1] * 2)},${Math.round(p.work * 120)},${Math.round(p.hull * 120)}`;
+    }
+    for (const e of bars) sign += `|${e.id}:${Math.round(e.x)},${Math.round(e.y)},${Math.round((e.hp / e.maxHp) * 60)}`;
+    if (!texts && this.dirty) {
+      // a label that stays put is already on the canvas; one that moves is redrawn half as often as the sea
+      if (sign === this.shown) return;
+      const now = performance.now();
+      if (now - this.lastPlates < 28 && !this.shown.startsWith('~')) return;
+    }
+    this.lastPlates = performance.now();
+    // floating text leaves something to wipe even when the labels have not moved since
+    this.shown = texts ? `~${sign}` : sign;
     this.dirty = true;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -526,13 +592,14 @@ export class TextLayer {
     g.lineJoin = 'round';
     const u = this.h / 900;
 
-    for (const e of sim.entities) {
-      if (e.maxHp < 2 || e.hp >= e.maxHp) continue;
-      const p = this.project(cam, toX(e.x), e.kind === 'trawler' ? 7.5 : 3.2, toZ(e.y), shift);
+    g.globalAlpha = fade;
+    for (const [p, x, y] of spots) this.plate(p, x, y, u);
+
+    for (const e of bars) {
+      const p = this.project(cam, toX(e.x), 3.2, toZ(e.y), shift);
       if (!p) continue;
-      const w = (e.kind === 'trawler' ? 130 : 56) * u;
-      const h = (e.kind === 'trawler' ? 13 : 9) * u;
-      g.globalAlpha = fade;
+      const w = 56 * u;
+      const h = 9 * u;
       g.fillStyle = '#0d2230';
       g.beginPath();
       g.roundRect(p[0] - w / 2 - 3 * u, p[1] - h / 2 - 3 * u, w + 6 * u, h + 6 * u, h);
@@ -542,7 +609,7 @@ export class TextLayer {
       g.roundRect(p[0] - w / 2, p[1] - h / 2, w, h, h / 2);
       g.fill();
       const k = clamp(e.hp / e.maxHp, 0, 1);
-      g.fillStyle = e.kind === 'trawler' ? '#ff5d4a' : e.kind === 'fire' ? '#ff9a3d' : e.kind === 'dolphin' ? '#5fe0c8' : '#b58cff';
+      g.fillStyle = e.kind === 'fire' ? '#ff9a3d' : '#5fe0c8';
       g.beginPath();
       g.roundRect(p[0] - w / 2, p[1] - h / 2, Math.max(h, w * k), h, h / 2);
       g.fill();
