@@ -475,7 +475,7 @@ export class RaidJob extends Job {
       }
       this.st.s.baskets = 2;
       this.phase('approach');
-      this.launch();
+      this.launch(undefined, true);
       this.st.radio(
         'BU SARI',
         this.s.story
@@ -491,10 +491,15 @@ export class RaidJob extends Job {
       return;
     }
     this.st.s.baskets = this.s.baskets;
-    this.launch(this.s.at ?? (this.closesNet ? this.anchor : undefined));
+    // a ship still on its way in that nobody has been shown yet gets its film once play resumes
+    this.launch(this.s.at ?? (this.closesNet ? this.anchor : undefined), this.s.phase === 'approach');
   }
 
-  private launch(at?: Point): void {
+  /** The crew is still to be introduced, on the ship's first move while the game is being played. */
+  private introduce = false;
+
+  /** Puts the ship in the water. The first one of a story is the pirates' introduction: a film, if there is one. */
+  private launch(at?: Point, fresh = false): void {
     const from = at ?? (this.south ? { x: 716, y: 806 } : { x: WORLD_W + 60, y: 384 });
     this.ship = this.sim.add('raider', from.x, from.y, {
       radius: 28,
@@ -504,6 +509,18 @@ export class RaidJob extends Job {
       rotation: this.south ? -Math.PI * 0.62 : Math.PI,
     });
     this.sim.audio.playAlert();
+    this.introduce = fresh && this.st.s.marks.pirates === undefined;
+  }
+
+  /** The pirates' film, if there is one to show: only a film that really started counts as having been seen. */
+  private meet(e: Entity): void {
+    this.introduce = false;
+    const marks = this.st.s.marks;
+    if (marks.pirates !== undefined || this.s.phase !== 'approach') return;
+    if (this.sim.hooks.raider?.(e)) {
+      marks.pirates = this.st.s.clock;
+      this.st.touchSave();
+    }
   }
 
   snapshot(): void {
@@ -573,16 +590,18 @@ export class RaidJob extends Job {
         this.st.dock(e.variant);
         this.st.s.baskets = 2;
         this.phase('approach');
-        this.launch();
+        this.launch(undefined, true);
       }
       return true;
     }
     if (e !== this.ship) return false;
+    if (this.introduce) this.meet(e);
     const s = this.s;
     const a = this.anchor;
     e.vx *= Math.pow(0.55, dt);
     e.vy *= Math.pow(0.55, dt);
-    const d = steer(e, a.x, a.y, 45, dt, 1.05, 40);
+    // while a film shows the crew the ship only creeps in, so nothing is lost while the player watches
+    const d = steer(e, a.x, a.y, this.sim.hooks.filming() ? 12 : 45, dt, 1.05, 40);
     e.hp = Math.max(0, s.hp);
     if (s.phase === 'approach') {
       if (hyp(e.vx, e.vy) > 10) face(e, Math.atan2(a.y - e.y, a.x - e.x), dt, 2.2);

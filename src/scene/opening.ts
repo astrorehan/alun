@@ -27,6 +27,8 @@ export interface OpeningHooks {
   motor?: (level: number) => void;
   /** How much birdsong there should be, 0..1, every frame: a full chorus that falls silent with the rubbish. */
   birds?: (level: number) => void;
+  /** The film's clock, every frame, for the music that goes with it. */
+  score?: (t: number) => void;
 }
 
 /** Seconds. */
@@ -529,6 +531,7 @@ export class Opening {
     // the clean lagoon is loud with birds; they go quiet as the rubbish goes in, and a few come back
     const birds = t < 17 ? 0.9 : t < 19.5 ? lerp(0.9, 0.3, smooth(17, 19.5, t)) : t < 26 ? 0.04 : lerp(0.04, 0.3, smooth(26, 30, t));
     this.hooks.birds?.(birds);
+    this.hooks.score?.(t);
 
     /* the boat */
     const on = t >= BOAT_FROM && t <= BOAT_TO;

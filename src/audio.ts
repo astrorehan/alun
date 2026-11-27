@@ -106,6 +106,84 @@ const BGM_PLAYLIST = [
   './audio/bgm/island-meet-and-greet.mp3',
 ] as const;
 
+/* ================================================================== the opening's score */
+
+const NOTE = {
+  C2: 65.41, E2: 82.41, F2: 87.31, G2: 98.0, A2: 110.0,
+  C3: 130.81, E3: 164.81, F3: 174.61, G3: 196.0, A3: 220.0, B3: 246.94,
+  C4: 261.63, D4: 293.66, E4: 329.63, G4: 392.0, A4: 440.0, B4: 493.88,
+  C5: 523.25, D5: 587.33, E5: 659.25, G5: 783.99, A5: 880.0, C6: 1046.5,
+};
+
+type ScoreEvent =
+  | { at: number; pad: number[]; dur: number; vol?: number; att?: number }
+  | { at: number; bass: number; dur: number }
+  | { at: number; bell: number; pan?: number; vol?: number }
+  | { at: number; flute: [number, number][] }
+  | { at: number; tone: number; secs: number };
+
+const N = NOTE;
+
+/**
+ * Music for the opening film, in C like the rest of the game's tones, timed to its shots: first light,
+ * the village, the reef, the tourists' boat, the rubbish (the colour drains out of it) and A.L.U.N.
+ * waking up, whose own arpeggio lands on the closing chords.
+ */
+const SCORE: ScoreEvent[] = [
+  { at: 0.0, pad: [N.C3, N.G3, N.D4, N.E4], dur: 5.4, att: 3.6 },
+  { at: 0.2, bass: N.C2, dur: 5.6 },
+  { at: 1.4, bell: N.G5, pan: -0.3 },
+  { at: 2.3, bell: N.E5, pan: 0.25 },
+  { at: 3.1, bell: N.D5, pan: -0.1 },
+  { at: 4.0, bell: N.C5, pan: 0.3 },
+  { at: 5.0, pad: [N.A3, N.C4, N.E4, N.G4], dur: 5.0 },
+  { at: 5.1, bass: N.A2, dur: 5.0 },
+  { at: 5.6, flute: [[N.G4, 0.55], [N.A4, 0.45], [N.C5, 0.9], [N.D5, 0.45], [N.C5, 0.4], [N.A4, 1.5]] },
+  { at: 10.0, pad: [N.F3, N.A3, N.C4, N.E4], dur: 5.0 },
+  { at: 10.1, bass: N.F2, dur: 5.0 },
+  { at: 10.5, bell: N.C5, pan: -0.35, vol: 0.8 },
+  { at: 11.1, bell: N.E5, pan: 0.3, vol: 0.8 },
+  { at: 11.7, bell: N.G5, pan: -0.2, vol: 0.8 },
+  { at: 12.3, bell: N.A5, pan: 0.35, vol: 0.8 },
+  { at: 12.9, bell: N.C6, vol: 0.7 },
+  { at: 13.3, flute: [[N.E5, 0.5], [N.D5, 0.5], [N.C5, 1.5]] },
+  { at: 15.0, pad: [N.G3, N.C4, N.D4, N.G4], dur: 2.3, vol: 0.8 },
+  { at: 15.1, bass: N.G2, dur: 4.2 },
+  { at: 17.2, pad: [N.G3, N.B3, N.D4, N.G4], dur: 2.2, vol: 0.8, att: 1.4 },
+  { at: 19.4, tone: 620, secs: 4.5 },
+  { at: 19.4, pad: [N.A3, N.C4, N.E4], dur: 2.9, att: 1.8 },
+  { at: 19.5, bass: N.A2, dur: 3.0 },
+  { at: 20.2, bell: N.E5, pan: 0.2, vol: 0.85 },
+  { at: 21.5, bell: N.C5, pan: -0.25, vol: 0.85 },
+  { at: 22.4, pad: [N.E3, N.G3, N.B3, N.D4], dur: 3.3, att: 1.5 },
+  { at: 22.5, bass: N.E2, dur: 3.3 },
+  { at: 22.9, bell: N.B4, pan: 0.1, vol: 0.85 },
+  { at: 25.5, tone: 4200, secs: 2.2 },
+  { at: 25.6, pad: [N.F3, N.A3, N.C4, N.G4], dur: 2.7, att: 1.2 },
+  { at: 25.7, bass: N.F2, dur: 2.7 },
+  { at: 28.1, pad: [N.C3, N.G3, N.C4, N.E4, N.G4], dur: 4.2, att: 1.3 },
+  { at: 28.2, bass: N.C2, dur: 4.6 },
+  { at: 28.2, bell: N.C6, pan: 0.2, vol: 0.8 },
+  { at: 28.3, flute: [[N.E5, 0.4], [N.G5, 0.4], [N.A5, 0.55], [N.G5, 0.45], [N.E5, 0.4], [N.D5, 0.45], [N.C5, 1.7]] },
+  { at: 30.1, bell: N.G5, pan: -0.3, vol: 0.7 },
+  { at: 31.3, bell: N.E5, pan: 0.3, vol: 0.6 },
+];
+
+/** Each note of a pad: two triangles a few cents apart, and a little saw for shimmer. */
+const PAD_VOICES: [OscillatorType, number, number][] = [
+  ['triangle', -6, 1],
+  ['triangle', 7, 0.7],
+  ['sawtooth', 2, 0.18],
+];
+
+/** A struck bar: ratio, offset in Hz, level, seconds to die away. The second partial beats against the first. */
+const BELL: [number, number, number, number][] = [
+  [1, 0, 1, 3.8],
+  [1, 3.1, 0.75, 3.4],
+  [2.76, 0, 0.22, 1.2],
+  [5.4, 0, 0.07, 0.45],
+];
+
 interface PlayOptions {
   volume?: number;
   rate?: number;
@@ -179,6 +257,15 @@ export class TropicalAudio {
   // Birdsong timer
   private birdT = 1.6;
 
+  // Everything meets here before the master; the opening's own music plugs in too
+  private comp: DynamicsCompressorNode | null = null;
+  // A film with its own music keeps the playlist waiting, then lets it back in slowly
+  private musicHeld = false;
+  private bgmDirect = false;
+  // The opening's calm score while it plays
+  private score: { input: GainNode; out: GainNode; wet: GainNode; lp: BiquadFilterNode; next: number } | null = null;
+  private room: AudioBuffer | null = null;
+
   public isMuted(): boolean {
     return this.muted;
   }
@@ -230,6 +317,11 @@ export class TropicalAudio {
     this.musicBus = ctx.createGain();
     this.musicBus.gain.value = 0.0001;
 
+    this.comp = comp;
+    // the sea comes up from silence instead of starting all at once
+    this.ambienceBus.gain.setValueAtTime(0.0001, ctx.currentTime);
+    this.ambienceBus.gain.setTargetAtTime(this.shopDucked ? 0.48 : 1.0, ctx.currentTime + 0.05, 1.1);
+
     this.sfxBus.connect(comp);
     this.uiBus.connect(comp);
     this.ambienceBus.connect(comp);
@@ -258,7 +350,7 @@ export class TropicalAudio {
     this.startFallbackAmbience();
     this.initialized = true;
     this.preloadAssets();
-    this.startBgm();
+    if (!this.musicHeld) this.startBgm();
   }
 
   private preloadAssets(): void {
@@ -364,11 +456,13 @@ export class TropicalAudio {
       src.connect(this.musicFilter);
     } catch {
       // If MediaElementSource is unavailable, fall back to direct element playback
-      el.volume = 0.22;
+      el.volume = this.musicHeld ? 0 : 0.22;
+      this.bgmDirect = true;
     }
 
     this.bgmEl = el;
-    this.applyMusicMix(1.2);
+    // the first time, the music arrives slowly: over the sea, not on top of it
+    this.applyMusicMix(2.6);
     if (!this.muted) {
       void el.play().catch(() => {});
     }
@@ -378,7 +472,8 @@ export class TropicalAudio {
     if (!this.ctx || !this.musicBus || !this.musicFilter) return;
     const now = this.ctx.currentTime;
     const baseGain = this.stormMix > 0.05 ? 0.24 - this.stormMix * 0.1 : 0.24;
-    const targetGain = this.shopDucked ? baseGain * 0.52 : baseGain;
+    const targetGain = this.musicHeld ? 0.0001 : this.shopDucked ? baseGain * 0.52 : baseGain;
+    if (this.bgmDirect && this.bgmEl) this.bgmEl.volume = this.musicHeld ? 0 : 0.22;
     const targetHz = this.shopDucked
       ? 2400
       : this.stormMix > 0.05
@@ -607,6 +702,26 @@ export class TropicalAudio {
       }
     }
     return this.muted;
+  }
+
+  /**
+   * Lets a film bring its own music: the playlist fades out while `held`, and when it is let go it comes
+   * back slowly from wherever it had got to.
+   */
+  public holdMusic(held: boolean): void {
+    if (this.musicHeld === held) return;
+    this.musicHeld = held;
+    if (!this.ctx) return;
+    if (held) {
+      this.applyMusicMix(0.35);
+      return;
+    }
+    if (!this.bgmStarted) {
+      this.startBgm();
+      return;
+    }
+    if (this.bgmEl && this.bgmEl.paused && !this.muted) void this.bgmEl.play().catch(() => {});
+    this.applyMusicMix(2.4);
   }
 
   /* -------------------------------------------------------------- wave charge */
@@ -1508,6 +1623,462 @@ export class TropicalAudio {
     [523.25, 659.25, 783.99, 1046.5, 1318.51].forEach((f, i) =>
       this.playKalimbaTone(f, 0.7 + i * 0.08, 0.17, i * 0.075)
     );
+  }
+
+  /* ------------------------------------------------------------------ the opening's music */
+
+  /** Called on every frame of the opening with its clock: whatever of the score is due is played. */
+  public openingScore(t: number): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.comp) return;
+    if (!this.score) this.startScore(t);
+    const sc = this.score!;
+    while (sc.next < SCORE.length && SCORE[sc.next].at <= t + 0.2) {
+      const ev = SCORE[sc.next++];
+      // after a stall in the film, what is long past stays unplayed
+      if (ev.at < t - 0.6) continue;
+      this.playScore(ev, ctx.currentTime + Math.max(0, ev.at - t));
+    }
+  }
+
+  /**
+   * The opening is over. At its natural end the last chord rings out on its own; `quick` (a skip) fades it
+   * away fast. Either way the graph is taken apart once it is silent.
+   */
+  public endOpeningScore(quick = false): void {
+    const sc = this.score;
+    if (!sc || !this.ctx) return;
+    this.score = null;
+    if (quick) {
+      const now = this.ctx.currentTime;
+      sc.out.gain.cancelScheduledValues(now);
+      sc.out.gain.setValueAtTime(Math.max(0.0001, sc.out.gain.value), now);
+      sc.out.gain.setTargetAtTime(0.0001, now, 0.35);
+    }
+    window.setTimeout(
+      () => {
+        sc.input.disconnect();
+        sc.lp.disconnect();
+        sc.out.disconnect();
+        sc.wet.disconnect();
+      },
+      quick ? 3500 : 9500
+    );
+  }
+
+  private startScore(t: number): void {
+    const ctx = this.ctx!;
+    const now = ctx.currentTime;
+    const input = ctx.createGain();
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 4200;
+    lp.Q.value = 0.4;
+    const out = ctx.createGain();
+    // it rises out of the sea rather than starting, and stays under the sea and the birds
+    out.gain.setValueAtTime(0.0001, now);
+    out.gain.exponentialRampToValueAtTime(0.7, now + 2.4);
+    input.connect(lp);
+    lp.connect(out);
+    out.connect(this.comp!);
+    const wet = ctx.createGain();
+    wet.gain.value = 0.5;
+    if (typeof ctx.createConvolver === 'function') {
+      const verb = ctx.createConvolver();
+      verb.buffer = this.roomTone();
+      out.connect(verb);
+      verb.connect(wet);
+      wet.connect(this.comp!);
+    }
+    let next = 0;
+    while (next < SCORE.length && SCORE[next].at < t - 0.6) next++;
+    this.score = { input, lp, out, wet, next };
+  }
+
+  /** A short warm room for the score, made once: decaying noise that loses its top as it fades. */
+  private roomTone(): AudioBuffer {
+    if (this.room) return this.room;
+    const ctx = this.ctx!;
+    const len = Math.floor(ctx.sampleRate * 2.8);
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      let lp = 0;
+      for (let i = 0; i < len; i++) {
+        const u = i / len;
+        const k = 0.5 + 0.46 * u;
+        lp = lp * k + (Math.random() * 2 - 1) * (1 - k);
+        d[i] = lp * Math.pow(1 - u, 2.4);
+      }
+    }
+    this.room = buf;
+    return buf;
+  }
+
+  private playScore(ev: ScoreEvent, when: number): void {
+    if ('pad' in ev) this.scorePad(when, ev.pad, ev.dur, ev.vol ?? 1, ev.att ?? 2.2);
+    else if ('bass' in ev) this.scoreBass(when, ev.bass, ev.dur);
+    else if ('bell' in ev) this.scoreBell(when, ev.bell, ev.vol ?? 1, ev.pan ?? 0);
+    else if ('flute' in ev) this.scoreFlute(when, ev.flute);
+    else this.score!.lp.frequency.setTargetAtTime(ev.tone, when, ev.secs / 3);
+  }
+
+  /** Sends a voice into the score, placed left or right. */
+  private toScore(node: AudioNode, pan: number): void {
+    const ctx = this.ctx!;
+    const input = this.score!.input;
+    if (pan !== 0 && typeof ctx.createStereoPanner === 'function') {
+      const p = ctx.createStereoPanner();
+      p.pan.value = pan;
+      node.connect(p);
+      p.connect(input);
+    } else node.connect(input);
+  }
+
+  /** A soft chord, spread across the stereo field, through a warm filter that opens as it swells. */
+  private scorePad(when: number, notes: number[], dur: number, vol: number, att: number): void {
+    const ctx = this.ctx!;
+    const rel = 3.2;
+    const hold = Math.max(att, dur);
+    const warm = ctx.createBiquadFilter();
+    warm.type = 'lowpass';
+    warm.Q.value = 0.5;
+    warm.frequency.setValueAtTime(800, when);
+    warm.frequency.linearRampToValueAtTime(1500, when + att);
+    warm.frequency.linearRampToValueAtTime(950, when + hold + rel);
+    const level = ctx.createGain();
+    level.gain.setValueAtTime(0, when);
+    level.gain.linearRampToValueAtTime(0.016 * vol, when + att);
+    level.gain.setValueAtTime(0.016 * vol, when + hold);
+    level.gain.linearRampToValueAtTime(0, when + hold + rel);
+    warm.connect(level);
+    this.toScore(level, 0);
+    const panner = typeof ctx.createStereoPanner === 'function';
+    notes.forEach((f, i) => {
+      const pan = notes.length > 1 ? (i / (notes.length - 1) - 0.5) * 0.7 : 0;
+      const p = panner ? ctx.createStereoPanner() : null;
+      if (p) {
+        p.pan.value = pan;
+        p.connect(warm);
+      }
+      for (const [type, det, amp] of PAD_VOICES) {
+        const o = ctx.createOscillator();
+        o.type = type;
+        o.frequency.value = f;
+        o.detune.value = det;
+        const g = ctx.createGain();
+        g.gain.value = amp;
+        o.connect(g);
+        g.connect(p ?? warm);
+        o.start(when);
+        o.stop(when + hold + rel + 0.05);
+      }
+    });
+  }
+
+  private scoreBass(when: number, f: number, dur: number): void {
+    const ctx = this.ctx!;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(0.034, when + 0.8);
+    g.gain.setValueAtTime(0.034, when + dur);
+    g.gain.linearRampToValueAtTime(0, when + dur + 2);
+    for (const [ratio, amp] of [[1, 1], [2, 0.22]] as const) {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = f * ratio;
+      const og = ctx.createGain();
+      og.gain.value = amp;
+      o.connect(og);
+      og.connect(g);
+      o.start(when);
+      o.stop(when + dur + 2.05);
+    }
+    this.toScore(g, 0);
+  }
+
+  /** A struck metal bar, gamelan-like: two slightly mistuned tones beat slowly against each other, like a swell. */
+  private scoreBell(when: number, f: number, vol: number, pan: number): void {
+    const ctx = this.ctx!;
+    const out = ctx.createGain();
+    out.gain.value = 0.05 * vol;
+    this.toScore(out, pan);
+    for (const [ratio, add, amp, decay] of BELL) {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = f * ratio + add;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, when);
+      g.gain.exponentialRampToValueAtTime(amp, when + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, when + decay);
+      o.connect(g);
+      g.connect(out);
+      o.start(when);
+      o.stop(when + decay + 0.05);
+    }
+  }
+
+  /** A bamboo flute: a breathy sine with a little vibrato, the notes of a phrase slurred together. */
+  private scoreFlute(when: number, notes: [number, number][]): void {
+    const ctx = this.ctx!;
+    const vol = 0.034;
+    const end = when + notes.reduce((a, n) => a + n[1], 0);
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    const o2 = ctx.createOscillator();
+    o2.type = 'triangle';
+    const g2 = ctx.createGain();
+    g2.gain.value = 0.16;
+    const env = ctx.createGain();
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 5.2;
+    const depth = ctx.createGain();
+    depth.gain.setValueAtTime(0, when);
+    depth.gain.linearRampToValueAtTime(8, when + 0.6);
+    lfo.connect(depth);
+    depth.connect(o.detune);
+    depth.connect(o2.detune);
+    o.connect(env);
+    o2.connect(g2);
+    g2.connect(env);
+    let t = when;
+    o.frequency.setValueAtTime(notes[0][0], t);
+    o2.frequency.setValueAtTime(notes[0][0] * 2, t);
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(vol, t + 0.12);
+    notes.forEach(([f, d], i) => {
+      if (i > 0) {
+        o.frequency.setTargetAtTime(f, t, 0.03);
+        o2.frequency.setTargetAtTime(f * 2, t, 0.03);
+        // a breath between notes
+        env.gain.setTargetAtTime(vol * 0.7, t - 0.04, 0.02);
+        env.gain.setTargetAtTime(vol, t + 0.03, 0.04);
+      }
+      t += d;
+    });
+    env.gain.setTargetAtTime(0.0001, end - 0.15, 0.12);
+    if (this.noiseBuffer) {
+      const n = ctx.createBufferSource();
+      n.buffer = this.noiseBuffer;
+      n.loop = true;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = notes[0][0] * 2.2;
+      bp.Q.value = 1.4;
+      const ng = ctx.createGain();
+      ng.gain.value = 0.09;
+      n.connect(bp);
+      bp.connect(ng);
+      ng.connect(env);
+      n.start(when, Math.random() * 2);
+      n.stop(end + 0.9);
+    }
+    this.toScore(env, -0.12);
+    for (const x of [o, o2, lfo]) {
+      x.start(when);
+      x.stop(end + 0.9);
+    }
+  }
+
+  /* ------------------------------------------------------------------ the raiders */
+
+  /** Sends a voice to the effects bus, placed left or right. */
+  private toSfx(node: AudioNode, pan: number): void {
+    const ctx = this.ctx!;
+    if (pan !== 0 && typeof ctx.createStereoPanner === 'function') {
+      const p = ctx.createStereoPanner();
+      p.pan.value = pan;
+      node.connect(p);
+      p.connect(this.sfxBus!);
+    } else node.connect(this.sfxBus!);
+  }
+
+  /** The war drum on the raiders' deck: a deep skin that drops in pitch, and the smack of the stick. */
+  public playWarDrum(strength = 1): void {
+    if (!this.ctx || !this.sfxBus || this.muted) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.005;
+    const k = Math.min(1.4, strength);
+    const body = ctx.createOscillator();
+    body.type = 'sine';
+    body.frequency.setValueAtTime(122, t);
+    body.frequency.exponentialRampToValueAtTime(54, t + 0.3);
+    const bg = ctx.createGain();
+    bg.gain.setValueAtTime(0.0001, t);
+    bg.gain.exponentialRampToValueAtTime(0.5 * k, t + 0.006);
+    bg.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+    body.connect(bg);
+    this.toSfx(bg, 0.15);
+    body.start(t);
+    body.stop(t + 0.85);
+    const ring = ctx.createOscillator();
+    ring.type = 'triangle';
+    ring.frequency.setValueAtTime(205, t);
+    ring.frequency.exponentialRampToValueAtTime(150, t + 0.2);
+    const rg = ctx.createGain();
+    rg.gain.setValueAtTime(0.0001, t);
+    rg.gain.exponentialRampToValueAtTime(0.09 * k, t + 0.004);
+    rg.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    ring.connect(rg);
+    this.toSfx(rg, 0.15);
+    ring.start(t);
+    ring.stop(t + 0.25);
+    if (this.noiseBuffer) {
+      const n = ctx.createBufferSource();
+      n.buffer = this.noiseBuffer;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 1400;
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime(0.22 * k, t);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+      n.connect(lp);
+      lp.connect(ng);
+      this.toSfx(ng, 0.15);
+      n.start(t, Math.random() * 2, 0.09);
+    }
+  }
+
+  /** The raiders' horn: a rough brassy blast on D with a fifth above, and a cymbal wash under it. */
+  public playPirateHorn(): void {
+    if (!this.ctx || !this.sfxBus || this.muted) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.01;
+    const dur = 1.9;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.Q.value = 1.8;
+    lp.frequency.setValueAtTime(240, t);
+    lp.frequency.exponentialRampToValueAtTime(1600, t + 0.2);
+    lp.frequency.exponentialRampToValueAtTime(760, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.14, t + 0.12);
+    g.gain.setTargetAtTime(0.105, t + 0.3, 0.25);
+    g.gain.setTargetAtTime(0.0001, t + dur - 0.45, 0.16);
+    lp.connect(g);
+    this.toSfx(g, 0.1);
+    const vib = ctx.createOscillator();
+    vib.frequency.value = 5.4;
+    const vd = ctx.createGain();
+    vd.gain.setValueAtTime(0, t);
+    vd.gain.linearRampToValueAtTime(9, t + 0.7);
+    vib.connect(vd);
+    const voices: [number, number, number][] = [
+      [146.83, -9, 1],
+      [146.83, 8, 0.9],
+      [220.0, 4, 0.5],
+      [73.42, 0, 0.55],
+    ];
+    for (const [f, det, a] of voices) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(f * 0.92, t);
+      o.frequency.exponentialRampToValueAtTime(f, t + 0.13);
+      o.detune.value = det;
+      vd.connect(o.detune);
+      const og = ctx.createGain();
+      og.gain.value = a * 0.3;
+      o.connect(og);
+      og.connect(lp);
+      o.start(t);
+      o.stop(t + dur + 0.1);
+    }
+    vib.start(t);
+    vib.stop(t + dur + 0.1);
+    if (this.noiseBuffer) {
+      const n = ctx.createBufferSource();
+      n.buffer = this.noiseBuffer;
+      n.loop = true;
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 4500;
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime(0.0001, t);
+      ng.gain.exponentialRampToValueAtTime(0.1, t + 0.02);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
+      n.connect(hp);
+      hp.connect(ng);
+      this.toSfx(ng, 0.25);
+      n.start(t, Math.random());
+      n.stop(t + 1.7);
+    }
+  }
+
+  /** A brass spyglass drawn out: three quick slides and a click. */
+  public playSpyglass(): void {
+    if (!this.ctx || !this.sfxBus || !this.noiseBuffer || this.muted) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime + 0.01;
+    for (let i = 0; i < 3; i++) {
+      const t = t0 + i * 0.12;
+      const n = ctx.createBufferSource();
+      n.buffer = this.noiseBuffer;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.Q.value = 6;
+      bp.frequency.setValueAtTime(1700 + i * 500, t);
+      bp.frequency.exponentialRampToValueAtTime(3600 + i * 600, t + 0.09);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.11, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+      n.connect(bp);
+      bp.connect(g);
+      this.toSfx(g, 0.1);
+      n.start(t, Math.random() * 2, 0.12);
+    }
+    const tc = t0 + 0.38;
+    const c = ctx.createOscillator();
+    c.type = 'triangle';
+    c.frequency.value = 2300;
+    const cg = ctx.createGain();
+    cg.gain.setValueAtTime(0.0001, tc);
+    cg.gain.exponentialRampToValueAtTime(0.06, tc + 0.003);
+    cg.gain.exponentialRampToValueAtTime(0.0001, tc + 0.05);
+    c.connect(cg);
+    this.toSfx(cg, 0.1);
+    c.start(tc);
+    c.stop(tc + 0.06);
+  }
+
+  /** Low strings trembling in D minor while the captain looks: what they want is in sight. */
+  public playTension(): void {
+    if (!this.ctx || !this.sfxBus || this.muted) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.01;
+    const dur = 2.4;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 760;
+    lp.Q.value = 0.7;
+    const trem = ctx.createGain();
+    trem.gain.value = 0.55;
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 8;
+    const ld = ctx.createGain();
+    ld.gain.value = 0.45;
+    lfo.connect(ld);
+    ld.connect(trem.gain);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.075, t + 0.5);
+    g.gain.setValueAtTime(0.075, t + dur - 0.6);
+    g.gain.linearRampToValueAtTime(0.0001, t + dur);
+    lp.connect(trem);
+    trem.connect(g);
+    this.toSfx(g, 0);
+    for (const [f, det] of [[73.42, -5], [110, 6], [174.61, -3], [146.83, 4]] as const) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = f;
+      o.detune.value = det;
+      o.connect(lp);
+      o.start(t);
+      o.stop(t + dur + 0.05);
+    }
+    lfo.start(t);
+    lfo.stop(t + dur + 0.05);
   }
 
   public playVictory(): void {

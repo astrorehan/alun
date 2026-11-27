@@ -74,6 +74,18 @@ function sect(t: number): { x: number; w: number; keel: number; gun: number } {
   };
 }
 
+/** Height of the deck boards at `x` along the shared hull, in the ship's own space. */
+export function deckAt(x: number): number {
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 22; i++) {
+    const m = (lo + hi) / 2;
+    if (sect(m).x < x) lo = m;
+    else hi = m;
+  }
+  return sect((lo + hi) / 2).gun - 0.3;
+}
+
 /** Bow points +X. Everything above the rail is the trade's own. */
 function hull(b: Build, o: Paint): void {
   const n = 18;
@@ -148,7 +160,10 @@ function wheelhouse(b: Build, wall: string, roof: string): void {
 
 /* ================================================================== the raider */
 
-/** A dark hull under a torn sail, with grappling poles and a crew in red headbands. */
+/**
+ * A dark hull under a torn sail, with grappling poles. Its crew in red headbands, the black flag and the
+ * tiller are drawn by `Pirates`, because they move.
+ */
 export function raider(): THREE.BufferGeometry {
   const b = new Build(420);
   hull(b, { side: '#2c2430', band: '#a8232b', bottom: '#4a1a1a', rail: '#15131a', deck: '#6b4a36', rust: 0.35 });
@@ -196,12 +211,6 @@ export function raider(): THREE.BufferGeometry {
     b.bar([1.2, 1.1, s * 0.9], [4.5, 2.2, s * 0.5], 0.08, 0.06, { color: '#7a5a3a' });
     b.add(new THREE.TorusGeometry(0.32, 0.08, 6, 12, 3.8), { color: '#8f98a2', pos: [4.6, 2.1, s * 0.5], rot: [0, 0, 1.2], gloss: 0.7 });
   }
-  const crew = (x: number, z: number, yaw: number): void => {
-    b.merge(person({ shirt: '#3a3040', sarong: '#1f2630', hat: 'none', skin: '#a56a44', scale: 0.86 }), matrixOf([x, 0.52, z], [0, yaw, 0]));
-    b.cyl(0.27, 0.27, 0.13, { color: '#e0322c', pos: [x, 2.05, z], seg: 10 });
-  };
-  crew(-1.6, 0.35, 1.4);
-  crew(1.7, -0.3, 1.9);
   b.box(0.9, 0.6, 0.8, { color: '#5a4030', pos: [-0.6, 0.9, -0.5], rot: [0, 0.3, 0], r: 0.05 });
   return b.geo(true);
 }

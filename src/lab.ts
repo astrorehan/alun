@@ -25,6 +25,7 @@ const sim = new GameSimulation(audio, {
   chapter: (n) => console.log(`bab ${n}`),
   celebrate: () => {},
   dolphin: (e) => rescue(e),
+  raider: (e) => pirates(e),
   filming: () => filming,
   worsen: () => {},
   ending: () => ending(),
@@ -65,6 +66,30 @@ function rescue(e: Entity): boolean {
   return true;
 }
 
+/** The first raider's film, as the game plays it. */
+function pirates(e: Entity): boolean {
+  const stage = $('stage');
+  const glass = $('spyglass');
+  filming = true;
+  stage.classList.add('film');
+  renderer.playPirates(
+    sim,
+    e.id,
+    {
+      caption: say,
+      scope: (open, on) => {
+        glass.classList.toggle('on', on);
+        glass.style.setProperty('--open', open.toFixed(3));
+      },
+    },
+    () => {
+      filming = false;
+      stage.classList.remove('film');
+    }
+  );
+  return true;
+}
+
 function ending(): void {
   const stage = $('stage');
   stage.classList.add('film');
@@ -86,6 +111,9 @@ const chapter = (n: number): void => {
   progress.story = s;
   progress.shopUnlocked = n > 1;
   renderer.cancelRescue();
+  renderer.cancelPirates();
+  $('stage').classList.remove('film');
+  $('spyglass').classList.remove('on');
   filming = false;
   renderer.forceEco = null;
   renderer.forceTod = null;
@@ -252,6 +280,8 @@ onButtons('spawn', 's', (v) => {
   else if (v === 'deposit') sim.story.showDeposit();
   else if (v === 'fire') sim.add('fire', 250, 258, { radius: 24, mass: 99, hp: 2.6, maxHp: 2.6 });
   else if (v === 'ending') ending();
+  // chapter 4 opens on the first raider, and the first raider on its film
+  else if (v === 'pirates') chapter(4);
 });
 onButtons('chapters', 'n', (v, b) => {
   pick('chapters', b);

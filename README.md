@@ -27,11 +27,15 @@ Sapu enam sampah pertama ke Jaring Desa, lalu dorong peti perkakas ke ujung derm
 
 Setelah jaga malam selesai dan pencemaran turun ke 30 atau kurang, jawab panggilan Operasi Badai Muson di bengkel saat siap. Sesudah fajar, Patroli Laguna melanjutkan permainan dengan saldo, peralatan, dan keadaan pesisir yang sama. Jurnal menyimpan riwayat pekerjaan desa.
 
+Kapal penjarah pertama (biasanya di bab 4) diperkenalkan dengan film singkat: kamera berayun ke kapal, memperlihatkan lima awak bajak laut di bawah bendera tengkorak, lalu mengintip lewat teropong sang kapten ke dua keranjang ikan di dermaga. Film ini hanya muncul sekali per simpanan. Sesudahnya awak tetap terlihat di setiap kapal penjarah: bersorak saat merampas keranjang, terhuyung saat lambungnya kena ombak, dan mengepalkan tinju saat mundur.
+
 Progres tersimpan otomatis di browser. Pilih **Lanjutkan** pada layar judul untuk kembali ke bab yang sedang dimainkan. Pengaturan kurangi gerakan pada perangkat melewati film dan langsung menampilkan tujuan permainan.
 
 ## Audio
 
 Efek suara dan sampel suasana dimuat sebagai MP3 lokal dari `public/audio/`. Web Audio mencampur sampel sesuai cuaca dan posisi di laguna. Suara prosedural tetap tersedia saat sampel belum siap.
+
+Saat suara pertama kali menyala, laut naik perlahan dari sunyi dan musik permainan masuk pelan-pelan. Film pembuka punya musik tenangnya sendiri yang dibangkitkan Web Audio di nada C (pad hangat, bilah logam bergaya gamelan, dan suling) mengikuti tiap adegan: meredup saat sampah dibuang dan pulih saat A.L.U.N. menyala. Musik permainan baru masuk setelah film selesai. Film bajak laut memakai drum perang, terompet, bunyi teropong, dan dawai rendah, juga dibangkitkan Web Audio.
 
 ## Menjalankan
 
@@ -45,7 +49,7 @@ npm run preview  # mencoba hasil build
 npm run uji      # uji alur, ekonomi, dan simpanan tanpa browser
 ```
 
-Game memerlukan browser dengan WebGL2. Buka `/lab.html` di server pengembangan untuk mencoba bab 1–9, film pembuka dan penutup, waktu hari, serta kondisi pesisir.
+Game memerlukan browser dengan WebGL2. Buka `/lab.html` di server pengembangan untuk mencoba bab 1–9, film pembuka, penutup, dan bajak laut (tombol **Pirates**), waktu hari, serta kondisi pesisir.
 
 ## Pengaturan grafis
 
@@ -63,6 +67,7 @@ Otomatis, Rendah, Sedang, Tinggi, dan Ultra, bisa diganti saat bermain. Rendah d
 | `src/ui.ts`, `src/ui-kit/` | Antarmuka |
 | `src/scene/` | Renderer 3D, air, hutan, terumbu, desa, dan tingkatan grafis |
 | `src/scene/opening.ts`, `src/scene/rescue.ts`, `src/scene/ending.ts` | Film pembuka, penyelamatan induk, dan kepulangan saat fajar |
+| `src/scene/pirates.ts` | Awak bajak laut di kapal penjarah dan film perkenalannya |
 | `src/scene/story.ts`, `src/scene/fleet.ts`, `src/scene/health.ts`, `src/scene/plates.ts` | Visual cerita, armada, perubahan pesisir, dan label kejadian |
 | `tests/` | Skenario uji, bot pemain, dan peluncur `npm run uji` |
 | `concepts/` | Klip adegan 3D dan contoh UI kit |
