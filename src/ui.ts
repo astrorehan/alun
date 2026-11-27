@@ -130,6 +130,9 @@ function fitLine(btn: HTMLElement, wrap = false): void {
   }
 }
 
+/** Seconds a finished radio line stays up before a scene that was waiting on it takes the screen. */
+const RADIO_BEFORE_SCENE = 1;
+
 const CLOSED_SHOP = 'Bengkel masih tutup: dorong peti perkakas Bu Sari ke ujung dermaga.';
 const NIGHT_SHOP = 'Bu Sari berjaga di suar! Bengkel buka kembali saat fajar.';
 const SAVE_FAILED = 'Browser menolak menyimpan. Progres hilang kalau halaman ditutup.';
@@ -294,7 +297,7 @@ export class GameUI {
 
   private btnPlay = el('btn-play') as HTMLButtonElement;
   private btnContinue = el('btn-continue') as HTMLButtonElement;
-  private continueLabel = el('continue-label');
+  private continueSub = el('continue-sub');
   private shopRibbon = el('shop-ribbon');
   private tabTree = el('tab-tree') as HTMLButtonElement;
   private tabJournal = el('tab-journal') as HTMLButtonElement;
@@ -739,7 +742,7 @@ export class GameUI {
   public setTitleSave(chapter: string | null): void {
     const has = chapter !== null;
     this.btnContinue.classList.toggle('hidden', !has);
-    if (has) this.continueLabel.textContent = `Lanjutkan · ${chapter}`;
+    this.continueSub.textContent = chapter ?? '';
     this.btnPlay.dataset.swatch = has ? 'blue' : 'green';
     this.btnPlay.classList.toggle('ui-btn-lg', !has);
     this.btnPlay.classList.toggle('t-stroke-md', !has);
@@ -897,6 +900,11 @@ export class GameUI {
     if (mood) this.handlers.voice?.prefetch(sender, mood);
   }
 
+  /** Takes lines off the radio queue that have not been said yet. */
+  public dropRadio(texts: string[]): void {
+    this.radioQueue = this.radioQueue.filter((q) => !texts.includes(q.text));
+  }
+
   /**
    * Bu Sari says something. With `hold` the lagoon waits on her scene until the player clicks
    * through it; without, the lines go over the radio while play goes on.
@@ -950,10 +958,12 @@ export class GameUI {
     this.handlers.onTalk?.(false);
   }
 
+  /** A line still being typed comes back after the scene; one already said in full is done. */
   private pauseRadio(): void {
     if (this.radioOn) {
+      const said = !this.radioSpeech.busy;
       this.radioSpeech.stop(false);
-      this.radioQueue.unshift(this.radioOn);
+      if (!said) this.radioQueue.unshift(this.radioOn);
       this.radioOn = null;
     }
     this.radio.hideNow();
@@ -962,7 +972,8 @@ export class GameUI {
   private tickTalk(dt: number): void {
     if (!this.talkActive) {
       if (this.talkQueue.length === 0) return;
-      // a line on the small radio steps aside and comes back after the scene
+      // Bu Sari finishes the remark she is making on the radio (and it stays a moment) before her scene starts
+      if (this.radioOn && (this.radioSpeech.busy || this.radioTotal - this.radioLeft < RADIO_BEFORE_SCENE)) return;
       this.pauseRadio();
       this.talkActive = true;
       this.talkLayer.classList.remove('hidden');
@@ -1018,7 +1029,8 @@ export class GameUI {
       this.radioOn = null;
       this.radio.leave();
     }
-    if (this.radio.leaving) return;
+    // a scene is waiting for the floor: the next radio line waits until after it
+    if (this.radio.leaving || this.talkQueue.length > 0) return;
     const next = this.radioQueue.shift();
     if (!next) return;
     this.radioSpeech.start(next.sender, next.text, next.mood);
