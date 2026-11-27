@@ -345,7 +345,7 @@ export class Story {
       const dx = e.x - o.x;
       const dy = e.y - o.y;
       const d = hyp(dx, dy);
-      if (canFollowSignal && o.variant === PIRATE_KIND.signal && d < PIRATE_SIGNAL_RADIUS) speedBoost = 1.26;
+      if (canFollowSignal && o.variant === PIRATE_KIND.signal && d < PIRATE_SIGNAL_RADIUS) speedBoost = 1.42;
       const minD = e.radius + o.radius + 10;
       if (d > 0.1 && d < minD) {
         const push = (minD - d) * 1.8;
@@ -354,28 +354,28 @@ export class Story {
       }
     }
 
-    e.vx *= Math.pow(0.52, dt);
-    e.vy *= Math.pow(0.52, dt);
+    e.vx *= Math.pow(0.28, dt);
+    e.vy *= Math.pow(0.28, dt);
     e.vx += sepX * dt * 2.4;
     e.vy += sepY * dt * 2.4;
 
-    const d = steer(e, a.x, a.y, speed * speedBoost, dt, 1.15, 38);
+    const d = steer(e, a.x, a.y, speed * speedBoost, dt, 2.1, 30);
     roundRocks(e, dt);
 
     if (e.tag !== 'attack') {
-      if (hyp(e.vx, e.vy) > 10) face(e, Math.atan2(a.y - e.y, a.x - e.x), dt, 2.5);
+      if (hyp(e.vx, e.vy) > 10) face(e, Math.atan2(a.y - e.y, a.x - e.x), dt, 2.8);
       if (variant === PIRATE_KIND.dumper) this.dumpPirateTrash(e, dt);
-      if (d < 36) {
+      if (d < 42) {
         e.tag = 'attack';
-        e.attackWork = 0.25;
+        e.attackWork = Math.max(e.attackWork ?? 0, 0.38);
         this.sim.text(e.x, e.y - 40, 'DERMAGA DISERANG!', '#ff8b78', 0.92);
       }
     } else {
-      face(e, Math.atan2(PIER_END.y - e.y, PIER_END.x - e.x), dt, 2.2);
-      if (d > 74) {
+      face(e, Math.atan2(PIER_END.y - e.y, PIER_END.x - e.x), dt, 2.4);
+      if (d > 82) {
         // Player's wave knocked them away from the pier — attack interrupted!
         e.tag = 'approach';
-        e.attackWork = 0;
+        e.attackWork = Math.max(0, (e.attackWork ?? 0) * 0.35);
       } else {
         e.attackWork = (e.attackWork ?? 0) + dt / PIRATE_SPECS[variant].attackPeriod;
         if (e.attackWork >= 1) {
@@ -383,7 +383,7 @@ export class Story {
           const damage = e.pirateDmg ?? pirateSpec(variant, this.s.day, this.s.cycle === 'night').dmg;
           this.damagePier(damage, e.x, e.y);
           // Slight recoil animation on the pirate hull when ramming
-          e.vx += 42;
+          e.vx += 34;
         }
       }
     }
@@ -415,16 +415,31 @@ export class Story {
     w.hitMap.set(e.id, w.age);
 
     // The push points away from its source. A wave coming at the bow opposes the ship's heading.
-    const guarded = e.variant === PIRATE_KIND.shield && px * Math.cos(e.rotation) + py * Math.sin(e.rotation) < -0.7;
-    const guard = guarded ? 0.36 : 1;
-    const buoyScale = w.kind === 'buoy_pulse' ? 0.58 : 1;
+    const guarded = e.variant === PIRATE_KIND.shield && px * Math.cos(e.rotation) + py * Math.sin(e.rotation) < -0.55;
+    const guard = guarded ? 0.25 : 1;
+    const inSignalAura =
+      e.variant !== PIRATE_KIND.signal &&
+      this.sim.entities.some(
+        (o) => o !== e && o.kind === 'raider' && o.tag !== 'leaving' && o.variant === PIRATE_KIND.signal && hyp(e.x - o.x, e.y - o.y) < PIRATE_SIGNAL_RADIUS
+      );
+    const auraGuard = inSignalAura ? 0.75 : 1;
+    const buoyScale = w.kind === 'buoy_pulse' ? 0.52 : 1;
+    const resonanceHullScale = w.kind === 'resonance' ? 0.28 : 1;
     const dmg = Math.max(
       1,
-      Math.round(hitDamage(w.power, w.charge, w.kind === 'resonance', this.sim.stats.critBonus) * buoyScale * guard)
+      Math.round(
+        hitDamage(w.power, w.charge, w.kind === 'resonance', this.sim.stats.critBonus) *
+          buoyScale *
+          resonanceHullScale *
+          guard *
+          auraGuard
+      )
     );
-    // Knockback pushes raiders away from the pier; heavy daily hulls resist small uncharged waves!
-    const rawShove = (210 / Math.max(1.2, e.mass)) * (0.55 + w.power * 0.45) * (w.kind === 'resonance' ? 1.4 : 1) * buoyScale;
-    const shove = Math.min(430, rawShove) * guard;
+    // Knockback pushes raiders away from the pier; heavy & late-day hulls push through weaker waves!
+    const powerPush = 0.55 + Math.sqrt(Math.max(0.1, w.power)) * 0.44;
+    const massCap = 220 / Math.pow(Math.max(1.8, e.mass) / 3, 0.6);
+    const rawShove = (155 / Math.max(1.6, e.mass)) * powerPush * (w.kind === 'resonance' ? 1.15 : 1) * buoyScale;
+    const shove = Math.min(massCap, rawShove) * guard * auraGuard;
     e.vx += px * shove;
     e.vy += py * shove;
 
@@ -864,23 +879,31 @@ export class Story {
     s.skirmishTimer -= dt;
     if (s.skirmishTimer <= 0 && s.dayTime < DAY_DURATION - 16) {
       const active = this.activePirates().length;
-      if (active < 2) {
+      if (active < 4) {
         const firstScout = s.day === 1 && s.piratesSunk === 0;
-        const count = !firstScout && s.day >= 3 && Math.random() < 0.42 ? 2 : 1;
+        const count = firstScout
+          ? 1
+          : s.day >= 3
+            ? Math.random() < 0.45 ? 3 : 2
+            : s.day >= 2
+              ? 2
+              : Math.random() < 0.45 ? 2 : 1;
         for (let i = 0; i < count; i++) {
           const variant: PirateKind = firstScout
             ? 0
-            : s.day >= 3 && i === 0 && Math.random() < 0.35
+            : s.day >= 3 && i === 0 && Math.random() < 0.45
               ? 2
-              : Math.random() < 0.42
-                ? 1
-                : 0;
+              : s.day >= 2 && i === 1 && Math.random() < 0.4
+                ? PIRATE_KIND.shield
+                : Math.random() < 0.44
+                  ? 1
+                  : 0;
           this.spawnPirate(variant, firstScout ? 0 : Math.floor(Math.random() * PIRATE_LANES.length), false);
         }
         this.sim.audio.playAlert();
         if (!(firstScout && this.talk('scout'))) this.radio('PAK DAMAR', 'Kapal layar robek siang-siang! Usir dio dari dermaga!');
       }
-      s.skirmishTimer = Math.max(24, 38 - s.day * 2.2) + Math.random() * 6;
+      s.skirmishTimer = Math.max(16, 28 - s.day * 2.2) + Math.random() * 5;
     }
 
     // Daytime side events (dolphins, fishers, trawlers, drum ships, forest fires) for bonus coins & narrative flavor
@@ -996,10 +1019,11 @@ export class Story {
     // Boss Night extra escort trickle if the Mother Ship survives past initial schedule
     if (bossNight && s.job?.kind === 'boss' && s.wavePlan.length === 0) {
       this.bossEscortTimer -= dt;
-      if (this.bossEscortTimer <= 0 && active.length < 3) {
-        this.bossEscortTimer = 13;
-        this.spawnPirate(1, 0, true);
-        this.spawnPirate(Math.random() < 0.5 ? 2 : 0, 3, true);
+      if (this.bossEscortTimer <= 0 && active.length < 5) {
+        this.bossEscortTimer = 11;
+        this.spawnPirate(Math.random() < 0.45 ? PIRATE_KIND.shield : 1, 0, true);
+        this.spawnPirate(Math.random() < 0.65 ? 2 : PIRATE_KIND.signal, 3, true);
+        this.spawnPirate(Math.random() < 0.5 ? 1 : 0, 5, true);
       }
     }
 

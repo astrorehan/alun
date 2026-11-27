@@ -92,15 +92,15 @@ export const P_MANGROVE = 3;
 export const P_HEALTHY = 30;
 export const P_DIRTY = 60;
 
-export const RAIDER_HP = 34;
-export const POLLUTER_HP = 32;
-export const TRAWL_HP = 62;
-export const BOSS_HP = 2200;
+export const RAIDER_HP = 78;
+export const POLLUTER_HP = 85;
+export const TRAWL_HP = 150;
+export const BOSS_HP = 8500;
 export const BASE_HIT = 10;
 
 export function bossHpForDay(day: number): number {
   const tier = Math.max(0, Math.floor((day - BOSS_INTERVAL) / BOSS_INTERVAL));
-  return Math.round(BOSS_HP * Math.pow(2.4, tier));
+  return Math.round(BOSS_HP * Math.pow(2.6, tier));
 }
 
 export function nightClearBonus(day: number): number {
@@ -123,29 +123,29 @@ export interface PirateSpec {
 
 export const PIRATE_SPECS: Record<PirateKind, PirateSpec> = {
   [PIRATE_KIND.raider]: {
-    name: 'PENJARAH', hp: RAIDER_HP, speed: 54, dmg: 11, bounty: 14, radius: 27, mass: 2.45, attackPeriod: 2.3,
+    name: 'PENJARAH', hp: RAIDER_HP, speed: 82, dmg: 16, bounty: 14, radius: 27, mass: 4.2, attackPeriod: 1.8,
   },
   [PIRATE_KIND.skiff]: {
-    name: 'PERAHU CEPAT', hp: 22, speed: 78, dmg: 8, bounty: 11, radius: 23, mass: 1.8, attackPeriod: 1.95,
+    name: 'PERAHU CEPAT', hp: 52, speed: 118, dmg: 12, bounty: 11, radius: 23, mass: 2.9, attackPeriod: 1.45,
   },
   [PIRATE_KIND.heavy]: {
-    name: 'PENJARAH BERAT', hp: 64, speed: 41, dmg: 18, bounty: 29, radius: 33, mass: 3.8, attackPeriod: 2.6,
+    name: 'PENJARAH BERAT', hp: 175, speed: 64, dmg: 28, bounty: 29, radius: 33, mass: 8.2, attackPeriod: 2.0,
   },
   [PIRATE_KIND.shield]: {
-    name: 'KAPAL PERISAI', hp: 27, speed: 45, dmg: 12, bounty: 21, radius: 29, mass: 2.8, attackPeriod: 2.4,
+    name: 'KAPAL PERISAI', hp: 76, speed: 72, dmg: 18, bounty: 21, radius: 29, mass: 5.6, attackPeriod: 1.85,
     intro: SCENES.shield.lines[0].text,
   },
   [PIRATE_KIND.dumper]: {
-    name: 'KAPAL RONGSOK', hp: 30, speed: 49, dmg: 8, bounty: 15, radius: 28, mass: 2.6, attackPeriod: 2.65,
+    name: 'KAPAL RONGSOK', hp: 82, speed: 74, dmg: 13, bounty: 15, radius: 28, mass: 4.6, attackPeriod: 2.0,
     intro: SCENES.dumper.lines[0].text,
   },
   [PIRATE_KIND.signal]: {
-    name: 'KAPAL ISYARAT', hp: 31, speed: 48, dmg: 9, bounty: 20, radius: 28, mass: 2.45, attackPeriod: 2.5,
+    name: 'KAPAL ISYARAT', hp: 86, speed: 72, dmg: 14, bounty: 20, radius: 28, mass: 4.4, attackPeriod: 1.9,
     intro: SCENES.signal.lines[0].text,
   },
 };
 
-export const PIRATE_SIGNAL_RADIUS = 165;
+export const PIRATE_SIGNAL_RADIUS = 195;
 
 export function pirateKind(value: unknown): PirateKind {
   return typeof value === 'number' && Number.isInteger(value) && value >= PIRATE_KIND.raider && value <= PIRATE_KIND.signal
@@ -159,10 +159,10 @@ export function pirateScale(day: number): number {
 }
 
 export function pirateSpec(variant: PirateKind, day: number, isNight: boolean): PirateSpec {
-  const sc = pirateScale(day) * (isNight ? 1 : 0.78);
-  const dmgSc = 1 + Math.max(0, day - 1) * 0.4;
-  const spdSc = 1 + Math.min(0.65, Math.max(0, day - 1) * 0.11);
-  const massSc = 1 + Math.min(1.8, Math.max(0, day - 1) * 0.25);
+  const sc = pirateScale(day) * (isNight ? 1 : 0.85);
+  const dmgSc = 1 + Math.max(0, day - 1) * 0.48;
+  const spdSc = 1 + Math.min(0.75, Math.max(0, day - 1) * 0.13);
+  const massSc = 1 + Math.min(2.4, Math.max(0, day - 1) * 0.35);
   const bountySc = 1 + Math.max(0, day - 1) * 0.3;
   const base = PIRATE_SPECS[variant];
   return {
@@ -183,125 +183,165 @@ export function buildNightWave(day: number): { plan: WaveSpawn[]; hugeFlags: num
   };
 
   if (day === 1) {
-    // Punchy PvZ Day 1 night: 9 ships, final huge wave of 4 ships attacking simultaneously!
-    add(1.5, 0, 0);
-    add(8, 1, 1);
-    add(15, 0, 3);
-    add(22, 1, 2);
-    add(29, 0, 4);
-    // HUGE WAVE
-    add(39, 0, 0, true);
-    add(40, 1, 3);
-    add(41, 0, 1);
-    add(42.2, 1, 4);
-    return { plan, hugeFlags: [39 / NIGHT_DURATION] };
+    // Punchy PvZ Day 1 night: 14 ships (1.5x), tighter pairs + simultaneous 6-ship huge wave!
+    add(1.2, 0, 0);
+    add(5.0, 1, 1);
+    add(9.2, 0, 3);
+    add(11.4, 1, 2);
+    add(16.0, 0, 4);
+    add(18.0, 1, 0);
+    add(23.0, 0, 2);
+    add(26.5, 1, 5);
+    // HUGE WAVE (6 ships)
+    add(35, 0, 0, true);
+    add(35.7, 1, 3);
+    add(36.4, 0, 1);
+    add(37.1, 1, 4);
+    add(37.8, 0, 2);
+    add(38.5, 1, 5);
+    return { plan, hugeFlags: [35 / NIGHT_DURATION] };
   }
 
   if (day === 2) {
-    // 13 ships + Brutes & Trawl support
-    add(1.5, 1, 0);
-    add(6.5, 0, 2);
-    add(11.5, 0, 4);
-    add(17, 2, 1, false, 'trawl');
-    add(22, 1, 3);
-    add(26.5, PIRATE_KIND.shield, 5);
-    add(31, 2, 2);
-    add(35, 1, 0);
-    // HUGE WAVE
-    add(41, 2, 0, true);
-    add(42, 0, 3);
-    add(43, 1, 1);
-    add(44, 0, 4);
-    add(45, 1, 2);
-    return { plan, hugeFlags: [41 / NIGHT_DURATION] };
+    // 20 ships (1.5x) + Brutes, Shields & Trawl support
+    add(1.2, 1, 0);
+    add(4.2, 0, 2);
+    add(7.0, 1, 4);
+    add(10.0, 0, 1);
+    add(13.2, 2, 3, false, 'trawl');
+    add(15.5, 1, 0);
+    add(18.5, 0, 5);
+    add(21.5, PIRATE_KIND.shield, 2);
+    add(24.5, 1, 4);
+    add(27.5, 2, 1);
+    add(30.0, PIRATE_KIND.shield, 5);
+    add(32.5, 1, 0);
+    // HUGE WAVE (8 ships)
+    add(38, 2, 0, true);
+    add(38.6, PIRATE_KIND.shield, 3);
+    add(39.2, 1, 1);
+    add(39.8, 0, 4);
+    add(40.4, 1, 2);
+    add(41.0, 0, 5);
+    add(41.6, 2, 3);
+    add(42.2, 1, 0);
+    return { plan, hugeFlags: [38 / NIGHT_DURATION] };
   }
 
   if (day === 3) {
-    // 17 ships + 2 Huge Waves + Drum Ship support
-    add(1.5, 0, 0);
-    add(5.5, 1, 3);
-    add(10, PIRATE_KIND.dumper, 1);
-    add(14.5, 2, 2);
-    add(18.5, 1, 4);
-    // HUGE WAVE 1
-    add(23, 2, 0, true, 'waste');
-    add(24, PIRATE_KIND.shield, 3);
-    add(25, 1, 1);
-    add(26, 0, 4);
-    add(32, 1, 5);
-    add(36, PIRATE_KIND.dumper, 2);
-    add(39.5, 2, 0);
-    // HUGE WAVE 2 (Final)
-    add(44, 2, 1, true);
-    add(45, 2, 3);
-    add(46, 0, 0);
-    add(47, 1, 4);
-    add(48, 0, 2);
-    return { plan, hugeFlags: [23 / NIGHT_DURATION, 44 / NIGHT_DURATION] };
+    // 26 ships (1.5x) + 2 Huge Waves + Drum Ship support
+    add(1.2, 0, 0);
+    add(3.8, 1, 3);
+    add(6.6, PIRATE_KIND.dumper, 1);
+    add(9.2, 0, 4);
+    add(11.8, 2, 2);
+    add(14.2, PIRATE_KIND.shield, 5);
+    add(16.5, 1, 0);
+    // HUGE WAVE 1 (6 ships)
+    add(21, 2, 0, true, 'waste');
+    add(21.6, PIRATE_KIND.shield, 3);
+    add(22.2, 1, 1);
+    add(22.8, PIRATE_KIND.dumper, 4);
+    add(23.4, 0, 2);
+    add(24.0, 1, 5);
+    add(29.0, PIRATE_KIND.shield, 5);
+    add(31.2, 0, 1);
+    add(33.2, PIRATE_KIND.dumper, 2);
+    add(35.2, 1, 4);
+    add(37.2, 2, 0);
+    // HUGE WAVE 2 (Final, 8 ships)
+    add(42, 2, 1, true);
+    add(42.6, 2, 3);
+    add(43.2, PIRATE_KIND.shield, 0);
+    add(43.8, 1, 4);
+    add(44.4, PIRATE_KIND.dumper, 2);
+    add(45.0, PIRATE_KIND.shield, 5);
+    add(45.6, 0, 1);
+    add(46.2, 1, 3);
+    return { plan, hugeFlags: [21 / NIGHT_DURATION, 42 / NIGHT_DURATION] };
   }
 
   if (day === 4) {
-    // 21 ships + 2 Huge Waves + Trawl & Drum pressure
-    add(1.5, 1, 0);
-    add(4.5, 0, 3);
-    add(8, 2, 1);
-    add(12, 1, 4);
-    add(15.5, 0, 2, false, 'trawl');
-    add(19, PIRATE_KIND.shield, 5);
-    // HUGE WAVE 1
-    add(23, 2, 0, true);
-    add(24, 2, 3);
-    add(25, PIRATE_KIND.signal, 1);
-    add(26, 0, 4);
-    add(27, 1, 2);
-    add(33, 0, 5, false, 'waste');
-    add(36.5, 2, 1);
-    add(39.5, 1, 3);
-    // HUGE WAVE 2 (Final)
-    add(44, 2, 0, true);
-    add(45, PIRATE_KIND.signal, 2);
-    add(46, 2, 4);
-    add(47, 1, 1);
-    add(48, PIRATE_KIND.dumper, 3);
-    add(49, 1, 5);
-    add(50, 0, 0);
-    return { plan, hugeFlags: [23 / NIGHT_DURATION, 44 / NIGHT_DURATION] };
+    // 32 ships (1.5x) + 2 Huge Waves + Trawl & Drum pressure
+    add(1.2, 1, 0);
+    add(3.2, 0, 3);
+    add(5.4, 2, 1);
+    add(7.6, 1, 4);
+    add(9.8, 0, 2);
+    add(11.8, PIRATE_KIND.shield, 5, false, 'trawl');
+    add(13.8, 1, 0);
+    add(15.6, PIRATE_KIND.dumper, 3);
+    add(17.4, 2, 4);
+    // HUGE WAVE 1 (8 ships)
+    add(21.5, 2, 0, true);
+    add(22.1, 2, 3);
+    add(22.7, PIRATE_KIND.signal, 1);
+    add(23.3, PIRATE_KIND.shield, 4);
+    add(23.9, 1, 2);
+    add(24.5, PIRATE_KIND.shield, 5);
+    add(25.1, 0, 0);
+    add(25.7, 1, 3);
+    add(30.0, 0, 5, false, 'waste');
+    add(32.0, 2, 1);
+    add(33.8, PIRATE_KIND.dumper, 4);
+    add(35.6, PIRATE_KIND.shield, 2);
+    add(37.4, 1, 3);
+    // HUGE WAVE 2 (Final, 10 ships)
+    add(42, 2, 0, true);
+    add(42.6, PIRATE_KIND.signal, 2);
+    add(43.2, 2, 4);
+    add(43.8, PIRATE_KIND.shield, 1);
+    add(44.4, PIRATE_KIND.dumper, 3);
+    add(45.0, 1, 5);
+    add(45.6, 2, 0);
+    add(46.2, PIRATE_KIND.signal, 4);
+    add(46.8, PIRATE_KIND.shield, 2);
+    add(47.4, 1, 1);
+    return { plan, hugeFlags: [21.5 / NIGHT_DURATION, 42 / NIGHT_DURATION] };
   }
 
   if (isBossDay(day)) {
-    // Monsoon Boss Night (Day 5, 10, 15...): Mother Ship + heavy escort waves!
-    const extra = Math.min(10, Math.floor((day - BOSS_INTERVAL) / BOSS_INTERVAL) * 4);
-    add(3, 1, 0);
-    add(7, 0, 3);
-    add(11.5, 2, 1);
-    add(16, 1, 4);
-    add(20, PIRATE_KIND.dumper, 2);
-    add(24.5, 2, 0);
-    // HUGE ESCORT WAVE
-    add(30, 2, 0, true);
-    add(31, PIRATE_KIND.signal, 3);
-    add(32, 0, 1);
-    add(33, 1, 4);
-    add(34, 1, 2);
-    add(40, 0, 5);
-    add(44, PIRATE_KIND.shield, 0);
-    add(48, 1, 3);
-    add(51, 2, 1);
-    add(54, 0, 4);
+    // Monsoon Boss Night (Day 5, 10, 15...): Mother Ship + 24 heavy escort ships (1.5x)!
+    const extra = Math.min(15, Math.floor((day - BOSS_INTERVAL) / BOSS_INTERVAL) * 6);
+    add(2.0, 1, 0);
+    add(4.4, 2, 3);
+    add(7.0, PIRATE_KIND.shield, 1);
+    add(9.4, 0, 4);
+    add(11.8, 1, 2);
+    add(14.2, PIRATE_KIND.dumper, 5);
+    add(16.6, 2, 0);
+    add(19.0, PIRATE_KIND.shield, 3);
+    add(21.4, 1, 1);
+    // HUGE ESCORT WAVE (8 ships)
+    add(26, 2, 0, true);
+    add(26.6, PIRATE_KIND.signal, 3);
+    add(27.2, PIRATE_KIND.shield, 1);
+    add(27.8, 1, 4);
+    add(28.4, 2, 2);
+    add(29.0, PIRATE_KIND.shield, 5);
+    add(29.6, 0, 0);
+    add(30.2, 1, 3);
+    add(34.5, 0, 5);
+    add(37.2, PIRATE_KIND.shield, 0);
+    add(40.0, PIRATE_KIND.signal, 3);
+    add(42.8, PIRATE_KIND.dumper, 2);
+    add(45.5, 2, 1);
+    add(48.2, 1, 4);
+    add(51.0, 2, 0);
     for (let i = 0; i < extra; i++) {
-      add(9 + i * 4.5, (i % 3) as PirateKind, i + 1);
+      add(7 + i * 3, (i % 3) as PirateKind, i + 1);
     }
     plan.sort((a, b) => a.at - b.at);
-    return { plan, hugeFlags: [30 / NIGHT_DURATION] };
+    return { plan, hugeFlags: [26 / NIGHT_DURATION] };
   }
 
-  // Endless Day 6+: dense multi-flag PvZ waves!
-  const total = Math.min(34, 21 + (day - 4) * 2);
+  // Endless Day 6+: dense 1.5x multi-flag PvZ waves!
+  const total = Math.min(52, 32 + (day - 4) * 3);
   const wave1At = 22;
   const wave2At = 44;
-  const huge1Count = 5 + Math.min(4, Math.floor((day - 5) / 2));
-  const huge2Count = 6 + Math.min(5, Math.floor((day - 5) / 2));
-  const trickle = Math.max(5, total - huge1Count - huge2Count);
+  const huge1Count = 8 + Math.min(6, Math.floor((day - 5) / 2));
+  const huge2Count = 9 + Math.min(7, Math.floor((day - 5) / 2));
+  const trickle = Math.max(8, total - huge1Count - huge2Count);
 
   for (let i = 0; i < trickle; i++) {
     const t = 1.5 + (i / trickle) * 40;
@@ -311,12 +351,12 @@ export function buildNightWave(day: number): { plan: WaveSpawn[]; hugeFlags: num
     add(adjusted, i === 4 || i === trickle - 1 ? PIRATE_KIND.dumper : v, i + day, false, sup);
   }
   for (let i = 0; i < huge1Count; i++) {
-    const v: PirateKind = i < 2 ? 2 : i % 2 === 0 ? 1 : 0;
-    add(wave1At + i * 0.85, i === 1 ? PIRATE_KIND.shield : v, i + 1, i === 0);
+    const v: PirateKind = i < 3 ? 2 : i % 2 === 0 ? 1 : 0;
+    add(wave1At + i * 0.65, i === 1 || i === 4 ? PIRATE_KIND.shield : v, i + 1, i === 0);
   }
   for (let i = 0; i < huge2Count; i++) {
-    const v: PirateKind = i < 3 ? 2 : i % 2 === 0 ? 1 : 0;
-    add(wave2At + i * 0.8, i === 1 ? PIRATE_KIND.signal : v, i + 2, i === 0);
+    const v: PirateKind = i < 4 ? 2 : i % 2 === 0 ? 1 : 0;
+    add(wave2At + i * 0.6, i === 1 || i === 5 ? PIRATE_KIND.signal : v, i + 2, i === 0);
   }
   plan.sort((a, b) => a.at - b.at);
   return { plan, hugeFlags: [wave1At / NIGHT_DURATION, wave2At / NIGHT_DURATION] };

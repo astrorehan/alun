@@ -94,13 +94,14 @@ export abstract class Job {
     if (w.hitMap.has(e.id)) return 0;
     w.hitMap.set(e.id, w.age);
     this.s.touched = true;
-    const buoyScale = w.kind === 'buoy_pulse' ? 0.58 : 1;
-    const k = shove * (0.55 + w.power * 0.45) * buoyScale;
+    const buoyScale = w.kind === 'buoy_pulse' ? 0.52 : 1;
+    const resonanceHullScale = w.kind === 'resonance' ? 0.28 : 1;
+    const k = shove * (0.55 + Math.sqrt(Math.max(0.1, w.power)) * 0.45) * buoyScale;
     e.vx += px * k;
     e.vy += py * k;
     const dmg = Math.max(
       1,
-      Math.round(hitDamage(w.power, w.charge, w.kind === 'resonance', this.sim.stats.critBonus) * buoyScale)
+      Math.round(hitDamage(w.power, w.charge, w.kind === 'resonance', this.sim.stats.critBonus) * buoyScale * resonanceHullScale)
     );
     if (this.sim.stats.comboEnergyReturn > 0) {
       this.sim.energy = Math.min(this.sim.stats.maxEnergy, this.sim.energy + this.sim.stats.comboEnergyReturn);
@@ -640,7 +641,7 @@ export class RaidJob extends Job {
 
 /* ================================================================== the trawl */
 
-const WINCH = 27;
+const WINCH = 23;
 
 /** A trawl's two end floats on their lines. Shared by the trawl ship and the mother ship. */
 class Trawl {
@@ -729,7 +730,7 @@ export class TrawlJob extends Job {
     const maxHp = Math.max(this.s.hp, TRAWL_HP);
     this.ship = this.sim.add('trawl_ship', WORLD_W + 80, TRAWL_GATE.y + 14, {
       radius: 36,
-      mass: 4,
+      mass: 5.2,
       hp: this.s.hp,
       maxHp,
       rotation: Math.PI,
@@ -783,7 +784,7 @@ export class TrawlJob extends Job {
       // in round the south of the big rock, then up to the spawning ground
       if (e.x < TRAWL_GATE.x + 36) this.through = true;
       const to = this.through ? TRAWL_STATION : TRAWL_GATE;
-      steer(e, to.x, to.y, 62, dt, 1.2);
+      steer(e, to.x, to.y, 74, dt, 1.35);
       roundRocks(e, dt);
       const moving = this.s.phase === 'enter' && hyp(e.vx, e.vy) > 16;
       face(e, moving ? Math.atan2(e.vy, e.vx) : Math.PI * 0.98, dt, 1.4);
@@ -833,7 +834,7 @@ export class TrawlJob extends Job {
 
 /* ================================================================== the drum carrier */
 
-const DUMP = 21;
+const DUMP = 18;
 
 export class WasteJob extends Job {
   private ship: Entity | null = null;
@@ -858,7 +859,7 @@ export class WasteJob extends Job {
     const maxHp = Math.max(this.s.hp, POLLUTER_HP);
     this.ship = this.sim.add('polluter', WORLD_W + 80, DUMP_STATION.y + 10, {
       radius: 33,
-      mass: 3.4,
+      mass: 4.5,
       hp: this.s.hp,
       maxHp,
       rotation: Math.PI,
@@ -911,7 +912,7 @@ export class WasteJob extends Job {
 
   move(e: Entity, dt: number): boolean {
     if (e !== this.ship) return false;
-    steer(e, DUMP_STATION.x, DUMP_STATION.y, 60, dt, 1.2);
+    steer(e, DUMP_STATION.x, DUMP_STATION.y, 72, dt, 1.35);
     face(e, Math.PI * 1.04, dt, 1.4);
     return true;
   }
@@ -1154,9 +1155,9 @@ export class FireJob extends Job {
 
 /* ================================================================== the mother ship */
 
-const GEAR_TRAWL = 22;
-const GEAR_DRUM = 19;
-const WINDOW = 11;
+const GEAR_TRAWL = 18;
+const GEAR_DRUM = 16;
+const WINDOW = 9.5;
 const DRUM_REEF: Point = { x: 1070, y: 600 };
 const BOSS_STATION: Point = { x: 1060, y: 372 };
 
@@ -1301,7 +1302,7 @@ export class BossJob extends Job {
         if (s.t > WINDOW) this.phase('rest');
         break;
       case 'rest':
-        if (s.t > 2.6) this.nextGear();
+        if (s.t > 2.0) this.nextGear();
         break;
     }
   }
@@ -1309,7 +1310,7 @@ export class BossJob extends Job {
   move(e: Entity, dt: number): boolean {
     if (e === this.ship) {
       const sway = this.s.phase === 'window' ? 0 : Math.sin(this.s.total * 0.45) * 30;
-      steer(e, BOSS_STATION.x, BOSS_STATION.y + sway, 70, dt, 1.1);
+      steer(e, BOSS_STATION.x, BOSS_STATION.y + sway, 78, dt, 1.25);
       face(e, Math.PI, dt, 1);
       return true;
     }
@@ -1317,8 +1318,8 @@ export class BossJob extends Job {
       const dx = DRUM_REEF.x - e.x;
       const dy = DRUM_REEF.y - e.y;
       const d = hyp(dx, dy) || 1;
-      e.vx += (dx / d) * 24 * dt;
-      e.vy += (dy / d) * 24 * dt;
+      e.vx += (dx / d) * 30 * dt;
+      e.vy += (dy / d) * 30 * dt;
       this.sim.drift(e, dt, 0.962, 380);
       return true;
     }
@@ -1330,10 +1331,11 @@ export class BossJob extends Job {
       if (w.kind !== 'buoy_pulse') this.s.touched = true;
       return 'push';
     }
-    const rawDmg = this.hullHit(e, w, px, py, 34);
+    const rawDmg = this.hullHit(e, w, px, py, 24);
     if (rawDmg <= 0) return 'hold';
-    // Uncapped full incremental damage during exposed window, 38% armored chip damage otherwise!
-    const take = Math.min(this.s.hp, this.open ? rawDmg : Math.max(1, Math.round(rawDmg * 0.38)));
+    // Heavy armor while deploying gear (15%) or entering (10%); full incremental burst during exposed window!
+    const armorScale = this.open ? 1 : this.s.phase === 'enter' ? 0.1 : 0.15;
+    const take = Math.min(this.s.hp, Math.max(1, Math.round(rawDmg * armorScale)));
     if (take <= 0) return 'hold';
     this.s.hp -= take;
     this.st.s.bossHp = this.s.hp;
