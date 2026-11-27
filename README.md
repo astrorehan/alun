@@ -24,7 +24,7 @@ Klik atau sentuh air, geser ke sasaran, lalu lepas untuk mengirim ombak. Ketuk t
 | Esc / Enter / Spasi | Lewati film |
 | Klik / Spasi / Enter | Lanjutkan omongan Bu Sari (Esc melewati adegannya) |
 
-Film pembuka dimulai di Pantai Panjang, yang papan namanya berdiri di pasir sebelah selatan desa. Kamera menyusuri desa, lalu ikut Pak Damar melaut: ia menunjuk camar yang menukik di atas kawanan ikan, menebar jala, dan menariknya penuh ikan. Ia lalu menunggu di luar karang, sementara wisatawan membuang sampah yang menutup dermaga.
+Film pembuka dimulai di Pantai Panjang, yang huruf-huruf pelanginya berdiri di pasir sebelah selatan desa. Kamera menyusuri desa, lalu ikut Pak Damar melaut: ia menunjuk camar yang menukik di atas kawanan ikan, menebar jala, dan menariknya penuh ikan. Ia lalu menunggu di luar karang, sementara wisatawan membuang sampah yang menutup dermaga.
 
 Sapu enam sampah pembuka ke Jaring Desa, lalu dorong peti perkakas ke ujung dermaga. Bu Sari membuka Bengkel dan memasang **Jalur Pasang**. Tahan sampai tiga panah muncul, geser, lalu lepas. Arus bertahan tiga detik dan siap lagi delapan detik setelah dilepas.
 
@@ -105,7 +105,7 @@ Pengaturan disimpan terpisah dari cerita, jadi tetap ada setelah simpanan dihapu
 | `src/scene/` | Renderer 3D, air, hutan, terumbu, desa, dan tingkatan grafis |
 | `src/scene/opening.ts`, `src/scene/rescue.ts`, `src/scene/ending.ts` | Film pembuka, penyelamatan induk, dan kepulangan saat fajar |
 | `src/scene/damar.ts` | Pak Damar melaut dan menebar jala di film pembuka |
-| `src/scene/beachsign.ts` | Papan nama Pantai Panjang |
+| `src/scene/landmark.ts` | Tulisan pelangi Pantai Panjang |
 | `src/scene/pirates.ts` | Awak bajak laut di kapal penjarah dan film perkenalannya |
 | `src/scene/story.ts`, `src/scene/fleet.ts`, `src/scene/health.ts`, `src/scene/plates.ts` | Visual cerita, armada, perubahan pesisir, dan label kejadian |
 | `tests/` | Skenario uji, bot pemain, dan peluncur `npm run uji` |

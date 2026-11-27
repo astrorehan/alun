@@ -17,6 +17,7 @@ import {
   UNIT,
 } from './space';
 import { VILLAGE_PIER, COLLECTOR_NET, RAFFLESIA_POS, SEA_ROCKS, CORAL_CLUSTERS } from '../world';
+import { PANTAI_PANJANG } from './landmark';
 
 const RECT = { x: -78, z: -78, w: 210, h: 146 };
 const SHORE_N = 256;
@@ -45,6 +46,7 @@ export const PATHS: [number, number][][] = [
     [pier.x - 8, pier.z + 2],
     [pier.x - 9, pier.z + 7],
     [pier.x - 6, pier.z + 11],
+    [PANTAI_PANJANG.x + 2.2, PANTAI_PANJANG.z - 4.2],
   ],
 ];
 

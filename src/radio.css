@@ -330,8 +330,8 @@
 }
 
 .talk-card {
-  --face: 124px;
-  width: min(900px, 100%);
+  --face: 92px;
+  width: min(700px, 100%);
   animation: talkIn 0.42s var(--ease-snappy) both;
 }
 
@@ -343,30 +343,30 @@
 }
 
 .talk-card .radio-portrait {
-  margin: 0 -22px 6px 0;
+  margin: 0 -18px 4px 0;
 }
 
 .talk-card .radio-bubble {
   flex: 1;
-  padding: 26px 28px 32px 40px;
-  border-radius: 24px;
+  padding: 20px 22px 24px 32px;
+  border-radius: 20px;
 }
 
 .talk-card .radio-line {
-  font-size: 22px;
-  line-height: 1.36;
-  /* three lines are always there, so the card keeps its size from one line to the next */
-  min-height: calc(3 * 1.36em);
+  font-size: 18px;
+  line-height: 1.34;
+  /* two lines are always there (her longest line fits in two), so the card keeps its size from one line to the next */
+  min-height: calc(2 * 1.34em);
 }
 
 .talk-card .radio-head {
-  top: -16px;
-  left: 30px;
+  top: -15px;
+  left: 26px;
 }
 
 .talk-card .radio-name {
-  font-size: 15px;
-  padding: 3px 14px 4px;
+  font-size: 13.5px;
+  padding: 2px 12px 3px;
 }
 
 .talk-card .radio-eq {
@@ -379,13 +379,13 @@
 
 .talk-card .radio-next {
   position: absolute;
-  right: 18px;
-  bottom: 9px;
+  right: 16px;
+  bottom: 5px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font-family: var(--font-display);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.05em;
   color: #66779b;
@@ -430,37 +430,37 @@
 }
 
 @media (max-height: 640px), (max-width: 920px) {
-  .talk-card { --face: 96px; }
-  .talk-card .radio-portrait { margin: 0 -18px 4px 0; }
-  .talk-card .radio-bubble { padding: 21px 20px 28px 32px; border-radius: 20px; }
-  .talk-card .radio-line { font-size: 18px; }
-  .talk-card .radio-head { top: -14px; left: 26px; }
-  .talk-card .radio-name { font-size: 13px; padding: 2px 11px 3px; }
-  .talk-card .radio-eq { height: 17px; }
-  .talk-card .radio-next { font-size: 12px; bottom: 7px; right: 14px; }
+  .talk-card { --face: 74px; width: min(600px, 100%); }
+  .talk-card .radio-portrait { margin: 0 -15px 3px 0; }
+  .talk-card .radio-bubble { padding: 17px 17px 21px 27px; border-radius: 17px; }
+  .talk-card .radio-line { font-size: 15.5px; line-height: 1.3; min-height: calc(2 * 1.3em); }
+  .talk-card .radio-head { top: -13px; left: 22px; }
+  .talk-card .radio-name { font-size: 12px; padding: 1px 10px 2px; }
+  .talk-card .radio-eq { height: 16px; }
+  .talk-card .radio-next { font-size: 11px; bottom: 4px; right: 13px; }
 }
 
 @media (max-width: 520px) {
   .talk-layer { padding-bottom: max(16px, calc(env(safe-area-inset-bottom) + 10px)); }
-  .talk-card { --face: 78px; }
-  .talk-card .radio-portrait { margin: 0 -16px 2px 0; }
-  .talk-card .radio-bubble { padding: 19px 16px 26px 26px; }
-  .talk-card .radio-line { font-size: 16.5px; line-height: 1.32; min-height: calc(4 * 1.32em); }
+  .talk-card { --face: 60px; }
+  .talk-card .radio-portrait { margin: 0 -13px 2px 0; }
+  .talk-card .radio-bubble { padding: 16px 14px 20px 22px; }
+  .talk-card .radio-line { font-size: 15px; line-height: 1.3; min-height: calc(3 * 1.3em); }
 }
 
 @media (max-height: 500px) {
   .talk-layer { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
-  .talk-card { --face: 64px; width: min(760px, 100%); }
+  .talk-card { --face: 50px; width: min(560px, 100%); }
   .talk-card .radio-portrait {
-    margin: 0 -14px 2px 0;
+    margin: 0 -12px 2px 0;
     border-width: var(--border-md);
     box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45), 0 3px 0 var(--ink), 0 0 0 calc(var(--talk, 0) * 5px) var(--who-glow);
   }
-  .talk-card .radio-bubble { padding: 14px 14px 20px 22px; border-radius: 16px; border-width: var(--border-md); }
-  .talk-card .radio-line { font-size: 14.5px; line-height: 1.3; min-height: calc(3 * 1.3em); }
-  .talk-card .radio-head { top: -12px; left: 18px; gap: 4px; }
+  .talk-card .radio-bubble { padding: 12px 12px 15px 19px; border-radius: 14px; border-width: var(--border-md); }
+  .talk-card .radio-line { font-size: 13.5px; line-height: 1.26; min-height: calc(2 * 1.26em); }
+  .talk-card .radio-head { top: -11px; left: 16px; gap: 4px; }
   .talk-card .radio-name { font-size: 11px; padding: 0 9px 1px; border-width: 2px; }
   .talk-card .radio-eq { height: 14px; padding: 2px 4px; border-width: 2px; }
-  .talk-card .radio-next { font-size: 10.5px; bottom: 4px; right: 11px; gap: 4px; }
+  .talk-card .radio-next { font-size: 10px; bottom: 2px; right: 10px; gap: 4px; }
   .talk-card .radio-next i { border-width: 4.5px 0 4.5px 8px; }
 }

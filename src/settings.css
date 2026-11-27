@@ -316,6 +316,7 @@
 }
 
 .set-slider input[type='range'] {
+  touch-action: pan-x;
   --thumb: 24px;
   -webkit-appearance: none;
   appearance: none;
@@ -591,7 +592,8 @@
   .set-switch-state { width: 36px; font-size: 11px; }
   .set-slider { gap: 2px; padding: 4px 11px 6px; }
   .set-slider-val { font-size: 12.5px; width: 40px; }
-  .set-slider input[type='range'] { --thumb: 18px; height: 11px; margin: 4px 0 3px; border-width: 2px; }
+  .set-slider input[type='range'] {
+  touch-action: pan-x; --thumb: 18px; height: 11px; margin: 4px 0 3px; border-width: 2px; }
   .set-slider input[type='range']::-webkit-slider-thumb { margin-top: calc((var(--thumb) - 7px) / -2); border-width: 2.5px; }
   .set-cell { padding: 5px 9px 7px; gap: 4px; }
   .set-seg { padding: 2px; border-radius: 10px; border-width: 2px; }

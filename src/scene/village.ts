@@ -6,6 +6,7 @@ import { inked, mesh } from './kit';
 import { clamp, groundAt, lerp, rng, shoreAt, smooth, toX, toZ } from './space';
 
 import { movingPerson, type PersonLook, type PersonRig } from './people';
+import { buildPantaiPanjang } from './landmark';
 export { person } from './people';
 
 export const PIER = { x: toX(VILLAGE_PIER.x), z: toZ(VILLAGE_PIER.y) };
@@ -562,6 +563,9 @@ export class Village {
       this.flag.position.set(fpx, fgy + 4.8, fpz);
       this.flag.frustumCulled = false;
     }
+
+    /* ---------------- Pantai Panjang Bengkulu coastal landmark */
+    buildPantaiPanjang(b, lamp);
 
     const body = inked(mesh(b.geo(true), staticPair), staticInk);
     body.frustumCulled = false;

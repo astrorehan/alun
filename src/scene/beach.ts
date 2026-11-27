@@ -4,6 +4,7 @@ import { Build, hex, matrixOf } from './build';
 import { outlineMaterial, toon } from './gfx';
 import { instanced, setCount, type Inst } from './kit';
 import { pathAmount } from './land';
+import { nearPantaiPanjang } from './landmark';
 import { beachWidth, clamp, groundAt, lerp, rng, shoreAt, smooth, toX, toZ } from './space';
 
 const _c = new THREE.Color();
@@ -162,7 +163,13 @@ export class Beach {
         const z = lerp(-48, 43, r());
         const bw = beachWidth(z);
         const x = shoreAt(z) - lerp(lo, Math.max(lo + 0.3, bw - hi), r());
-        if (Math.abs(z - pier.z) < 2.4 || Math.hypot(x - net.x, z - net.z) < 8.6 || pathAmount(x, z) > 0.45) continue;
+        if (
+          Math.abs(z - pier.z) < 2.4 ||
+          Math.hypot(x - net.x, z - net.z) < 8.6 ||
+          pathAmount(x, z) > 0.45 ||
+          nearPantaiPanjang(x, z, 1.1)
+        )
+          continue;
         if (taken.some((t) => Math.hypot(t[0] - x, t[1] - z) < gap + t[2])) continue;
         taken.push([x, z, gap]);
         out.push({

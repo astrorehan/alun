@@ -4,7 +4,7 @@ import type { Mood } from './story/talk';
 
 /**
  * The people on the radio. Bu Sari opens each line of her scenes with a short exclamation in her
- * own voice, picked by the line's mood ("Aduh, aduh...", "Eh! Eh, eh!"); the clips are made by
+ * own voice, picked by the line's mood (one word: "Aduh...", "Hoi!"); the clips are made by
  * `npm run generate:voice` and listed in public/audio/voice/manifest.json. Every other line is
  * typed with a babble: one recorded syllable per vowel, pitched for the speaker, a chirp for the machine.
  */

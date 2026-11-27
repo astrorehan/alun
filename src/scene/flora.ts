@@ -7,6 +7,7 @@ import { Build, hex, matrixOf, type Vec } from './build';
 import { toon, type ToonPair } from './gfx';
 import { instanced, mesh, setCount, type Inst } from './kit';
 import { forestAmount, pathAmount } from './land';
+import { blocksPantaiPanjang, nearPantaiPanjang } from './landmark';
 import { beachWidth, clamp, groundAt, lerp, noise2, rng, shoreAt, smooth, toX, toZ, type Rng } from './space';
 
 /* ================================================================== leaf atlas */
@@ -1015,6 +1016,7 @@ export class Flora {
       const dz = z - raff.z;
       if (rx < 2.6 + rad && dz > -2.4 - rad * 0.5 && dz < 2.2 + tall * 0.95) return true;
       for (const f of FIRE_SPOTS) if (Math.hypot(x - toX(f.x), z - toZ(f.y)) < 2.4 + rad) return true;
+      if (blocksPantaiPanjang(x, z, tall, rad)) return true;
       return false;
     };
 
@@ -1059,9 +1061,9 @@ export class Flora {
       [412, 12.4, 1.06, -0.4, 2],
       [548, 8.4, 1.0, -0.1, 0],
       [574, 10.2, 0.88, 0.55, 1],
-      [640, 6.6, 1.02, 0.2, 2],
-      [668, 8.4, 0.86, -0.3, 1],
-      [716, 6.8, 1.0, 0.1, 0],
+      [640, 15.8, 0.9, -0.25, 1],
+      [688, 16.5, 0.94, 0.15, 0],
+      [760, 8.4, 0.96, 0.1, 1],
       [-20, 6.6, 1.0, 0.2, 0],
       [-70, 7.4, 0.9, -0.3, 2],
     ];
@@ -1144,7 +1146,7 @@ export class Flora {
       const b = bw + lerp(-3.4, 1.4, r());
       const x = shoreAt(z) - b;
       const f = forestAmount(x, z) + noise2(x * 0.3, z * 0.3) * 0.35;
-      if (f < 0.12 || f > 0.85 || pathAmount(x, z) > 0.2) continue;
+      if (f < 0.12 || f > 0.85 || pathAmount(x, z) > 0.2 || nearPantaiPanjang(x, z, 0.8)) continue;
       add(S.tuft, x, z, lerp(0.7, 1.35, r()), r() * 6, { sink: 0.02, tint: 0.16 });
     }
     for (let n = 0; n < 60; n++) {
@@ -1152,7 +1154,7 @@ export class Flora {
       const bw = beachWidth(z);
       const x = shoreAt(z) - bw - 0.4;
       if (pathAmount(x + 1.5, z) > 0.2 || r() < 0.25) continue;
-      if (Math.hypot(x - (pier.x - 4), z - pier.z) < 6) continue;
+      if (Math.hypot(x - (pier.x - 4), z - pier.z) < 6 || nearPantaiPanjang(x, z, 0.8)) continue;
       add(S.runner, x, z, lerp(0.75, 1.15, r()), (r() - 0.5) * 0.9, { sink: 0.0, tint: 0.08, tilt: 0.02 });
     }
 

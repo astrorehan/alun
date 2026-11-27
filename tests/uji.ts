@@ -233,8 +233,8 @@ test('simpanan v4, migrasi v2, dan mode Endless Hari 6+ berjalan mulus', () => {
   invariant(s);
 });
 
-test('tiga kapal baru datang bertahap dengan jumlah kapal 1.5x dan pengali HP yang sama', () => {
-  const sizes = [13, 20, 26, 32, 24, 38];
+test('tiga kapal baru datang bertahap, Malam 1-2 lebih ringan (8 dan 16 kapal), pengali HP sama', () => {
+  const sizes = [8, 16, 26, 32, 24, 38];
   for (const [index, size] of sizes.entries()) {
     const day = index + 1;
     const { plan, hugeFlags } = buildNightWave(day);
