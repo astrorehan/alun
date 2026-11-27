@@ -187,15 +187,17 @@
 
       <!-- ================= TITLE OVERLAY (ARCADE TROPICAL LAUNCH) ================= -->
       <section id="title-screen" class="overlay title-screen">
-        <div class="ui-modal-frame ui-shell-navy title-modal">
+        <div class="ui-modal-frame title-modal">
+          <div class="title-drift" aria-hidden="true"></div>
           <div class="title-hero">
             <div class="title-emblem" id="title-emblem"></div>
-            <div>
+            <div class="title-name">
               <h1 class="game-title t-stroke-xl">ALUN</h1>
-              <p class="game-subtitle">Bersihkan teluk di siang hari, perkuat ombakmu di Bengkel, dan tahan gelombang bajak laut setiap malam!</p>
-              <div id="title-best" class="title-best t-stroke-xs hidden"></div>
+              <span class="title-kicker t-stroke-xs">Gema Pesisir Tropis</span>
             </div>
           </div>
+          <p class="game-subtitle">Bersihkan teluk di siang hari, perkuat ombakmu di Bengkel, dan tahan bajak laut setiap malam!</p>
+          <div id="title-best" class="title-best t-stroke-xs hidden"></div>
 
           <div class="title-actions">
             <button type="button" id="btn-continue" class="ui-btn ui-btn-lg t-stroke-md hidden" data-swatch="green">
@@ -206,15 +208,12 @@
               <span class="ui-btn-icon" id="title-play-icon"></span>
               <span>Permainan Baru</span>
             </button>
-            <button type="button" id="btn-title-settings" class="ui-btn t-stroke-sm" data-swatch="blue">
+            <button type="button" id="btn-title-settings" class="ui-btn t-stroke-sm" data-swatch="purple">
               <span class="ui-btn-icon" id="title-settings-icon"></span>
               <span>Pengaturan</span>
             </button>
-            <button type="button" id="btn-credits" class="ui-btn t-stroke-sm" data-swatch="slate">
-              <span class="ui-btn-icon" id="title-info-icon"></span>
-              <span>Info &amp; AI</span>
-            </button>
           </div>
+          <div class="title-waves" aria-hidden="true"></div>
         </div>
       </section>
 
@@ -399,7 +398,7 @@
       </section>
 
       <!-- ================= INFO & AI TRANSPARENCY MODAL ================= -->
-      <section id="credits-modal" class="ui-modal-backdrop hidden">
+      <section id="credits-modal" class="ui-modal-backdrop ui-modal-top hidden">
         <div class="ui-modal-frame ui-shell-navy credits-modal">
           <div class="ui-modal-ribbon" data-swatch="blue">
             <span class="ui-modal-ribbon-title t-stroke-lg">Info &amp; Transparansi AI</span>
@@ -444,6 +443,7 @@
           <button type="button" id="btn-close-settings" class="ui-close-btn" title="Tutup (Esc)" aria-label="Tutup Pengaturan"></button>
 
           <div class="settings-body">
+          <div class="settings-side">
           <div class="settings-tabs" role="tablist" aria-label="Bagian pengaturan">
             <button type="button" class="settings-tab is-active" role="tab" id="set-tab-graphics" data-pane="graphics" data-swatch="purple" aria-controls="set-pane-graphics" aria-selected="true">
               <span class="settings-tab-icon" id="set-tab-icon-graphics"></span>
@@ -457,6 +457,11 @@
               <span class="settings-tab-icon" id="set-tab-icon-game"></span>
               <span class="settings-tab-label t-stroke-sm">Permainan</span>
             </button>
+          </div>
+          <button type="button" id="btn-credits" class="ui-btn t-stroke-sm settings-info" data-swatch="slate" title="Info &amp; Transparansi AI">
+            <span class="ui-btn-icon" id="title-info-icon"></span>
+            <span class="settings-info-label">Info &amp; AI</span>
+          </button>
           </div>
 
           <div class="settings-panes">

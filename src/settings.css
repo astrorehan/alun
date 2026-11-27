@@ -600,3 +600,32 @@
   .set-danger-icon { width: 20px; height: 20px; }
   .settings-actions { display: none; }
 }
+
+/* ---------------------------------------------------------------- Info & AI, beside the tabs (below them on a short screen) */
+.settings-side {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+.settings-info {
+  min-height: 48px;
+  padding: 8px 16px 10px;
+  font-size: 15px;
+  white-space: nowrap;
+}
+@media (max-width: 520px) {
+  .settings-info { width: 48px; padding: 0; }
+  .settings-info-label { display: none; }
+}
+@media (max-height: 500px) {
+  .settings-side {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .settings-info { width: auto; min-height: 38px; padding: 4px 10px 6px; font-size: 13px; border-width: var(--border-sm); }
+  .settings-info-label { display: inline; }
+}
