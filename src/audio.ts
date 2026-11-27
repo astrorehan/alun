@@ -216,6 +216,9 @@ export class TropicalAudio {
   /** When each kind of quick, frequent sound last played, so a flurry does not turn into noise. */
   private last = new Map<string, number>();
 
+  private openingMusic = false;
+  private musicHeld = false;
+
   public isMuted(): boolean {
     return this.muted;
   }
@@ -252,7 +255,8 @@ export class TropicalAudio {
     this.uiBus.gain.value = 0.92 * curve(this.volumes.ui);
 
     this.ambienceBus = ctx.createGain();
-    this.ambienceBus.gain.value = this.ambienceLevel();
+    this.ambienceBus.gain.value = 0;
+    this.ambienceBus.gain.setTargetAtTime(this.ambienceLevel(), ctx.currentTime, 1.1);
 
     this.voiceBus = ctx.createGain();
     this.voiceBus.gain.value = curve(this.volumes.voice);
@@ -342,9 +346,20 @@ export class TropicalAudio {
   private startMusic(): void {
     if (this.music || !this.ctx || !this.musicFilter) return;
     this.music = new MusicPlayer(this.ctx, this.musicFilter);
-    this.music.setTimeOfDay(this.currentTod ?? 'morning');
+    this.music.setTimeOfDay(this.openingMusic ? 'sunset' : this.currentTod ?? 'morning');
     this.music.start();
     this.applyMusicMix(1.1);
+  }
+
+  public setOpeningMusic(on: boolean): void {
+    this.openingMusic = on;
+    this.music?.setTimeOfDay(on ? 'sunset' : this.currentTod ?? 'morning');
+    this.applyMusicMix();
+  }
+
+  public holdMusic(held: boolean): void {
+    this.musicHeld = held;
+    this.applyMusicMix(held ? 0.2 : 0.6);
   }
 
   public setPaused(paused: boolean): void {
@@ -358,7 +373,7 @@ export class TropicalAudio {
     const baseGain = this.stormMix > 0.05 ? 0.4 : isNight ? 0.42 : 0.44;
     const targetGain = (this.shopDucked ? baseGain * 0.48 : baseGain) * curve(this.volumes.music) * (this.voiceDucked ? 0.6 : 1);
     const targetHz = this.shopDucked ? 2200 : 18000;
-    this.musicBus.gain.setTargetAtTime(targetGain, now, timeConstant);
+    this.musicBus.gain.setTargetAtTime(this.musicHeld ? 0 : targetGain * (this.openingMusic ? 0.65 : 1), now, timeConstant);
     this.musicFilter.frequency.setTargetAtTime(targetHz, now, timeConstant);
   }
 
@@ -500,7 +515,7 @@ export class TropicalAudio {
   public setWeather(tod: TimeOfDay, announceTransition = true): void {
     const prev = this.currentTod;
     this.currentTod = tod;
-    this.music?.setTimeOfDay(tod);
+    this.music?.setTimeOfDay(this.openingMusic ? 'sunset' : tod);
     if (prev === tod) return;
     this.stormMix = tod === 'monsoon' ? 1 : 0;
     this.applyAmbienceMix(0.65);
@@ -828,6 +843,10 @@ export class TropicalAudio {
   public playPierHit(): void {
     if (!this.ctx || this.muted) return;
     this.playBuffer('pier-hit', { volume: 0.62, rate: 0.94 + Math.random() * 0.12, pan: -0.3 });
+  }
+
+  public playPirateBeat(strength: number): void {
+    this.playBuffer('ship-hit', { volume: 0.32 * strength, rate: 0.72, pan: 0.25 });
   }
 
   /** The raiders' horn out at sea: a night of raids begins, or a big wave of them comes. */

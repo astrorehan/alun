@@ -172,6 +172,7 @@ export class GameUI {
   private introCaption = el('intro-caption');
   private introKicker = el('intro-kicker');
   private introLine = el('intro-line');
+  private spyglass = el('spyglass');
   private swipeHint = el('swipe-hint');
   private swipeLine = el('swipe-hint-line');
   private swipeHead = el('swipe-hint-head');
@@ -763,6 +764,12 @@ export class GameUI {
     if (on && this.introOverlay.classList.contains('hidden')) this.setIntroCaption('', '');
     this.introOverlay.classList.toggle('hidden', !on);
     this.syncHudVisibility();
+  }
+
+  /** The view through the pirate captain's spyglass: `open` is how far its iris is open, 0..1. */
+  public setSpyglass(open: number, on: boolean): void {
+    this.spyglass.classList.toggle('hidden', !on);
+    if (on) this.spyglass.style.setProperty('--open', open.toFixed(3));
   }
 
   /** The opening's subtitle. Two empty strings fade it out. */

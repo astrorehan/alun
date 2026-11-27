@@ -332,6 +332,17 @@ export class Story {
 
   private movePirate(e: Entity, dt: number): boolean {
     const a = RAID_ANCHORS[(e.anchorIdx ?? 0) % RAID_ANCHORS.length];
+    if (
+      e.tag === 'approach' &&
+      e.variant === PIRATE_KIND.raider &&
+      this.s.marks.pirates === undefined &&
+      !this.sim.hooks.filming() &&
+      this.sim.hooks.raider?.(e)
+    ) {
+      this.s.marks.pirates = this.s.clock;
+      this.touchSave();
+      return true;
+    }
     const speed = e.pirateSpeed ?? 50;
     const variant = pirateKind(e.variant);
     const canFollowSignal = e.tag !== 'attack' && variant !== PIRATE_KIND.signal;

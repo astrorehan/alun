@@ -41,7 +41,9 @@ export interface SimHooks {
   defeat: () => void;
   /** The mother dolphin is there. True when a film takes it from here. */
   dolphin: (e: Entity) => boolean;
-  /** One of the dolphin's films, or the help between them, is running. */
+  /** The first raider of the story is in the water. True when a film introduces its crew. */
+  raider?: (e: Entity) => boolean;
+  /** One of the dolphin's films, or the help between them, or the raiders' film is running. */
   filming: () => boolean;
   /** The shore got worse by this much. */
   worsen: (kind: 'trash' | 'spill' | 'ghost_net', amount: number) => void;

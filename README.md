@@ -28,6 +28,8 @@ Sapu enam sampah pertama ke Jaring Desa, lalu dorong peti perkakas ke ujung derm
 
 Setelah jaga malam selesai dan pencemaran turun ke 30 atau kurang, jawab panggilan Operasi Badai Muson di bengkel saat siap. Sesudah fajar, Patroli Laguna melanjutkan permainan dengan saldo, peralatan, dan keadaan pesisir yang sama. Jurnal menyimpan riwayat pekerjaan desa.
 
+Kapal penjarah pertama diperkenalkan sekali per simpanan. Kamera mengikuti lima awak dan memperlihatkan dermaga lewat teropong kapten. Awak bersorak saat menyerang dan terhuyung saat terkena ombak.
+
 Progres tersimpan otomatis di browser. Pilih **Lanjutkan** pada layar judul untuk kembali ke bab yang sedang dimainkan. Film cerita bisa dilewati lewat **Pengaturan → Permainan**. Perangkat dengan pengaturan kurangi gerakan juga melewatinya dan langsung menampilkan tujuan permainan.
 
 ## Audio
@@ -56,6 +58,8 @@ npm run generate:voice                                            # rekam seruan
 
 Daftar seruan per suasana ada di `scripts/generate-voice.mjs`. Klipnya disimpan di `public/audio/voice/` bersama `manifest.json`.
 
+Suara laut naik perlahan saat audio mulai. Film pembuka memakai lagu senja dengan volume rendah. Saat film bajak laut diputar, musik meredup agar bunyi lambung dan terompet terdengar jelas.
+
 ## Menjalankan
 
 Butuh Node.js 20 atau lebih baru.
@@ -68,7 +72,7 @@ npm run preview  # mencoba hasil build
 npm run uji      # uji alur, ekonomi, dan simpanan tanpa browser
 ```
 
-Game memerlukan browser dengan WebGL2. Buka `/lab.html` di server pengembangan untuk mencoba bab 1–9, film pembuka dan penutup, waktu hari, serta kondisi pesisir.
+Game memerlukan browser dengan WebGL2. Buka `/lab.html` di server pengembangan untuk mencoba bab 1–9, film pembuka, penutup, dan bajak laut (tombol **Pirates**), waktu hari, serta kondisi pesisir.
 
 ## Pengaturan
 
@@ -96,6 +100,7 @@ Pengaturan disimpan terpisah dari cerita, jadi tetap ada setelah simpanan dihapu
 | `src/ui.ts`, `src/ui-kit/` | Antarmuka dan potret tokoh |
 | `src/scene/` | Renderer 3D, air, hutan, terumbu, desa, dan tingkatan grafis |
 | `src/scene/opening.ts`, `src/scene/rescue.ts`, `src/scene/ending.ts` | Film pembuka, penyelamatan induk, dan kepulangan saat fajar |
+| `src/scene/pirates.ts` | Awak bajak laut di kapal penjarah dan film perkenalannya |
 | `src/scene/story.ts`, `src/scene/fleet.ts`, `src/scene/health.ts`, `src/scene/plates.ts` | Visual cerita, armada, perubahan pesisir, dan label kejadian |
 | `tests/` | Skenario uji, bot pemain, dan peluncur `npm run uji` |
 | `concepts/` | Klip adegan 3D dan contoh UI kit |
