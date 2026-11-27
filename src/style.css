@@ -2386,3 +2386,88 @@ body {
     font-size: 11px;
   }
 }
+
+/* ================= GAME FEEL: coins to the purse, combo chip, bursts (src/juice.ts) ================= */
+.fx-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  pointer-events: none;
+  overflow: hidden;
+  contain: strict;
+}
+
+.fly-coin {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px;
+  filter: drop-shadow(0 2px 0 var(--ink));
+  will-change: transform, opacity;
+}
+
+.fly-coin > svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.fx-spark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  will-change: transform, opacity;
+}
+
+.fx-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 5px solid #ffe07d;
+  box-shadow: 0 0 0 3px var(--ink), inset 0 0 0 3px var(--ink);
+  transform: translate(-50%, -50%);
+}
+
+/* the chip's timer runs along its foot; it never changes the chip's size */
+.ui-combo-chip {
+  position: relative;
+}
+
+.combo-timer {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 3px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(13, 34, 48, 0.45);
+  overflow: hidden;
+}
+
+.combo-timer > span {
+  display: block;
+  height: 100%;
+  background: #fff6c8;
+  transform-origin: left center;
+  will-change: transform;
+}
+
+.combo-ghost {
+  position: absolute;
+  margin: 0;
+  animation: none;
+}
+
+@media (max-height: 640px) and (min-width: 641px) {
+  .combo-timer { left: 7px; right: 7px; bottom: 2px; height: 3px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fly-coin, .fx-spark, .fx-ring, .combo-ghost { display: none; }
+}

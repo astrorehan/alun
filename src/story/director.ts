@@ -430,7 +430,7 @@ export class Story {
 
     e.hp -= dmg;
     e.hitFlash = 0.24;
-    this.sim.audio.playTrawlerHit(this.sim.audio.worldXToPan(e.x, WORLD_W));
+    this.sim.audio.playShipHit(this.sim.audio.worldXToPan(e.x, WORLD_W));
     this.sim.shake(w.kind === 'resonance' ? 6.5 : 4);
     this.sim.burst(e.x - 10, e.y, w.kind === 'resonance' ? '#ffe07d' : '#a8f9f3', 10);
     const hitText = guarded ? `PERISAI -${dmg}` : `-${dmg}`;
@@ -456,7 +456,7 @@ export class Story {
 
     this.sim.award(bounty, e.x, e.y - 18, isBrute ? 'PENJARAH BERAT KABUR!' : undefined, '#ffe07d');
     this.sim.burst(e.x, e.y, '#ffe07d', isBrute ? 24 : 14);
-    this.sim.audio.playAchievementClaim();
+    this.sim.audio.playShipSink(this.sim.audio.worldXToPan(e.x, WORLD_W));
 
     // Sunk pirates drop floating salvage loot you can sweep into the net for extra income!
     const drops = isBrute ? 2 : Math.random() < 0.72 ? 1 : 0;
@@ -482,7 +482,7 @@ export class Story {
     s.pierHp = Math.max(0, s.pierHp - dmg);
     this.sim.shake(7.5);
     this.sim.flashAlpha = Math.max(this.sim.flashAlpha, 0.16);
-    this.sim.audio.playNetSnap(0.95);
+    this.sim.audio.playPierHit();
     this.sim.burst((fromX + PIER_END.x) * 0.5, (fromY + PIER_END.y) * 0.5, '#ff6b5a', 14);
     this.sim.text(PIER_END.x + 14, PIER_END.y - 34, `-${dmg} DERMAGA!`, '#ff7a70', 1.15);
     this.sim.hooks.pierHurt(s.pierHp, s.maxPierHp);
@@ -941,7 +941,7 @@ export class Story {
     s.hugeAnnounced = 0;
     this.bossEscortTimer = 14;
 
-    this.sim.audio.playAlert();
+    this.sim.audio.playRaidHorn();
     if (isBossDay(s.day)) {
       this.start('boss', true, 0);
       this.sim.hooks.banner(`MALAM ${s.day} · BADAI MUSON!`, 'Kapal Induk dan armada pengawal memasuki laguna!', 'red');
@@ -982,7 +982,7 @@ export class Story {
       const item = s.wavePlan.shift()!;
       if (item.huge) {
         s.hugeAnnounced += 1;
-        this.sim.audio.playAlert();
+        this.sim.audio.playRaidHorn(true);
         this.sim.shake(5.5);
         this.sim.hooks.banner('GELOMBANG BESAR MENDEKAT!', 'Armada layar robek menyerbu serentak!', 'red');
       }

@@ -49,6 +49,8 @@ export class Fx {
   private rainU = { value: 0 };
   private acc = 0;
   private drawback = 0;
+  /** The gold burst for a full charge has gone off for the wave being held. */
+  private fullBurst = false;
 
   constructor(private water: Water) {
     this.sprites = new Sprites(water);
@@ -439,7 +441,24 @@ void main(){
         const a = this.r() * 6.283;
         this.spray(x0 + Math.cos(a) * rad * 1.5, 0.3, z0 + Math.sin(a) * rad * 1.5, -Math.cos(a) * rad * 2, 1.6, -Math.sin(a) * rad * 2, 0.11, 0.6, charge > 0.6 ? 2 : 0);
       }
-    } else this.drawback = 0;
+      // full power: gold flies up once and a ring runs out from the held water
+      const full = sim.chargeFullAge;
+      if (full >= 0) {
+        if (!this.fullBurst) {
+          this.fullBurst = true;
+          this.burst(x0, 0.3, z0, 16, 5.5, 2, 0.12);
+          this.water.splash({ x: x0, z: z0, radius: rad * 1.2, foam: 0.5, impulse: 0.9, gold: 1 });
+        }
+        if (full < 0.5) {
+          const k = full / 0.5;
+          const ring = rad * (1.15 + k * 1.9);
+          sp.push(x0, 0.24, z0, ring, ring, 0, 1.7, 1.35, 0.45, (1 - k) * (1 - k) * 0.95, SP.ring, MODE.flat, 0.9);
+        }
+      } else this.fullBurst = false;
+    } else {
+      this.drawback = 0;
+      this.fullBurst = false;
+    }
 
     const dx = d.currX - d.startX;
     const dy = d.currY - d.startY;

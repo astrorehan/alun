@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import type { Objective } from './story/jobs';
 import { LandscapeMode } from './landscape';
 import type { Entity, GamePhase, PlayerProgress, ShopTab, UpgradeId } from './types';
@@ -5,7 +6,8 @@ import { TropicalAudio } from './audio';
 import { markRead } from './journal';
 import { browserStore, clearGame, loadBest, loadGame, saveGame, updateBest } from './save';
 import { loadSettings, saveSettings, skipFilms, type GameSettings, type VolumeChannel } from './settings';
-import { GameSimulation } from './simulation';
+import { COMBO_WINDOW, GameSimulation } from './simulation';
+import { HudJuice } from './juice';
 import { RadioVoice } from './voice';
 import { dayTitle } from './story/state';
 import { SCENES, type Scene } from './story/talk';
@@ -65,6 +67,9 @@ class AlunApp {
   private introBirds = 0.8;
   private settings: GameSettings;
   private voice: RadioVoice;
+  private juice: HudJuice;
+  /** The last press on the lagoon came from a finger: the phone may buzz with the game. */
+  private touching = false;
 
   constructor(makeRenderer: (canvas: HTMLCanvasElement) => GameRenderer) {
     this.canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
@@ -224,6 +229,15 @@ class AlunApp {
       onUiError: () => this.audio.playUiError(),
     });
 
+    this.juice = new HudJuice(
+      document.getElementById('hud-coin-pill')!,
+      document.getElementById('hud-coin-icon')!,
+      document.getElementById('hud-combo-pill')!,
+      () => this.audio.playCoin(),
+      () => this.settings.shake
+    );
+    this.ui.juice = this.juice;
+
     this.renderer.onQualityChange = (state) => this.ui.updateQualityUI(state);
     this.renderer.onPerfHint = (suggested) => this.ui.showPerfHint(suggested);
     this.renderer.onContextLost = () => {
@@ -263,7 +277,11 @@ class AlunApp {
         const scene: Scene = SCENES[id];
         this.ui.startTalk(scene.lines, scene.hold !== false);
       },
-      coins: () => {},
+      coins: (amount, x, y) => {
+        // what was earned in the water flies up to the purse
+        const at = this.renderer.worldToScreen?.(x, y);
+        if (at) this.juice.flyCoins(at.x, at.y, amount);
+      },
       save: () => this.save(),
       chapter: (n) => {
         updateBest(this.store, this.progress);
@@ -271,7 +289,11 @@ class AlunApp {
       },
       celebrate: (text, swatch) => this.ui.celebrate(text, swatch),
       banner: (title, sub, swatch) => this.ui.showWaveBanner(title, sub, swatch),
-      pierHurt: () => this.ui.pulsePier(),
+      pierHurt: () => {
+        this.ui.pulsePier();
+        this.sim.hitstopTimer = Math.max(this.sim.hitstopTimer, 0.05);
+        this.buzz(40);
+      },
       defeat: () => this.handleDefeat(),
       dolphin: (e) => this.startRescue(e),
       filming: () => this.rescue !== null,
@@ -291,6 +313,15 @@ class AlunApp {
     this.showTitle();
 
     requestAnimationFrame((t) => this.loop(t));
+  }
+
+  private buzz(ms: number): void {
+    if (!this.touching || !this.settings.shake || typeof navigator.vibrate !== 'function') return;
+    try {
+      navigator.vibrate(ms);
+    } catch {
+      // not allowed here
+    }
   }
 
   private savedPlace(): string {
@@ -733,6 +764,7 @@ class AlunApp {
       if (e.button !== 0 && e.pointerType === 'mouse') return;
 
       const pos = this.renderer.screenToWorld(e.clientX, e.clientY);
+      this.touching = e.pointerType === 'touch';
       this.canvas.setPointerCapture(e.pointerId);
       this.sim.drag = {
         active: true,
@@ -762,7 +794,7 @@ class AlunApp {
 
       if (this.phase === 'playing' && !this.ui.isSettingsOpen() && !this.ending) {
         const stats = computeStats(this.progress);
-        this.sim.launchPlayerWave(startX, startY, pos.x, pos.y, charge, this.progress, stats);
+        if (this.sim.launchPlayerWave(startX, startY, pos.x, pos.y, charge, this.progress, stats)) this.buzz(Math.round(8 + charge * 22));
       }
     };
 
@@ -830,6 +862,7 @@ class AlunApp {
           this.sim.story.waveHud()
         );
         guideObjective = obj;
+        this.juice.combo(this.sim.comboCount, this.sim.comboTimer / COMBO_WINDOW);
       }
 
       this.autoSaveTimer += dt;
@@ -903,7 +936,9 @@ async function bootApp(): Promise<void> {
   }
   try {
     const { SceneRenderer } = await import('./scene/SceneRenderer');
-    new AlunApp((c) => new SceneRenderer(c, gl));
+    const app = new AlunApp((c) => new SceneRenderer(c, gl));
+    // the dev server lets a console or a test script reach the running game; a build leaves this out
+    if (import.meta.env.DEV) (window as unknown as { __alun?: AlunApp }).__alun = app;
   } catch (err) {
     console.error('[ALUN] 3D startup failed:', err);
     showFatalError(

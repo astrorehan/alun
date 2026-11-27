@@ -32,9 +32,20 @@ Progres tersimpan otomatis di browser. Pilih **Lanjutkan** pada layar judul untu
 
 ## Audio
 
-Efek suara dan sampel suasana dimuat sebagai MP3 lokal dari `public/audio/`. Web Audio mencampur sampel sesuai cuaca dan posisi di laguna. Suara prosedural tetap tersedia saat sampel belum siap.
+Semua bunyi adalah rekaman: efek suara dan suasana dibuat dengan ElevenLabs Sound Effects, musik dengan ElevenLabs Music. Tidak ada bunyi yang disintesis di kode; Web Audio hanya mencampur rekaman sesuai cuaca, posisi di laguna, kekuatan ombak, dan panjang kombo. Tiap sampah yang masuk jaring berbunyi koin yang naik satu nada per tangkapan beruntun (pentatonik D mayor siang, D minor malam), dan tiap kelipatan lima kombo koin tumpah. Musik punya empat lagu (siang, senja, malam, badai muson) yang berganti dengan crossfade dan berulang di titik loop dalam `public/audio/music/loops.json`.
 
-Bu Sari memandu lewat adegan bicara. Di langkah pertama dan saat cerita bergerak, laguna berhenti sampai pemain mengeklik atau menekan Spasi untuk lanjut (Esc melewati adegan). Bu Sari tidak membacakan dialognya. Setiap barisnya dibuka dengan seruan pendek dengan suaranya sendiri sesuai suasana baris itu ("Aduh, aduh...", "Eh! Eh, eh... alamak!", "Hoi! Hoi!"), lalu tulisannya diketik pelan seperti orang bicara. Pak Damar, A.L.U.N., dan Penjaga Rimba bicara lewat kartu radio dengan gumam pendek, dan A.L.U.N. hanya berbunyi bip. Dialog adegan dan suasananya ada di `src/story/talk.ts`, jadi teksnya bisa diubah tanpa merekam ulang. Di **Pengaturan → Permainan**, suara tokoh bisa diatur ke Asli, Gumam, atau Diam.
+```bash
+npm run generate:sfx -- --dry               # bunyi yang belum punya rekaman, tanpa biaya
+npm run generate:sfx -- --takes 3 coin      # tiga versi baru dari satu bunyi
+npm run generate:sfx -- --audition coin     # semua versinya ke scripts/.sfx-audition untuk didengar
+npm run generate:sfx -- --process           # pasang versi pilihan (`pick`) ke public/audio, tanpa biaya
+npm run generate:music -- --sample day      # sampel 30 detik satu lagu
+npm run generate:music -- --process         # pasang lagu pilihan dan cari titik loop-nya
+```
+
+Rekaman mentah disimpan di `scripts/.sfx-raw/` dan `scripts/.music-raw/` supaya bisa diolah ulang tanpa membayar lagi. Versi yang dipakai tiap bunyi ditulis sebagai `pick` di `scripts/generate-sfx.mjs`.
+
+Bu Sari memandu lewat adegan bicara. Di langkah pertama dan saat cerita bergerak, laguna berhenti sampai pemain mengeklik atau menekan Spasi untuk lanjut (Esc melewati adegan). Bu Sari tidak membacakan dialognya. Setiap barisnya dibuka dengan seruan pendek dengan suaranya sendiri sesuai suasana baris itu ("Aduh, aduh...", "Eh! Eh, eh... alamak!", "Hoi! Hoi!"), lalu tulisannya diketik pelan seperti orang bicara. Pak Damar, A.L.U.N., dan Penjaga Rimba bicara lewat kartu radio dengan gumam: satu suku kata rekaman per huruf hidup, dinadakan sesuai tokohnya, dan A.L.U.N. berbunyi cicit robot. Dialog adegan dan suasananya ada di `src/story/talk.ts`, jadi teksnya bisa diubah tanpa merekam ulang. Di **Pengaturan → Permainan**, suara tokoh bisa diatur ke Asli, Gumam, atau Diam.
 
 ```bash
 node --env-file=.env.local scripts/design-voice.mjs              # tiga contoh suara Bu Sari untuk dipilih
@@ -77,7 +88,8 @@ Pengaturan disimpan terpisah dari cerita, jadi tetap ada setelah simpanan dihapu
 | `src/story/` | Bab, kejadian patroli, pasokan rongsok, pencemaran, dan pembayaran |
 | `src/upgrades.ts`, `src/journal.ts` | Cetak biru bengkel, tingkat alat, dan catatan desa |
 | `src/save.ts` | Simpanan lokal v4 dan migrasi v2 |
-| `src/audio.ts`, `src/music.ts`, `public/audio/` | Pencampuran Web Audio, musik prosedural, dan sampel MP3 |
+| `src/audio.ts`, `src/music.ts`, `public/audio/` | Pencampuran Web Audio, pemutar musik, dan rekaman MP3 |
+| `src/juice.ts` | Koin terbang ke dompet, chip kombo, dan percikan di HUD |
 | `src/story/talk.ts`, `src/voice.ts`, `src/ui-radio.ts` | Dialog adegan Bu Sari, seruan dan gumam, kartu radio, dan adegan bicara |
 | `scripts/design-voice.mjs`, `scripts/generate-voice.mjs` | Merancang suara Bu Sari dan merekam seruannya |
 | `src/settings.ts`, `src/ui-settings.ts` | Pengaturan dan jendelanya |
@@ -94,7 +106,7 @@ Simulasi berjalan di bidang 2D dan terpisah dari renderer.
 
 - [Three.js](https://threejs.org), lisensi MIT
 - [Fredoka](https://fonts.google.com/specimen/Fredoka) dan [Nunito](https://fonts.google.com/specimen/Nunito), SIL Open Font License
-- Musik latar: komposisi dinamis orisinal (Siang, Senja, Malam & Badai Muson) disintesis real-time melalui Web Audio API (`src/music.ts`)
-- Suara Bu Sari: dirancang dengan [ElevenLabs](https://elevenlabs.io) Voice Design dan direkam dengan ElevenLabs Text to Speech (eleven_v3). Efek suara: ElevenLabs Sound Effects
+- Musik latar (Siang, Senja, Malam & Badai Muson): dibuat dengan [ElevenLabs](https://elevenlabs.io) Music (music_v2_5)
+- Suara Bu Sari: dirancang dengan ElevenLabs Voice Design dan direkam dengan ElevenLabs Text to Speech (eleven_v3). Semua efek suara: ElevenLabs Sound Effects (eleven_text_to_sound_v3)
 
 Pekerjaan yang belum selesai ada di tab [Issues](../../issues).
