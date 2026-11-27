@@ -779,7 +779,8 @@ void main(){ gl_FragDepth = texture2D(tDepth, vUv).x; }`,
   private aim(center: THREE.Vector3): void {
     const dir = G.uSunDir.value;
     this.cam.position.copy(center).addScaledVector(dir, 150);
-    this.cam.up.set(0, 1, 0);
+    // The sun passes near vertical at dusk. Keep the shadow camera roll stable there.
+    this.cam.up.set(0, 0, 1);
     this.cam.lookAt(center);
     this.cam.updateMatrixWorld();
     this.cam.updateProjectionMatrix();
@@ -813,11 +814,12 @@ void main(){ gl_FragDepth = texture2D(tDepth, vUv).x; }`,
     dynGroup: THREE.Group,
     center: THREE.Vector3
   ): void {
-    this.aim(center);
     const st = this.ensureStaticTarget();
     const prev = r.getRenderTarget();
     const dir = G.uSunDir.value;
-    if (!this.staticValid || dir.distanceToSquared(this.lastSunDir) > 0.0004) {
+    if (!this.staticValid || !dir.equals(this.lastSunDir)) {
+      // The copied depth and the dynamic casters must use the same projection.
+      this.aim(center);
       staticGroup.visible = true;
       underDynGroup.visible = false;
       dynGroup.visible = false;

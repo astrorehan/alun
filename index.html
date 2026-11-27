@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" href="data:," />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>ALUN — Gema Pesisir Tropis</title>
+    <title>ALUN · Gema Pesisir Tropis</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -42,6 +42,7 @@
               <div class="ui-combo-chip hidden" id="hud-combo-pill" data-swatch="gold">
                 <span class="t-stroke-xs">BERUNTUN</span>
                 <span class="t-stroke-sm t-gold num" id="hud-combo-val">2</span>
+                <span class="combo-mult t-stroke-xs num" id="hud-combo-mult"></span>
                 <span class="combo-timer" aria-hidden="true"><span></span></span>
               </div>
             </div>
@@ -55,7 +56,7 @@
               <div class="ui-meter-badge" data-swatch="blue" id="hud-energy-icon"></div>
               <div class="ui-meter-content">
                 <div class="ui-meter-top">
-                  <span class="ui-meter-label t-stroke-xs">Energi Ombak</span>
+                  <span class="ui-meter-label t-stroke-xs" id="hud-energy-label">Energi Ombak</span>
                   <span class="ui-meter-num t-stroke-xs t-gold num" id="hud-energy-val">100/100</span>
                 </div>
                 <div class="ui-bar-track">
@@ -68,7 +69,7 @@
               <div class="wave-bar-body">
                 <div class="wave-bar-head">
                   <span class="wave-bar-title t-stroke-xs" id="hud-wave-title">HARI 1 · SIANG</span>
-                  <span class="wave-bar-sub t-stroke-xs num" id="hud-wave-sub">02:30</span>
+                  <span class="wave-bar-sub t-stroke-xs num" id="hud-wave-sub">01:30</span>
                 </div>
                 <div class="wave-bar-track" id="hud-wave-track">
                   <div class="wave-bar-fill" id="hud-wave-fill" data-swatch="orange" style="width: 0%"></div>
@@ -138,6 +139,15 @@
             <div id="hud-notice" class="ui-toast t-stroke-sm hidden" role="status"></div>
           </div>
           <div class="hud-action-stack hidden" id="hud-action-stack">
+            <button type="button" id="btn-shop-goal" class="hud-goal hidden" data-ready="false" aria-label="Alat berikutnya di bengkel">
+              <span id="hud-goal-icon" class="hud-goal-icon" aria-hidden="true"></span>
+              <span class="hud-goal-copy">
+                <span id="hud-goal-name" class="hud-goal-name t-stroke-xs"></span>
+                <span class="hud-goal-bar" aria-hidden="true"><span id="hud-goal-fill" class="hud-goal-fill"></span></span>
+              </span>
+              <span id="hud-goal-count" class="hud-goal-count num t-stroke-xs"></span>
+            </button>
+
             <button type="button" id="btn-open-shop" class="ui-btn hud-shop-btn t-stroke-sm" data-swatch="slate">
               <span id="shop-btn-icon" class="ui-btn-icon"></span>
               <span class="hud-shop-copy">

@@ -26,7 +26,6 @@ type SfxId =
   | 'charge-full'
   | 'wave-hit'
   | 'shore-splash'
-  | 'resonance-burst'
   | 'net-catch-1'
   | 'net-catch-2'
   | 'coin'
@@ -114,7 +113,6 @@ const SECONDARY_SFX: SfxId[] = [
   'trash-rare',
   'trash-epic',
   'trash-legendary',
-  'resonance-burst',
   'upgrade-buy',
   'shop-unlock',
   'achievement-claim',
@@ -653,11 +651,6 @@ export class TropicalAudio {
     if (!this.ctx || this.muted || !this.ready('shore', 380)) return;
     const s = Math.max(0.25, Math.min(1.2, strength));
     this.playBuffer('shore-splash', { volume: 0.22 + s * 0.2, rate: 0.92 + Math.random() * 0.18, pan });
-  }
-
-  public playResonanceBurst(pan = 0): void {
-    if (!this.ctx || this.muted) return;
-    this.playBuffer('resonance-burst', { volume: 0.78, rate: 0.97 + Math.random() * 0.06, pan });
   }
 
   /* ------------------------------------------------------------------ the net, coins and combos */

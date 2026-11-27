@@ -5,11 +5,11 @@ import { DEPOSIT_SPOTS, MOORING, OLD_BLOTCH } from '../world';
 
 /**
  * Pure data for ALUN's Day/Night Active Incremental Wave Defense:
- * 150s Day (farming + skirmishes + side jobs) -> 60s Night (PvZ-style escalating pirate waves).
+ * 90s Day (farming + skirmishes + side jobs) -> 60s Night (PvZ-style escalating pirate waves).
  * Pier HP reaching 0 ends the run and restarts from Day 1.
  */
 
-export const DAY_DURATION = 150;
+export const DAY_DURATION = 90;
 export const NIGHT_DURATION = 60;
 export const BOSS_INTERVAL = 5;
 export const BASE_PIER_HP = 100;
@@ -139,6 +139,14 @@ export const PIRATE_SPECS: Record<PirateKind, PirateSpec> = {
     name: 'KAPAL RONGSOK', hp: 82, speed: 74, dmg: 13, bounty: 15, radius: 28, mass: 4.6, attackPeriod: 2.0,
     intro: SCENES.dumper.lines[0].text,
   },
+  [PIRATE_KIND.rammer]: {
+    name: 'KAPAL PENDOBRAK', hp: 65, speed: 90, dmg: 19, bounty: 16, radius: 25, mass: 3, attackPeriod: 2,
+    intro: 'Pendobrak mengunci arah! Sapu ke samping sebelum menghantam dermaga.',
+  },
+  [PIRATE_KIND.tug]: {
+    name: 'KAPAL TUNDA', hp: 88, speed: 65, dmg: 8, bounty: 18, radius: 26, mass: 4, attackPeriod: 2,
+    intro: 'Tunda membawa peti! Sapu tongkang dari samping sampai talinya putus.',
+  },
   [PIRATE_KIND.signal]: {
     name: 'KAPAL ISYARAT', hp: 86, speed: 72, dmg: 14, bounty: 20, radius: 28, mass: 4.4, attackPeriod: 1.9,
     intro: SCENES.signal.lines[0].text,
@@ -148,19 +156,25 @@ export const PIRATE_SPECS: Record<PirateKind, PirateSpec> = {
 export const PIRATE_SIGNAL_RADIUS = 195;
 
 export function pirateKind(value: unknown): PirateKind {
-  return typeof value === 'number' && Number.isInteger(value) && value >= PIRATE_KIND.raider && value <= PIRATE_KIND.signal
+  return typeof value === 'number' && Number.isInteger(value) && value >= PIRATE_KIND.raider && value <= PIRATE_KIND.tug
     ? (value as PirateKind)
     : PIRATE_KIND.raider;
 }
 
-/** Enemy ship HP doubles every single day (1x -> 2x -> 4x -> 8x -> 16x -> 32x...). */
+/** Enemy hull multiplier for days 1-5: each day grows more than the one before (old curve: 1, 2, 4, 8, 16). */
+const PIRATE_HP_SCALE = [1, 2.05, 4.5, 9.8, 18];
+/** After the monsoon, every patrol day is this much tougher again. */
+export const PIRATE_HP_GROWTH = 2.3;
+
 export function pirateScale(day: number): number {
-  return Math.pow(2, Math.max(0, day - 1));
+  const d = Math.max(1, Math.floor(day));
+  if (d <= PIRATE_HP_SCALE.length) return PIRATE_HP_SCALE[d - 1];
+  return PIRATE_HP_SCALE[PIRATE_HP_SCALE.length - 1] * Math.pow(PIRATE_HP_GROWTH, d - PIRATE_HP_SCALE.length);
 }
 
 export function pirateSpec(variant: PirateKind, day: number, isNight: boolean): PirateSpec {
   const sc = pirateScale(day) * (isNight ? 1 : 0.85);
-  const dmgSc = 1 + Math.max(0, day - 1) * 0.48;
+  const dmgSc = 1 + Math.max(0, day - 1) * 0.32;
   const spdSc = 1 + Math.min(0.75, Math.max(0, day - 1) * 0.13);
   const massSc = 1 + Math.min(2.4, Math.max(0, day - 1) * 0.35);
   const bountySc = 1 + Math.max(0, day - 1) * 0.3;
@@ -193,8 +207,7 @@ export function buildNightWave(day: number): { plan: WaveSpawn[]; hugeFlags: num
     add(23.0, 0, 2);
     add(26.5, 1, 5);
     // HUGE WAVE (6 ships)
-    add(35, 0, 0, true);
-    add(35.7, 1, 3);
+    add(35, PIRATE_KIND.rammer, 0, true);
     add(36.4, 0, 1);
     add(37.1, 1, 4);
     add(37.8, 0, 2);
@@ -212,7 +225,7 @@ export function buildNightWave(day: number): { plan: WaveSpawn[]; hugeFlags: num
     add(15.5, 1, 0);
     add(18.5, 0, 5);
     add(21.5, PIRATE_KIND.shield, 2);
-    add(24.5, 1, 4);
+    add(24.5, PIRATE_KIND.rammer, 4);
     add(27.5, 2, 1);
     add(30.0, PIRATE_KIND.shield, 5);
     add(32.5, 1, 0);
@@ -233,7 +246,7 @@ export function buildNightWave(day: number): { plan: WaveSpawn[]; hugeFlags: num
     add(1.2, 0, 0);
     add(3.8, 1, 3);
     add(6.6, PIRATE_KIND.dumper, 1);
-    add(9.2, 0, 4);
+    add(9.2, PIRATE_KIND.tug, 4);
     add(11.8, 2, 2);
     add(14.2, PIRATE_KIND.shield, 5);
     add(16.5, 1, 0);
@@ -247,7 +260,7 @@ export function buildNightWave(day: number): { plan: WaveSpawn[]; hugeFlags: num
     add(29.0, PIRATE_KIND.shield, 5);
     add(31.2, 0, 1);
     add(33.2, PIRATE_KIND.dumper, 2);
-    add(35.2, 1, 4);
+    add(35.2, PIRATE_KIND.rammer, 4);
     add(37.2, 2, 0);
     // HUGE WAVE 2 (Final, 8 ships)
     add(42, 2, 1, true);
@@ -266,12 +279,12 @@ export function buildNightWave(day: number): { plan: WaveSpawn[]; hugeFlags: num
     add(1.2, 1, 0);
     add(3.2, 0, 3);
     add(5.4, 2, 1);
-    add(7.6, 1, 4);
+    add(7.6, PIRATE_KIND.rammer, 4);
     add(9.8, 0, 2);
     add(11.8, PIRATE_KIND.shield, 5, false, 'trawl');
     add(13.8, 1, 0);
     add(15.6, PIRATE_KIND.dumper, 3);
-    add(17.4, 2, 4);
+    add(17.4, PIRATE_KIND.tug, 4);
     // HUGE WAVE 1 (8 ships)
     add(21.5, 2, 0, true);
     add(22.1, 2, 3);
@@ -306,7 +319,7 @@ export function buildNightWave(day: number): { plan: WaveSpawn[]; hugeFlags: num
     add(2.0, 1, 0);
     add(4.4, 2, 3);
     add(7.0, PIRATE_KIND.shield, 1);
-    add(9.4, 0, 4);
+    add(9.4, PIRATE_KIND.rammer, 4);
     add(11.8, 1, 2);
     add(14.2, PIRATE_KIND.dumper, 5);
     add(16.6, 2, 0);
@@ -348,7 +361,7 @@ export function buildNightWave(day: number): { plan: WaveSpawn[]; hugeFlags: num
     const adjusted = Math.abs(t - wave1At) < 3 ? t + 4.5 : t;
     const v: PirateKind = i % 4 === 0 ? 2 : i % 3 === 1 ? 1 : 0;
     const sup = i === 2 ? 'trawl' : i === Math.floor(trickle * 0.65) ? 'waste' : undefined;
-    add(adjusted, i === 4 || i === trickle - 1 ? PIRATE_KIND.dumper : v, i + day, false, sup);
+    add(adjusted, i === 4 || i === trickle - 1 ? PIRATE_KIND.dumper : i === 1 ? PIRATE_KIND.tug : i === 3 ? PIRATE_KIND.rammer : v, i + day, false, sup);
   }
   for (let i = 0; i < huge1Count; i++) {
     const v: PirateKind = i < 3 ? 2 : i % 2 === 0 ? 1 : 0;
@@ -456,7 +469,7 @@ export function createStory(skipPrep = false): StoryState {
     supplyTimer: 1.5,
     seedTimer: 18,
     padTimer: 2.5,
-    marks: { bab1: 0, day1: 0 },
+    marks: { shortDays: 1, bab1: 0, day1: 0 },
     worstP: P_START,
     aboveSince: 0,
     recoveries: [],

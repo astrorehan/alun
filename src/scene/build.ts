@@ -141,6 +141,34 @@ export class Build {
     return this.add(new THREE.SphereGeometry(r, s, Math.max(4, Math.round(s * 0.7))), o);
   }
 
+  /** Stack elliptical cross-sections from bottom to top. Each ring gives height, half-width,
+   * half-depth and an optional fore/aft offset. Shared corners keep the outline continuous. */
+  profile(rings: [number, number, number, number?][], sides: number, o: Part): this {
+    const positions: number[] = [];
+    const indices: number[] = [];
+    for (const [y, width, depth, z = 0] of rings) {
+      for (let i = 0; i < sides; i++) {
+        const angle = ((i + 0.5) / sides) * Math.PI * 2;
+        positions.push(width * Math.sin(angle), y, z + depth * Math.cos(angle));
+      }
+    }
+    const last = (rings.length - 1) * sides;
+    for (let i = 0; i < sides; i++) {
+      const next = (i + 1) % sides;
+      for (let row = 0; row < last; row += sides) {
+        const a = row + i;
+        const b = row + next;
+        indices.push(a, b, a + sides, b, b + sides, a + sides);
+      }
+      if (i > 0 && i < sides - 1) indices.push(0, next, i, last, last + i, last + next);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    g.setIndex(indices);
+    g.computeVertexNormals();
+    return this.add(g, o);
+  }
+
   ico(r: number, detail: number, o: Part): this {
     return this.add(new THREE.IcosahedronGeometry(r, detail), o);
   }

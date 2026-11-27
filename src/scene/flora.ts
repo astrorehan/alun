@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { type Pose } from './director';
 import { Q } from './quality';
 import type { PermanentMangrove, PlayerProgress } from '../types';
 import { FIRE_SPOTS, MANGROVE_SLOTS, RAFFLESIA_POS, VILLAGE_PIER } from '../world';
@@ -229,11 +230,25 @@ class Leaves {
   }
 
   /** Leafy lobe: cards on a sphere around a dark core. */
-  lobe(c: THREE.Vector3, rad: number, squash: number, cards: number, size: number, tile: number, crown: THREE.Vector3, crownR: number, tone: (h: number, rnd: number) => THREE.Color, others: { c: THREE.Vector3; r: number }[], sway: number): void {
+  lobe(
+    c: THREE.Vector3,
+    rad: number,
+    squash: number,
+    cards: number,
+    size: number,
+    tile: number,
+    crown: THREE.Vector3,
+    crownR: number,
+    tone: (h: number, rnd: number) => THREE.Color,
+    others: { c: THREE.Vector3; r: number }[],
+    sway: number,
+    o: { minY?: number; solid?: Leaves } = {}
+  ): void {
     const core = new THREE.IcosahedronGeometry(rad * 0.84, 0);
     core.scale(1, squash, 1);
     core.translate(c.x, c.y, c.z);
-    this.solid(core, () => _c.copy(tone(0.1, 0.4)).multiplyScalar(0.5), { ao: () => 0.35, sway: () => sway * 0.8 });
+    (o.solid ?? this).solid(core, () => _c.copy(tone(0.1, 0.4)).multiplyScalar(0.5), { ao: () => 0.35, sway: () => sway * 0.8 });
+    const minY = o.minY ?? -1;
     for (let i = 0; i < cards; i++) {
       const k = (i + 0.5) / cards;
       const y = 1 - k * 1.55;
@@ -250,9 +265,14 @@ class Leaves {
         occ = Math.max(occ, 1 - smooth(o.r * 0.55, o.r * 1.12, p.distanceTo(o.c)));
       }
       if (occ > 0.93) continue;
-      const h = clamp((p.y - (crown.y - crownR)) / (crownR * 2), 0, 1);
+      const sz = size * lerp(0.8, 1.25, this.r());
+      const col = tone(clamp((p.y - (crown.y - crownR)) / (crownR * 2), 0, 1), this.r());
+      if (y < minY) {
+        this.r(); // keep spin PRNG stream identical for remaining cards
+        continue;
+      }
       const ao = lerp(0.34, 1, smooth(-0.55, 0.7, dir.y)) * lerp(1, 0.42, occ);
-      this.card(p, face, nrm, size * lerp(0.8, 1.25, this.r()), tile, tone(h, this.r()), ao, sway);
+      this.card(p, face, nrm, sz, tile, col, ao, sway);
     }
   }
 
@@ -294,22 +314,34 @@ const bark = (lo: string, hi: string, rings = 0) => {
 
 /* ================================================================== species */
 
-function rainTree(seed: number, near: boolean): THREE.BufferGeometry {
+interface SplitGeo {
+  solid?: THREE.BufferGeometry;
+  trunk?: THREE.BufferGeometry;
+  cards?: THREE.BufferGeometry;
+}
+
+function rainTree(seed: number, near: boolean): SplitGeo {
   const L = new Leaves(seed);
+  const S = new Leaves(seed);
   const r = L.r;
   const h = lerp(4.6, 5.6, r());
   const lean = (r() - 0.5) * 1.1;
-  L.trunk(
-    [
-      [0, -0.6, 0],
-      [lean * 0.3, h * 0.4, 0],
-      [lean, h, lean * 0.3],
-    ],
-    0.34,
-    0.2,
-    bark('#4f3b2b', '#8a6f54'),
-    { flare: 0.5, seg: 7 }
-  );
+  let trunkGeo: THREE.BufferGeometry | undefined;
+  if (near) {
+    const T = new Leaves(seed);
+    T.trunk(
+      [
+        [0, -0.6, 0],
+        [lean * 0.3, h * 0.4, 0],
+        [lean, h, lean * 0.3],
+      ],
+      0.34,
+      0.2,
+      bark('#4f3b2b', '#8a6f54'),
+      { flare: 0.5, rings: 4, seg: 5 }
+    );
+    trunkGeo = T.geo();
+  }
   const crown = new THREE.Vector3(lean, h + 0.5, lean * 0.3);
   const n = near ? 8 : 5;
   const lobes: { c: THREE.Vector3; r: number }[] = [];
@@ -321,16 +353,19 @@ function rainTree(seed: number, near: boolean): THREE.BufferGeometry {
   }
   const tones = [tone('#2c6b3a', '#7ec24a'), tone('#1f5f45', '#5fb35a'), tone('#3f7a35', '#a4cf52'), tone('#24664a', '#6fbf74')];
   const tn = tones[seed % tones.length];
-  for (const l of lobes) L.lobe(l.c, l.r, 0.82, near ? 26 : 18, near ? 1.54 : 1.92, seed % 3 === 1 ? 1 : 0, crown, 2.6, tn, lobes, 0.2);
-  return L.geo();
+  // Skip underside leaf cards that stay occluded behind canopies or terrain while preserving every visible card's exact pose.
+  const minY = near ? -0.38 : -0.1;
+  for (const l of lobes) L.lobe(l.c, l.r, 0.82, near ? 26 : 18, near ? 1.54 : 1.92, seed % 3 === 1 ? 1 : 0, crown, 2.6, tn, lobes, 0.2, { minY, solid: S });
+  return { solid: S.geo(), trunk: trunkGeo, cards: L.geo() };
 }
 
 /** Tall dipterocarp that breaks the canopy line. */
-function emergent(seed: number): THREE.BufferGeometry {
+function emergent(seed: number): SplitGeo {
   const L = new Leaves(seed);
+  const S = new Leaves(seed);
   const r = L.r;
   const h = 10.5 + r() * 1.5;
-  L.trunk(
+  S.trunk(
     [
       [0, -0.6, 0],
       [0.2, h * 0.5, 0.1],
@@ -339,7 +374,7 @@ function emergent(seed: number): THREE.BufferGeometry {
     0.4,
     0.22,
     bark('#8c7a66', '#d8c7ae'),
-    { flare: 0.8, rings: 10 }
+    { flare: 0.8, rings: 7, seg: 6 }
   );
   const crown = new THREE.Vector3(-0.1, h + 0.4, 0);
   const lobes: { c: THREE.Vector3; r: number }[] = [];
@@ -348,16 +383,17 @@ function emergent(seed: number): THREE.BufferGeometry {
     const d = i < 2 ? 0.4 : lerp(1.7, 2.9, r());
     lobes.push({ c: crown.clone().add(new THREE.Vector3(Math.cos(a) * d, (i < 2 ? 0.7 : 0) + (r() - 0.5) * 0.9, Math.sin(a) * d)), r: lerp(0.95, 1.45, r()) });
   }
-  for (const l of lobes) L.lobe(l.c, l.r, 0.7, 26, 1.3, 1, crown, 2.4, tone('#356f46', '#8fc860', '#d8c25a', 0.06), lobes, 0.3);
-  return L.geo();
+  for (const l of lobes) L.lobe(l.c, l.r, 0.7, 26, 1.3, 1, crown, 2.4, tone('#356f46', '#8fc860', '#d8c25a', 0.06), lobes, 0.3, { minY: -0.45, solid: S });
+  return { solid: S.geo(), cards: L.geo() };
 }
 
 /** Sea almond: flat tiers like a pagoda, with the old leaves that turn red before they fall. */
-function ketapang(seed: number): THREE.BufferGeometry {
+function ketapang(seed: number): SplitGeo {
   const L = new Leaves(seed);
+  const S = new Leaves(seed);
   const r = L.r;
   const h = 6.2;
-  L.trunk(
+  S.trunk(
     [
       [0, -0.5, 0],
       [0.15, h * 0.5, 0.1],
@@ -380,7 +416,7 @@ function ketapang(seed: number): THREE.BufferGeometry {
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + y;
       const tip = new THREE.Vector3(Math.cos(a) * rad * 0.8, y + 0.28, Math.sin(a) * rad * 0.8);
-      L.trunk(
+      S.trunk(
         [
           [0, y - 0.25, 0],
           [tip.x * 0.5, y + 0.05, tip.z * 0.5],
@@ -403,18 +439,19 @@ function ketapang(seed: number): THREE.BufferGeometry {
     }
     const under = new THREE.CylinderGeometry(rad * 0.82, rad * 0.5, 0.12, 12);
     under.translate(0, y + 0.02, 0);
-    L.solid(under, () => _c.set('#2a5a30'), { ao: () => 0.35, sway: () => 0.2 });
+    S.solid(under, () => _c.set('#2a5a30'), { ao: () => 0.35, sway: () => 0.2 });
   }
-  return L.geo();
+  return { solid: S.geo(), cards: L.geo() };
 }
 
 /** Cemara laut, the casuarinas that line Pantai Panjang. */
-function casuarina(seed: number): THREE.BufferGeometry {
+function casuarina(seed: number): SplitGeo {
   const L = new Leaves(seed);
+  const S = new Leaves(seed);
   const r = L.r;
   const h = 7.6 + r() * 1.2;
   const lean = 0.7;
-  L.trunk(
+  S.trunk(
     [
       [0, -0.5, 0],
       [lean * 0.3, h * 0.5, 0],
@@ -439,7 +476,7 @@ function casuarina(seed: number): THREE.BufferGeometry {
     const face = out.clone().add(new THREE.Vector3(r() - 0.5, r() * 0.8, r() - 0.5).multiplyScalar(0.8)).normalize();
     L.card(p, face, out, lerp(1.3, 1.9, r()) * lerp(1, 0.75, t), 2, tn(t, r()), lerp(0.5, 1, d / 1.7) * lerp(0.7, 1, t), 0.25 + t * 0.35);
   }
-  return L.geo();
+  return { solid: S.geo(), cards: L.geo() };
 }
 
 function frond(L: Leaves, base: THREE.Vector3, az: number, pitch: number, len: number, droop: number, wid: number, colA: THREE.Color, colB: THREE.Color, serrate: number, swayK: number, seg = 13): void {
@@ -579,7 +616,7 @@ function banana(seed: number): THREE.BufferGeometry {
       const wid = lerp(0.34, 0.48, r());
       const dir = new THREE.Vector3(Math.cos(az), 0, Math.sin(az));
       const side = new THREE.Vector3(-Math.sin(az), 0, Math.cos(az));
-      const seg = 8;
+      const seg = 6;
       const P = (t: number, w: number): THREE.Vector3 => {
         const x = Math.cos(pitch) * t * len;
         const y = Math.sin(pitch) * t * len - 0.62 * t * t * len;
@@ -667,8 +704,9 @@ function pandan(seed: number): THREE.BufferGeometry {
   return L.geo();
 }
 
-function bush(seed: number, lo: string, hi: string, flower?: string): THREE.BufferGeometry {
+function bush(seed: number, lo: string, hi: string, flower?: string): SplitGeo {
   const L = new Leaves(seed);
+  const S = new Leaves(seed);
   const r = L.r;
   const crown = new THREE.Vector3(0, 0.55, 0);
   const lobes: { c: THREE.Vector3; r: number }[] = [];
@@ -676,27 +714,27 @@ function bush(seed: number, lo: string, hi: string, flower?: string): THREE.Buff
     const a = (i / 4) * 6.28 + r();
     lobes.push({ c: new THREE.Vector3(Math.cos(a) * 0.55 * r(), 0.42 + r() * 0.35, Math.sin(a) * 0.55), r: lerp(0.5, 0.78, r()) });
   }
-  for (const l of lobes) L.lobe(l.c, l.r, 0.85, 15, 0.82, seed % 2, crown, 0.9, tone(lo, hi), lobes, 0.18);
+  for (const l of lobes) L.lobe(l.c, l.r, 0.85, 15, 0.82, seed % 2, crown, 0.9, tone(lo, hi), lobes, 0.18, { minY: -0.1, solid: S });
   if (flower) {
     for (let i = 0; i < 9; i++) {
       const l = lobes[i % lobes.length];
       const a = r() * 6.28;
       const e = lerp(0.3, 1.2, r());
       const p = l.c.clone().add(new THREE.Vector3(Math.cos(a) * Math.cos(e), Math.sin(e), Math.sin(a) * Math.cos(e)).multiplyScalar(l.r * 1.06));
-      const g = new THREE.SphereGeometry(0.11, 6, 4);
+      const g = new THREE.OctahedronGeometry(0.11, 0);
       g.scale(1, 0.6, 1);
       g.translate(p.x, p.y, p.z);
-      L.solid(g, () => _c.set(flower), { sway: () => 0.18, glow: 0.2 });
+      S.solid(g, () => _c.set(flower), { sway: () => 0.18, glow: 0.2 });
     }
   }
-  return L.geo();
+  return { solid: S.geo(), cards: L.geo() };
 }
 
 function fern(seed: number): THREE.BufferGeometry {
   const L = new Leaves(seed);
   const r = L.r;
   for (let i = 0; i < 7; i++) {
-    frond(L, new THREE.Vector3(0, 0.1, 0), i * 2.39996, lerp(1.0, 0.45, r()), lerp(0.9, 1.4, r()), 0.5, 0.26, hex('#3f7f3a'), hex('#a3cf52'), 0, 0.35, 4);
+    frond(L, new THREE.Vector3(0, 0.1, 0), i * 2.39996, lerp(1.0, 0.45, r()), lerp(0.9, 1.4, r()), 0.5, 0.26, hex('#3f7f3a'), hex('#a3cf52'), 0, 0.35, 3);
   }
   return L.geo();
 }
@@ -731,7 +769,7 @@ function runner(seed: number): THREE.BufferGeometry {
     sh.lineTo(0, s * 0.3);
     sh.lineTo(-s * 0.18, s * 0.5);
     sh.bezierCurveTo(-s * 0.75, s * 0.55, -s * 0.9, -s * 0.5, 0, -s * 0.55);
-    const g = new THREE.ShapeGeometry(sh, 4);
+    const g = new THREE.ShapeGeometry(sh, 2);
     g.rotateX(-Math.PI / 2 + (r() - 0.5) * 0.5);
     g.rotateY(rot);
     g.translate(x, 0.1 + r() * 0.08, z);
@@ -757,7 +795,7 @@ function runner(seed: number): THREE.BufferGeometry {
       x += Math.cos(a) * 0.42;
       z += Math.sin(a) * 0.42;
     }
-    L.trunk(pts, 0.035, 0.02, bark('#6f7a3a', '#8a8a4a'), { seg: 3, rings: 10 });
+    L.trunk(pts, 0.035, 0.02, bark('#6f7a3a', '#8a8a4a'), { seg: 3, rings: 5 });
   }
   return L.geo();
 }
@@ -885,12 +923,28 @@ const FOLIAGE_LIGHT = /* glsl */ `
   }
 `;
 
+interface ManagedBatch {
+  mesh: THREE.InstancedMesh;
+  items: Inst[];
+  localBox: THREE.Box3;
+  isBrush: boolean;
+  casts: boolean;
+  cineOnly: boolean;
+  activeCount: number;
+  playCount: number;
+}
+
 export class Flora {
   readonly group = new THREE.Group();
   readonly dynGroup = new THREE.Group();
   readonly leafPair: ToonPair;
+  private solidPair: ToonPair;
+  private solidDoublePair: ToonPair;
   private mangPair: ToonPair;
-  private brushMeshes: { mesh: THREE.InstancedMesh; full: number }[] = [];
+  private batches: ManagedBatch[] = [];
+  private brushShare = 1;
+  private playMode = false;
+  private playFrustum: THREE.Frustum | null = null;
   private mang: THREE.InstancedMesh;
   private raff: THREE.Mesh;
   private stakes: THREE.InstancedMesh;
@@ -899,14 +953,22 @@ export class Flora {
   constructor() {
     const atlas = leafAtlas();
     const uniforms = { tLeaf: { value: atlas } };
+    const sharedVWorld = /* glsl */ `wp.xyz += windAt(wp.xyz, aInst.x * 6.28) * aFx.y;`;
+    const dryTint = /* glsl */ `
+        // tired and yellowed while the coast is sick, lush once it heals
+        float lush = smoothstep(.04, .55, uEco);
+        float own = fract(vInst.y * 7.31);
+        float dry = (1. - lush) * mix(.45, 1., own);
+        vec3 tired = mix(vec3(dot(alb, vec3(.35, .5, .15))), alb, .62) * vec3(1.16, .9, .56);
+        alb = mix(alb, tired, dry * (1. - step(.5, gloss)));
+    `;
     const leafOpts = {
       side: THREE.DoubleSide,
       uniforms,
       alphaToCoverage: true,
-      vWorld: /* glsl */ `wp.xyz += windAt(wp.xyz, aInst.x * 6.28) * aFx.y;`,
+      vWorld: sharedVWorld,
       fHead: 'uniform sampler2D tLeaf;',
       fAlbedo: /* glsl */ `
-        float aTint = vInst.y;
         n = normalize(vN);
         vec4 tl = texture2D(tLeaf, vUv2);
         float la = tl.a;
@@ -918,17 +980,25 @@ export class Flora {
         #endif
         outA = sat(la);
         alb *= mix(1., tl.r * 1.22, 1. - step(.5, gloss));
-        // tired and yellowed while the coast is sick, lush once it heals
-        float lush = smoothstep(.04, .55, uEco);
-        float own = fract(aTint * 7.31);
-        float dry = (1. - lush) * mix(.45, 1., own);
-        vec3 tired = mix(vec3(dot(alb, vec3(.35, .5, .15))), alb, .62) * vec3(1.16, .9, .56);
-        alb = mix(alb, tired, dry * (1. - step(.5, gloss)));
+        ${dryTint}
       `,
       fLight: FOLIAGE_LIGHT,
       fDepth: 'if (texture2D(tLeaf, vUv2).a < .42) discard;',
     };
+    // Opaque foliage (trunks, canopy cores, fronds, blades) skips leaf-atlas sampling and alpha-discard so Early-Z stays active.
+    const solidOpts = {
+      vWorld: sharedVWorld,
+      fAlbedo: /* glsl */ `
+        n = normalize(vN);
+        alb *= mix(1., 1.10996, 1. - step(.5, gloss));
+        ${dryTint}
+      `,
+      fLight: FOLIAGE_LIGHT,
+      isStatic: true,
+    };
     this.leafPair = toon({ ...leafOpts, isStatic: true });
+    this.solidPair = toon({ ...solidOpts, side: THREE.FrontSide });
+    this.solidDoublePair = toon({ ...solidOpts, side: THREE.DoubleSide });
     this.mangPair = toon({ ...leafOpts, isStatic: false });
 
     const r = rng(404);
@@ -948,8 +1018,8 @@ export class Flora {
       return false;
     };
 
-    type Sp = { geos: THREE.BufferGeometry[]; items: Inst[][] };
-    const sp = (geos: THREE.BufferGeometry[]): Sp => ({ geos, items: geos.map(() => []) });
+    type Sp = { geos: (THREE.BufferGeometry | SplitGeo)[]; items: Inst[][] };
+    const sp = (geos: (THREE.BufferGeometry | SplitGeo)[]): Sp => ({ geos, items: geos.map(() => []) });
     const S = {
       rainNear: sp([rainTree(1, true), rainTree(2, true), rainTree(3, true), rainTree(8, true)]),
       rainFar: sp([rainTree(4, false), rainTree(5, false), rainTree(6, false)]),
@@ -1086,15 +1156,68 @@ export class Flora {
       add(S.runner, x, z, lerp(0.75, 1.15, r()), (r() - 0.5) * 0.9, { sink: 0.0, tint: 0.08, tilt: 0.02 });
     }
 
-    for (const s of Object.values(S)) {
-      const isBrush = s === S.bush || s === S.fern || s === S.tuft || s === S.pandan;
-      s.geos.forEach((g, i) => {
-        if (s.items[i].length) {
-          const im = instanced(g, this.leafPair, s.items[i], { cast: s !== S.tuft && s !== S.fern && s !== S.bush && s !== S.runner });
-          this.group.add(im);
-          if (isBrush) this.brushMeshes.push({ mesh: im, full: s.items[i].length });
+    // Add opaque solids first (FrontSide cores/trunks, then DoubleSide blades/fronds), and alpha-tested cards last
+    // so hardware Early-Z rejects occluded undergrowth and back-layer foliage behind solid canopy cores.
+    const solidLayer: ManagedBatch[] = [];
+    const doubleSolidLayer: ManagedBatch[] = [];
+    const cardLayer: ManagedBatch[] = [];
+
+    const register = (
+      layer: ManagedBatch[],
+      geo: THREE.BufferGeometry,
+      pair: ToonPair,
+      items: Inst[],
+      opts: { cast: boolean; isBrush: boolean; cineOnly?: boolean }
+    ): void => {
+      if (!items.length) return;
+      geo.computeBoundingBox();
+      const im = instanced(geo, pair, items, { cast: opts.cast });
+      layer.push({
+        mesh: im,
+        items,
+        localBox: geo.boundingBox!.clone(),
+        isBrush: opts.isBrush,
+        casts: opts.cast,
+        cineOnly: !!opts.cineOnly,
+        activeCount: items.length,
+        playCount: items.length,
+      });
+    };
+
+    const specs: { sp: Sp; isBrush: boolean; castSolid: boolean; castCards: boolean }[] = [
+      { sp: S.rainNear, isBrush: false, castSolid: true, castCards: true },
+      // Deep inland canopies cast shadow volume from their opaque cores only (skipping alpha-tested card shadows).
+      { sp: S.rainFar, isBrush: false, castSolid: true, castCards: false },
+      { sp: S.emergent, isBrush: false, castSolid: true, castCards: true },
+      { sp: S.ketapang, isBrush: false, castSolid: true, castCards: true },
+      { sp: S.casuarina, isBrush: false, castSolid: true, castCards: true },
+      { sp: S.palm, isBrush: false, castSolid: true, castCards: false },
+      { sp: S.banana, isBrush: false, castSolid: false, castCards: false },
+      { sp: S.pandan, isBrush: true, castSolid: false, castCards: false },
+      { sp: S.bush, isBrush: true, castSolid: false, castCards: false },
+      { sp: S.fern, isBrush: true, castSolid: false, castCards: false },
+      { sp: S.tuft, isBrush: true, castSolid: false, castCards: false },
+      { sp: S.runner, isBrush: false, castSolid: false, castCards: false },
+    ];
+    for (const cfg of specs) {
+      cfg.sp.geos.forEach((g, i) => {
+        const items = cfg.sp.items[i];
+        if (!items.length) return;
+        if (g instanceof THREE.BufferGeometry) {
+          register(doubleSolidLayer, g, this.solidDoublePair, items, { cast: cfg.castSolid, isBrush: cfg.isBrush });
+        } else {
+          if (g.solid) register(solidLayer, g.solid, this.solidPair, items, { cast: cfg.castSolid, isBrush: cfg.isBrush });
+          // Near-forest trunks are completely buried under their canopies from the overhead gameplay camera.
+          if (g.trunk) register(solidLayer, g.trunk, this.solidPair, items, { cast: cfg.castSolid, isBrush: cfg.isBrush, cineOnly: true });
+          if (g.cards) register(cardLayer, g.cards, this.leafPair, items, { cast: cfg.castCards, isBrush: cfg.isBrush });
         }
       });
+    }
+    for (const layer of [solidLayer, doubleSolidLayer, cardLayer]) {
+      for (const b of layer) {
+        this.group.add(b.mesh);
+        this.batches.push(b);
+      }
     }
     this.setBrushDensity(Q.brush);
 
@@ -1124,10 +1247,90 @@ export class Flora {
     this.dynGroup.add(this.stakes);
   }
 
+  private white = new THREE.Color(1, 1, 1);
+  private cullBox = new THREE.Box3();
+  private cullCam = new THREE.PerspectiveCamera(27, 16 / 9, 1, 1400);
+  private cullVP = new THREE.Matrix4();
+
+  /** Recomputes which forest instances can appear (or cast shadows) in the overhead gameplay view. */
+  updatePlayCulling(playPose: Pose, aspect: number): void {
+    const cam = this.cullCam;
+    cam.fov = playPose.fov;
+    cam.aspect = aspect;
+    cam.position.copy(playPose.pos);
+    cam.lookAt(playPose.look);
+    cam.updateMatrixWorld();
+    cam.updateProjectionMatrix();
+    this.cullVP.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    this.playFrustum = (this.playFrustum ?? new THREE.Frustum()).setFromProjectionMatrix(this.cullVP);
+    this.repackBatches();
+  }
+
+  /** Switches between gameplay frustum-culled counts and full cinematic counts (title/intro/cutscenes). */
+  setPlayMode(playOnly: boolean): boolean {
+    if (playOnly === this.playMode) return false;
+    this.playMode = playOnly;
+    this.applyBatchCounts();
+    return true;
+  }
+
   setBrushDensity(share: number): void {
-    for (const b of this.brushMeshes) {
-      const n = Math.max(1, Math.round(b.full * clamp(share, 0.2, 1)));
-      setCount(b.mesh, n);
+    this.brushShare = clamp(share, 0.2, 1);
+    this.repackBatches();
+  }
+
+  private repackBatches(): void {
+    const frustum = this.playFrustum;
+    for (const b of this.batches) {
+      const full = b.items.length;
+      b.activeCount = b.isBrush ? Math.max(1, Math.round(full * this.brushShare)) : full;
+      if (b.cineOnly) {
+        b.playCount = 0;
+        continue;
+      }
+      if (!frustum) {
+        b.playCount = b.activeCount;
+        continue;
+      }
+      const vis: Inst[] = [];
+      const hid: Inst[] = [];
+      for (let i = 0; i < b.activeCount; i++) {
+        const it = b.items[i];
+        this.cullBox.copy(b.localBox).applyMatrix4(it.m);
+        // Pad for subtle parallax/shake, and keep off-left/north/south casters whose dawn/sunset shadow enters frame.
+        this.cullBox.min.x -= 2.5;
+        this.cullBox.max.x += b.casts ? 15 : 2.5;
+        this.cullBox.min.z -= b.casts ? 6 : 2.5;
+        this.cullBox.max.z += b.casts ? 9 : 2.5;
+        if (frustum.intersectsBox(this.cullBox)) vis.push(it);
+        else hid.push(it);
+      }
+      b.playCount = vis.length;
+      const instAttr = b.mesh.geometry.attributes.aInst as THREE.InstancedBufferAttribute;
+      const data = instAttr.array as Float32Array;
+      let k = 0;
+      for (const it of vis) {
+        b.mesh.setMatrixAt(k, it.m);
+        b.mesh.setColorAt(k, it.color ?? this.white);
+        if (it.i) data.set(it.i, k * 4);
+        k++;
+      }
+      for (const it of hid) {
+        b.mesh.setMatrixAt(k, it.m);
+        b.mesh.setColorAt(k, it.color ?? this.white);
+        if (it.i) data.set(it.i, k * 4);
+        k++;
+      }
+      b.mesh.instanceMatrix.needsUpdate = true;
+      if (b.mesh.instanceColor) b.mesh.instanceColor.needsUpdate = true;
+      instAttr.needsUpdate = true;
+    }
+    this.applyBatchCounts();
+  }
+
+  private applyBatchCounts(): void {
+    for (const b of this.batches) {
+      setCount(b.mesh, this.playMode ? b.playCount : b.activeCount);
     }
   }
 

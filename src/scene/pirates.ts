@@ -92,8 +92,6 @@ const SHOULDER_Y = 1.5;
 const SHOULDER_X = 0.32;
 const ARM = 0.68;
 
-const _c = new THREE.Color();
-
 /** A box from a to b, `w` wide and `t` thick: a blade, a slat. */
 function slab(b: Build, a: Vec, c: Vec, w: number, t: number, o: { color: string; gloss?: number; sway?: (p: THREE.Vector3) => number }): void {
   const A = new THREE.Vector3(...a);
@@ -107,75 +105,53 @@ function slab(b: Build, a: Vec, c: Vec, w: number, t: number, o: { color: string
 function pirateBody(o: Look): THREE.BufferGeometry {
   const b = new Build(31);
   for (const s of [-1, 1]) {
-    b.cyl(0.135, 0.15, 0.32, { color: BOOT, pos: [s * 0.14, 0.16, 0], seg: 9 });
-    b.box(0.22, 0.12, 0.34, { color: BOOT, pos: [s * 0.14, 0.06, 0.08], r: 0.05 });
-    b.cyl(0.12, 0.13, 0.5, { color: o.pants, pos: [s * 0.14, 0.55, 0], seg: 9 });
+    const x = s * 0.151;
+    const step = s * 0.042;
+    b.profile([[0, 0.135, 0.187, 0.055], [0.09, 0.146, 0.2, 0.06], [0.18, 0.112, 0.12],
+      [0.32, 0.145, 0.14]], 7, { color: BOOT, pos: [x, 0, step], flat: true });
+    b.bar([x, 0.28, step], [s * 0.14, 0.85, 0], 0.108, 0.15, { color: o.pants, seg: 7 });
   }
-  b.cyl(0.29, 0.3, 0.26, { color: o.pants, pos: [0, 0.84, 0], seg: 12 });
+  b.cyl(0.29, 0.3, 0.26, { color: o.pants, pos: [0, 0.84, 0], seg: 8, scale: [1, 1, 0.68] });
 
-  /* the shirt: plain, striped, or under an open vest */
-  const shirt = (p: THREE.Vector3): THREE.Color => {
-    if (o.vest && !(p.z > 0.1 && Math.abs(p.x) < 0.11)) return _c.set(o.vest);
-    if (o.stripes && Math.floor((p.y - 0.8) / 0.11) % 2 === 1) return _c.set(o.stripes);
-    return _c.set(o.shirt);
-  };
-  b.add(new THREE.CapsuleGeometry(0.3, 0.32, 3, 12), { color: shirt, pos: [0, 1.24, 0], scale: [1, 1, 0.84] });
+  const chest = o.drum ? 0.395 : o.captain ? 0.425 : 0.313;
+  b.profile([[0.91, 0.28, 0.199], [1.1, 0.283, 0.206], [1.48, chest, 0.245], [1.59, 0.2, 0.166]],
+    8, { color: o.vest ?? o.shirt });
+  if (o.vest) {
+    b.quad([-0.073, 0.98, 0.194], [0.061, 0.98, 0.194], [0.115, 1.48, 0.231], [-0.115, 1.48, 0.231], { color: o.shirt });
+  }
+  if (o.stripes) {
+    for (const y of [1.13, 1.31]) {
+      const t = (y - 1.1) / 0.38;
+      const w = lerp(0.283, chest, t);
+      const d = lerp(0.206, 0.245, t);
+      b.profile([[y, w + 0.006, d + 0.004], [y + 0.068, w + 0.013, d + 0.012]], 8, { color: o.stripes });
+    }
+  }
   if (o.captain) {
     // a long coat with gold trim, a white jabot and brass buttons
     b.cyl(0.33, 0.45, 0.72, { color: o.shirt, pos: [0, 0.83, 0], seg: 14 });
     b.cyl(0.455, 0.455, 0.06, { color: GOLD, pos: [0, 0.49, 0], seg: 14 });
-    b.box(0.17, 0.4, 0.06, { color: '#f4efe4', pos: [0, 1.34, 0.245], r: 0.03 });
+    for (const side of [-1, 1]) {
+      b.ico(1, 0, { color: GOLD, pos: [side * 0.357, 1.515, 0.005], scale: [0.187, 0.09, 0.195] });
+      const lapel: Vec[] = [[side * 0.068, 1.045, 0.34], [side * 0.27, 1.455, 0.205], [side * 0.178, 1.587, 0.148], [side * 0.112, 1.44, 0.236]];
+      if (side < 0) lapel.reverse();
+      b.quad(lapel[0], lapel[1], lapel[2], lapel[3], { color: '#da7645' });
+    }
+    b.box(0.17, 0.4, 0.06, { color: '#f4efe4', pos: [0, 1.34, 0.245], r: 0 });
     for (const y of [1.08, 1.22, 1.36]) for (const s of [-1, 1]) b.ball(0.03, { color: GOLD, pos: [s * 0.15, y, 0.25], seg: 6, gloss: 0.7 });
   }
   b.cyl(0.318, 0.318, 0.1, { color: '#3a2418', pos: [0, 0.97, 0], seg: 12 });
-  b.box(0.13, 0.11, 0.05, { color: GOLD, pos: [0, 0.97, 0.32], r: 0.02, gloss: 0.6 });
+  b.box(0.13, 0.11, 0.05, { color: GOLD, pos: [0, 0.97, 0.32], r: 0, gloss: 0.6 });
 
-  /* the head */
-  b.ball(0.3, { color: o.skin, pos: [0, 1.86, 0.02], seg: 14 });
-  b.ball(0.075, { color: o.skin, pos: [0, 1.82, 0.31], seg: 8 });
-  for (const s of [-1, 1]) {
-    const covered = o.patch && s === 1;
-    if (!covered) {
-      b.ball(0.06, { color: '#ffffff', pos: [s * 0.105, 1.9, 0.26], seg: 8 });
-      b.ball(0.034, { color: DARK, pos: [s * 0.105, 1.9, 0.31], seg: 6 });
-    }
-    // brows down towards the nose: up to no good
-    b.box(0.13, 0.035, 0.035, { color: o.beard ?? DARK, pos: [s * 0.11, 1.99, 0.27], rot: [0, 0, s * 0.32], r: 0.01 });
+  if (!o.captain) {
+    b.profile([[0.887, 0.314, 0.27], [0.991, 0.318, 0.27]], 8, { color: o.drum ? '#ecab4a' : '#bf4949' });
+    b.quad([-0.25, 0.96, 0.175], [-0.39, 0.65, 0.154], [-0.26, 0.71, 0.212], [-0.14, 0.965, 0.248], { color: o.drum ? GOLD : RED });
   }
-  if (o.patch) {
-    b.add(new THREE.CylinderGeometry(0.08, 0.08, 0.03, 10), { color: DARK, pos: [0.105, 1.9, 0.3], rot: [Math.PI / 2 - 0.15, 0, 0] });
-    const strap = new THREE.Matrix4().makeRotationZ(-0.42).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
-    strap.setPosition(0, 1.92, 0.02);
-    b.add(new THREE.TorusGeometry(0.308, 0.013, 4, 26), { color: DARK, matrix: strap });
+  if (o.drum) {
+    b.profile([[1.34, 0.405, 0.286], [1.51, 0.404, 0.275], [1.585, 0.208, 0.161]], 8, { color: '#e6b85a' });
+    for (const side of [-1, 1]) b.ico(0.064, 0, { color: '#a6e6c8', pos: [side * 0.215, 1.412, 0.24] });
   }
-  if (o.beard) {
-    b.ball(0.22, { color: o.beard, pos: [0, 1.69, 0.15], scale: [1.18, 0.9, 0.75], seg: 12 });
-    for (const s of [-1, 1]) b.ball(0.06, { color: o.beard, pos: [s * 0.085, 1.765, 0.3], scale: [1.6, 0.7, 0.8], rot: [0, 0, s * -0.3], seg: 7 });
-  }
-  if (o.grin) {
-    const z = o.beard ? 0.32 : 0.275;
-    b.box(0.17, 0.06, 0.03, { color: '#4a1414', pos: [0, 1.715, z], r: 0.012 });
-    b.box(0.13, 0.025, 0.02, { color: '#fbf6ea', pos: [0, 1.73, z + 0.012], r: 0.006 });
-  }
-  if (o.earring) {
-    b.add(new THREE.TorusGeometry(0.05, 0.013, 5, 12), { color: GOLD, pos: [-0.3, 1.77, 0.04], rot: [0, Math.PI / 2, 0], gloss: 0.8 });
-  }
-  if (o.band) {
-    // the headband: a cap over the crown, knotted at the back with two loose ends
-    b.add(new THREE.SphereGeometry(0.318, 14, 7, 0, Math.PI * 2, 0, 1.15), { color: o.band, pos: [0, 1.86, 0.02] });
-    b.ball(0.07, { color: o.band, pos: [0.08, 2.0, -0.29], seg: 7 });
-    b.tube([[0.08, 2.0, -0.31], [0.13, 1.88, -0.4], [0.17, 1.74, -0.42]], (t) => lerp(0.045, 0.02, t), { color: o.band, seg: 5, rings: 6 });
-    b.tube([[0.06, 1.99, -0.32], [0.02, 1.86, -0.43], [-0.04, 1.75, -0.44]], (t) => lerp(0.04, 0.018, t), { color: o.band, seg: 5, rings: 6 });
-  }
-  if (o.captain) {
-    // a tricorn, one corner to the front, with a gold edge and a red plume
-    b.add(new THREE.CylinderGeometry(0.6, 0.62, 0.1, 3), { color: '#1d1b22', pos: [0, 2.1, -0.01] });
-    b.add(new THREE.CylinderGeometry(0.645, 0.645, 0.035, 3), { color: GOLD, pos: [0, 2.13, -0.01], gloss: 0.6 });
-    b.cyl(0.25, 0.3, 0.27, { color: '#1d1b22', pos: [0, 2.28, -0.03], seg: 12 });
-    b.cyl(0.302, 0.302, 0.06, { color: RED, pos: [0, 2.18, -0.03], seg: 12 });
-    b.ball(0.075, { color: '#fbf6ea', pos: [0, 2.27, 0.24], scale: [1, 1, 0.5], seg: 8 });
-    b.ball(0.09, { color: RED, pos: [0.22, 2.4, -0.2], scale: [0.55, 0.55, 3.2], rot: [0.75, 0.3, 0], seg: 8 });
-  }
+
   if (o.drum) {
     // a standing drum in front of him, red with gold hoops
     b.cyl(0.21, 0.19, 0.46, { color: '#8e2a22', pos: [0, 0.48, 0.5], seg: 14 });
@@ -185,17 +161,89 @@ function pirateBody(o: Look): THREE.BufferGeometry {
   return b.geo(true);
 }
 
+function pirateHead(o: Look): THREE.BufferGeometry {
+  const b = new Build(32);
+  b.profile([[1.565, 0.123, 0.135], [1.665, o.beard ? 0.258 : 0.223, 0.227],
+    [1.85, 0.3, 0.29], [2.005, 0.281, 0.272], [2.135, 0.144, 0.155]], 10, { color: o.skin, pos: [0, 0, 0.02] });
+  b.ball(0.075, { color: o.skin, pos: [0, 1.82, 0.31], seg: 6 });
+  for (const s of [-1, 1]) {
+    const covered = o.patch && s === 1;
+    if (!covered) {
+      b.ball(0.06, { color: '#ffffff', pos: [s * 0.105, 1.9, 0.26], seg: 6 });
+      b.ball(0.034, { color: DARK, pos: [s * 0.105, 1.9, 0.31], seg: 6 });
+    }
+    // brows down towards the nose: up to no good
+    b.box(0.13, 0.035, 0.035, { color: o.beard ?? DARK, pos: [s * 0.11, 1.99, 0.27], rot: [0, 0, s * 0.32], r: 0 });
+  }
+  if (o.patch) {
+    b.add(new THREE.CylinderGeometry(0.08, 0.08, 0.03, 10), { color: DARK, pos: [0.105, 1.9, 0.3], rot: [Math.PI / 2 - 0.15, 0, 0] });
+    const strap = new THREE.Matrix4().makeRotationZ(-0.42).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
+    strap.setPosition(0, 1.92, 0.02);
+    b.add(new THREE.TorusGeometry(0.308, 0.013, 4, 16), { color: DARK, matrix: strap });
+  }
+  if (o.beard) {
+    b.profile([[1.407, 0.052, 0.06, 0.20], [1.53, 0.18, 0.118, 0.169], [1.69, 0.235, 0.138, 0.14]], 7,
+      { color: o.beard, top: '#493341', flat: true });
+    b.ball(0.22, { color: o.beard, pos: [0, 1.69, 0.15], scale: [1.18, 0.9, 0.75], seg: 8 });
+    for (const s of [-1, 1]) b.ball(0.06, { color: o.beard, pos: [s * 0.085, 1.765, 0.3], scale: [1.6, 0.7, 0.8], rot: [0, 0, s * -0.3], seg: 7 });
+  }
+  if (o.grin) {
+    const z = o.beard ? 0.32 : 0.275;
+    b.box(0.17, 0.06, 0.03, { color: '#4a1414', pos: [0, 1.715, z], r: 0 });
+    b.box(0.13, 0.025, 0.02, { color: '#fbf6ea', pos: [0, 1.73, z + 0.012], r: 0 });
+  }
+  if (o.earring) {
+    b.add(new THREE.TorusGeometry(0.05, 0.013, 5, 12), { color: GOLD, pos: [-0.3, 1.77, 0.04], rot: [0, Math.PI / 2, 0], gloss: 0.8 });
+  }
+  if (o.band) {
+    // the headband: a cap over the crown, knotted at the back with two loose ends
+    b.add(new THREE.SphereGeometry(0.318, 10, 4, 0, Math.PI * 2, 0, 1.15), { color: o.band, pos: [0, 1.86, 0.02] });
+    const height = o.drum ? 0.28 : o.patch ? 0.18 : 0.08;
+    b.profile([[1.993, 0.305, 0.299], [2.08, 0.30, 0.28], [2.11 + height, 0.124, 0.144, -0.075]], 9,
+      { color: o.drum ? '#dd6740' : o.band, flat: true });
+    if (o.drum || o.patch) b.profile([[2.036, 0.312, 0.302], [2.091, 0.298, 0.287]], 9, { color: o.drum ? '#ffd877' : '#672a43' });
+    for (const side of [-1, 1]) b.ico(1, 0, { color: '#4b2930', pos: [side * 0.262, 1.94, 0.102], scale: [0.062, o.patch ? 0.18 : 0.085, 0.082] });
+    b.ball(0.07, { color: o.band, pos: [0.08, 2.0, -0.29], seg: 7 });
+    b.tube([[0.08, 2.0, -0.31], [0.13, 1.88, -0.4], [0.17, 1.74, -0.42]], (t) => lerp(0.045, 0.02, t), { color: o.band, seg: 5, rings: 3 });
+    b.tube([[0.06, 1.99, -0.32], [0.02, 1.86, -0.43], [-0.04, 1.75, -0.44]], (t) => lerp(0.04, 0.018, t), { color: o.band, seg: 5, rings: 3 });
+  }
+  if (o.captain) {
+    // a tricorn, one corner to the front, with a gold edge and a red plume
+    // Three swept-up sides with a narrow binding along the turned edge.
+    const brim = (i: number, radius: number, lift: number): Vec => {
+      const a = (i / 18) * Math.PI * 2;
+      const corner = (1 + Math.cos(3 * a)) * 0.5;
+      const r = radius * (0.78 + 0.22 * corner);
+      return [Math.sin(a) * r, 2.064 + lift * (1 - 0.73 * corner), Math.cos(a) * r - 0.025];
+    };
+    for (let i = 0; i < 18; i++) {
+      const j = i + 1;
+      b.quad(brim(i, 0.28, 0), brim(j, 0.28, 0), brim(j, 0.63, 0.19), brim(i, 0.63, 0.19), { color: '#27222d' });
+      b.quad(brim(i, 0.63, 0.19), brim(j, 0.63, 0.19), brim(j, 0.616, 0.22), brim(i, 0.616, 0.22), { color: GOLD });
+      b.quad(brim(i, 0.616, 0.22), brim(j, 0.616, 0.22), brim(j, 0.27, 0.037), brim(i, 0.27, 0.037), { color: '#423541' });
+    }
+    b.cyl(0.25, 0.3, 0.27, { color: '#1d1b22', pos: [0, 2.28, -0.03], seg: 8 });
+    b.cyl(0.302, 0.302, 0.06, { color: RED, pos: [0, 2.18, -0.03], seg: 8 });
+    b.ball(0.075, { color: '#fbf6ea', pos: [0, 2.27, 0.24], scale: [1, 1, 0.5], seg: 6 });
+    b.profile([[0, 0.023, 0.018], [0.14, 0.082, 0.027, -0.025], [0.26, 0.067, 0.022, -0.065],
+      [0.34, 0.012, 0.009, -0.135]], 5, { color: RED, top: '#ff9766', pos: [0.21, 2.265, -0.13], scale: [1.55, 1.32, 1.2], rot: [0, -0.25, -0.48], flat: true });
+  }
+  return b.geo(true).translate(0, -1.60, 0).scale(1.19, 1.04, 1.1);
+}
+
 /** One arm, hanging from the shoulder at the origin, with whatever it holds. */
 function pirateArm(sleeve: string, skin: string, hold: 'none' | 'blade' | 'glass' | 'hook' | 'stick' | 'coil', cuff?: string): THREE.BufferGeometry {
   const b = new Build(33);
-  b.bar([0, 0.03, 0], [0, -0.6, 0.06], 0.105, 0.085, { color: sleeve, seg: 8 });
+  const elbow: Vec = [0, -0.32, -0.025];
+  b.bar([0, 0.04, 0], elbow, 0.127, 0.1, { color: sleeve, seg: 6 });
+  b.bar(elbow, [0, -0.61, 0.06], 0.096, 0.074, { color: cuff ? sleeve : skin, seg: 6 });
   if (cuff) b.cyl(0.098, 0.098, 0.07, { color: cuff, pos: [0, -0.56, 0.055], seg: 8 });
   const hand: Vec = [0, -ARM, 0.07];
   if (hold === 'hook') {
     b.cyl(0.07, 0.085, 0.1, { color: '#3a2418', pos: [0, -0.66, 0.065], seg: 8 });
     b.add(new THREE.TorusGeometry(0.085, 0.024, 6, 12, Math.PI * 1.25), { color: GOLD, pos: [0, -0.8, 0.1], rot: [0, Math.PI / 2, 0.8], gloss: 0.8 });
   } else {
-    b.ball(0.1, { color: skin, pos: hand, seg: 8 });
+    b.ball(0.1, { color: skin, pos: hand, seg: 6 });
   }
   if (hold === 'blade') {
     // a cutlass held point-up out of the fist, the blade curving away from him
@@ -271,6 +319,8 @@ function grapnel(): THREE.BufferGeometry {
 interface Pirate {
   role: Role;
   g: THREE.Group;
+  head: THREE.Mesh;
+  heldPose: [THREE.Quaternion, THREE.Quaternion];
   /** Index 0 is his right arm (at -X), 1 his left. */
   arms: [THREE.Group, THREE.Group];
   x: number;
@@ -407,6 +457,7 @@ export class Pirates {
       return m;
     };
 
+    const heads = CAST.map((c) => pirateHead(c.look));
     const bodies = CAST.map((c) => pirateBody(c.look));
     const cuff = (c: (typeof CAST)[number]): string | undefined => (c.look.captain ? GOLD : undefined);
     const arms = CAST.map((c) => [pirateArm(c.look.shirt, c.look.skin, c.right, cuff(c)), pirateArm(c.look.shirt, c.look.skin, c.left, cuff(c))] as const);
@@ -416,7 +467,7 @@ export class Pirates {
       g.cyl(0.056, 0.056, 0.05, { color: '#6a4a20', pos: a, rot: [Math.PI / 2, 0, 0], seg: 8 });
       return g.geo(true);
     };
-    const eyeGlass = brass([-0.105, 1.9, 0.28], [-0.105, 1.93, 0.92]);
+    const eyeGlass = brass([-0.125, 0.312, 0.308], [-0.125, 0.342, 0.95]);
     const handGlass = brass([0, -ARM, -0.12], [0, -ARM, 0.36]);
     const rig = rigging();
     const hook = grapnel();
@@ -428,7 +479,9 @@ export class Pirates {
       root.add(part(rig));
       const folk: Pirate[] = CAST.map((c, i) => {
         const g = new THREE.Group();
-        g.add(part(bodies[i]));
+        const head = part(heads[i]);
+        head.position.y = 1.6;
+        g.add(part(bodies[i]), head);
         const mk = (k: 0 | 1): THREE.Group => {
           const a = new THREE.Group();
           a.position.set((k === 0 ? -1 : 1) * SHOULDER_X, SHOULDER_Y, 0);
@@ -436,11 +489,11 @@ export class Pirates {
           g.add(a);
           return a;
         };
-        const p: Pirate = { role: c.role, g, arms: [mk(0), mk(1)], x: c.x, z: c.z, y: deckAt(c.x) - 0.02, yaw: c.yaw, ph: i * 1.37 + n * 0.5 };
+        const p: Pirate = { role: c.role, g, head, heldPose: [new THREE.Quaternion(), new THREE.Quaternion()], arms: [mk(0), mk(1)], x: c.x, z: c.z, y: deckAt(c.x) - 0.02, yaw: c.yaw, ph: i * 1.37 + n * 0.5 };
         if (c.role === 'captain') {
           p.eyeGlass = part(eyeGlass);
           p.eyeGlass.visible = false;
-          g.add(p.eyeGlass);
+          head.add(p.eyeGlass);
           p.handGlass = part(handGlass);
           p.arms[0].add(p.handGlass);
         }
@@ -500,7 +553,7 @@ export class Pirates {
       mood = last?.kind === 'raid' && last.result === 'failed' ? 'gloat' : 'shake';
     } else if (e.tag === 'attack' || (job?.kind === 'raid' && job.phase === 'seize')) mood = 'cheer';
     const film = this.cue && e.id === this.id ? this.cue : null;
-    for (const p of c.folk) this.pose(p, mood, time, film);
+    for (const p of c.folk) this.pose(p, mood, time, film, dt, c.hurt);
     this.swingHook(c, mood, time, film);
   }
 
@@ -514,7 +567,7 @@ export class Pirates {
     this.aim(arm, x - arm.position.x, y - arm.position.y, z - arm.position.z);
   }
 
-  private pose(p: Pirate, mood: Mood, time: number, film: Cue | null): void {
+  private pose(p: Pirate, mood: Mood, time: number, film: Cue | null, dt: number, hurt: number): void {
     const t = time + p.ph;
     let rise = 0;
     let lean = Math.sin(t * 1.1) * 0.03;
@@ -543,8 +596,11 @@ export class Pirates {
       if (p.role === 'helm') this.reach(L, 0.36, 0.78, 0.55);
       if (p.role === 'captain') this.aim(L, 0.25, 1, 0.35 + Math.sin(t * 8) * 0.2);
     } else if (m === 'flail') {
-      lean = -0.28;
-      roll = Math.sin(t * 19) * 0.16;
+      const impact = 1 - hurt / 0.75;
+      const recoil = Math.sin(impact * Math.PI * 2) * (1 - impact);
+      lean = -0.46 * recoil;
+      roll = Math.sin(p.ph + 0.7) * recoil * 0.27;
+      rise = Math.max(0, recoil) * 0.11;
       this.aim(R, -1, 0.45 + Math.sin(t * 17) * 0.35, 0.2);
       this.aim(L, 1, 0.45 + Math.sin(t * 15 + 1) * 0.35, 0.2);
     } else if (m === 'shake') {
@@ -604,6 +660,16 @@ export class Pirates {
       }
     }
 
+    // Settle into the next gesture while the drummer keeps exact contact on the beat.
+    const follow = 1 - Math.exp(-dt * (m === 'flail' ? 24 : 14));
+    for (let i = 0; i < 2; i++) {
+      const target = p.arms[i].quaternion;
+      if (p.role === 'drum' || p.eyeGlass?.visible) p.heldPose[i].copy(target);
+      else target.copy(p.heldPose[i].slerp(target, follow));
+    }
+    const locked = p.eyeGlass?.visible;
+    const nod = p.role === 'drum' ? 0.13 * Math.cos(t * 5.7) : 0.045 * Math.sin(t * 1.9);
+    p.head.rotation.set(locked ? 0 : nod - lean * 0.5, locked ? 0 : 0.17 * Math.sin(t * 0.86), locked ? 0 : -roll * 0.57);
     p.g.position.set(p.x, p.y + rise, p.z);
     p.g.rotation.set(lean, p.yaw + turn, roll);
   }

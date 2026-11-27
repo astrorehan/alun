@@ -1,5 +1,5 @@
 /* ==========================================================================
-   ALUN ARCADE GLOSS UI KIT — REUSABLE COMPONENT TEMPLATES (BOLD ARCADE SCALE)
+   ALUN ARCADE GLOSS UI KIT: REUSABLE COMPONENT TEMPLATES (BOLD ARCADE SCALE)
    Every HUD widget, button, modal, tab, card, toast, speech bubble, keycap,
    achievement row, and skill-tree node is built from these atomic classes.
    ========================================================================== */
@@ -237,7 +237,8 @@
   box-shadow: var(--gloss-top-soft), var(--lip-bot-sm), var(--shadow-btn-press);
 }
 
-.ui-btn:disabled {
+.ui-btn:disabled,
+.ui-tab:disabled {
   cursor: not-allowed;
   filter: saturate(0.32) brightness(0.92);
   opacity: 0.9;
@@ -331,12 +332,12 @@
   transition: transform 0.14s var(--ease-bounce), filter 0.15s ease;
 }
 
-.ui-tab:hover {
+.ui-tab:hover:not(:disabled) {
   transform: translateY(-2px) scale(1.03);
   filter: brightness(1.07);
 }
 
-.ui-tab:active {
+.ui-tab:active:not(:disabled) {
   transform: translateY(2px) scale(0.97);
 }
 

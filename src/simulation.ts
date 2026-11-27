@@ -20,6 +20,7 @@ import type { TropicalAudio } from './audio';
 import { Story } from './story/director';
 import { FireJob } from './story/jobs';
 import { DAY_DURATION, isBossDay, SALVAGE_VALUE } from './story/state';
+import { comboMultiplier } from './upgrades';
 import { AI_BUOY_SLOTS, COLLECTOR_NET, getShoreX, MANGROVE_SLOTS, SEA_ROCKS, WORLD_H, WORLD_W } from './world';
 
 /** What the simulation asks of the app around it. */
@@ -37,7 +38,7 @@ export interface SimHooks {
   banner: (title: string, sub: string, swatch: 'orange' | 'blue' | 'green' | 'gold' | 'teal' | 'purple' | 'red') => void;
   /** Pier took damage from a pirate attack. */
   pierHurt: (hp: number, maxHp: number) => void;
-  /** Pier HP reached 0 — run lost, restart from Day 1. */
+  /** Pier HP reached 0: run lost, restart from Day 1. */
   defeat: () => void;
   /** The mother dolphin is there. True when a film takes it from here. */
   dolphin: (e: Entity) => boolean;
@@ -47,8 +48,10 @@ export interface SimHooks {
   filming: () => boolean;
   /** The shore got worse by this much. */
   worsen: (kind: 'trash' | 'spill' | 'ghost_net', amount: number) => void;
-  /** Day 5 Monsoon Boss defeated — victory dawn! */
+  /** Day 5 Monsoon Boss defeated: victory dawn! */
   ending: () => void;
+  /** The purse can pay for a tool ("Tenaga Lv 3") and the player has not been to the workshop. */
+  shopNudge?: (what: string) => void;
 }
 
 export function isTrashKind(kind: EntityKind): boolean {
@@ -125,7 +128,12 @@ export class GameSimulation {
 
   private nextId = 1;
   private ambientRippleTimer = 0;
-  private resonanceCooldown = 0;
+  public get tidalLane() { return this.progress?.story.tidalLane; }
+  public get laneCooldown(): number {
+    const story = this.progress?.story;
+    return story ? Math.max(0, (story.laneReadyAt ?? 0) - story.clock) : 0;
+  }
+
 
   constructor(
     public readonly audio: TropicalAudio,
@@ -214,8 +222,7 @@ export class GameSimulation {
     this.energy = stats.maxEnergy;
     this.comboCount = 0;
     this.comboTimer = 0;
-    this.screenShake = 0;
-    this.hitstopTimer = 0;
+    this.clearTransientEffects();
     this.bossActive = false;
     this.netClosed = false;
     this.drag.active = false;
@@ -309,6 +316,15 @@ export class GameSimulation {
     }
   }
 
+  public clearTransientEffects(): void {
+    this.screenShake = 0;
+    this.hitstopTimer = 0;
+    this.netPulse = 0;
+    this.flashAlpha = 0;
+    this.shoreSplash = 0;
+    for (const e of this.entities) e.hitFlash = 0;
+  }
+
   public updateAmbientOnly(dt: number, progress: PlayerProgress, stats: ComputedStats): void {
     this.time += dt;
     this.updateAmbientFish(dt);
@@ -373,7 +389,24 @@ export class GameSimulation {
     this.netPulse = Math.max(0, this.netPulse - dt * 4);
     this.flashAlpha = Math.max(0, this.flashAlpha - dt * 2.5);
     this.shoreSplash = Math.max(0, this.shoreSplash - dt * 2.4);
-    this.resonanceCooldown = Math.max(0, this.resonanceCooldown - dt);
+    const lane = this.tidalLane;
+    if (lane) {
+      lane.left -= dt;
+      if (lane.left <= 0) delete progress.story.tidalLane;
+      else {
+        const dx = Math.cos(lane.angle), dy = Math.sin(lane.angle);
+        for (const e of this.entities) {
+          if (!(isTrashKind(e.kind) || ['raider', 'boat', 'drum', 'float', 'pad', 'drift_net', 'mangrove_seed'].includes(e.kind))) continue;
+          const x = e.x - lane.x, y = e.y - lane.y;
+          const along = x * dx + y * dy;
+          if (along < 0 || along > lane.length || Math.abs(y * dx - x * dy) > 38 + e.radius) continue;
+          const force = 620 * dt / Math.sqrt(Math.max(1, e.mass));
+          e.vx += dx * force;
+          e.vy += dy * force;
+          if (e.tow) e.tow.strain += Math.abs(dy * Math.cos(e.rotation) - dx * Math.sin(e.rotation)) * dt;
+        }
+      }
+    }
 
     if (this.comboTimer > 0) {
       this.comboTimer -= dt;
@@ -472,6 +505,11 @@ export class GameSimulation {
       this.spawnWaveInternal('ripple', spawnX, spawnY, 0, effectiveCharge, stats, 0.85 * ratio, 0.9);
     } else {
       const angle = Math.atan2(dy, dx);
+      if (progress.story.flags.toolbox && charge >= 0.42 && this.laneCooldown <= 0) {
+        progress.story.tidalLane = { x: spawnX, y: spawnY, angle, left: 3, length: 230 + 30 * stats.laneLevel };
+        progress.story.laneReadyAt = progress.story.clock + 8;
+        progress.totalCurrents++;
+      }
       this.spawnWaveInternal('directional', spawnX, spawnY, angle, effectiveCharge, stats, ratio, 1);
 
       for (let e = 1; e <= stats.echoCount; e++) {
@@ -508,7 +546,7 @@ export class GameSimulation {
     widthScale: number
   ): void {
     const chargeMult = 1 + charge * (stats.maxChargeBonus - 1);
-    const isCircle = kind === 'ripple' || kind === 'resonance' || kind === 'buoy_pulse';
+    const isCircle = kind === 'ripple' || kind === 'buoy_pulse';
     const speed = isCircle ? 0 : stats.waveSpeed * (0.94 + charge * 0.34);
 
     const wave: Wave = {
@@ -522,38 +560,29 @@ export class GameSimulation {
       arcHalf: isCircle ? Math.PI : 0.72 + charge * 0.14,
       radius: isCircle ? 16 : 24,
       maxRadius:
-        kind === 'resonance'
-          ? 148 + stats.resonanceLevel * 34
-          : kind === 'buoy_pulse'
+        kind === 'buoy_pulse'
             ? 125
             : isCircle
               ? 88 + stats.waveWidth * 0.65 * chargeMult
               : stats.waveWidth * 1.15 * chargeMult,
       crestWidth: stats.waveWidth * widthScale * (1 + charge * 0.52),
-      power:
-        stats.wavePower *
-        powerScale *
-        chargeMult *
-        (kind === 'resonance' ? 2.15 + stats.resonanceLevel * 0.4 : 1),
+      power: stats.wavePower * powerScale * chargeMult,
       charge,
       age: 0,
       maxAge:
-        kind === 'resonance'
-          ? 0.72
-          : kind === 'buoy_pulse'
+        kind === 'buoy_pulse'
             ? 0.68
             : isCircle
               ? 0.76
               : stats.waveDuration * (1 + charge * 0.25),
       hitMap: new Map(),
-      resonatedWith: new Set(),
       triggeredBuoys: new Set(),
       isEcho: kind === 'echo',
     };
 
     this.waves.push(wave);
 
-    const burstCount = kind === 'resonance' ? 26 : 7 + Math.round(charge * 8);
+    const burstCount = 7 + Math.round(charge * 8);
     for (let i = 0; i < burstCount; i++) {
       const a = isCircle
         ? (i / burstCount) * Math.PI * 2 + Math.random() * 0.2
@@ -567,9 +596,9 @@ export class GameSimulation {
         size: 2.5 + Math.random() * 3.6,
         life: 0,
         maxLife: 0.42 + Math.random() * 0.35,
-        color: kind === 'resonance' ? (i % 2 === 0 ? '#ffe07d' : '#7ffcff') : '#e5ffff',
+        color: '#e5ffff',
         alpha: 0.9,
-        kind: kind === 'resonance' ? 'spark' : 'foam',
+        kind: 'foam',
         drag: 0.92,
       });
     }
@@ -581,7 +610,6 @@ export class GameSimulation {
     stats: ComputedStats,
     isMonsoon: boolean
   ): void {
-    const newResonances: { x: number; y: number }[] = [];
     const newBuoyPulses: { x: number; y: number }[] = [];
 
     for (let i = this.waves.length - 1; i >= 0; i--) {
@@ -593,7 +621,7 @@ export class GameSimulation {
       }
 
       const lifeT = w.age / w.maxAge;
-      const isCircle = w.kind === 'ripple' || w.kind === 'resonance' || w.kind === 'buoy_pulse';
+      const isCircle = w.kind === 'ripple' || w.kind === 'buoy_pulse';
 
       if (isCircle) {
         const eased = 1 - Math.pow(1 - lifeT, 2.2);
@@ -664,33 +692,6 @@ export class GameSimulation {
         }
       }
 
-      if (stats.resonanceLevel > 0 && w.kind !== 'resonance' && this.resonanceCooldown <= 0 && newResonances.length === 0) {
-        for (let j = i - 1; j >= 0; j--) {
-          const other = this.waves[j];
-          if (other.kind === 'resonance' || w.resonatedWith.has(other.id)) continue;
-          // Echoes from the same sweep should not endlessly self-detonate; cross waves or hit a buoy!
-          if (w.isEcho && other.isEcho) continue;
-          if (w.age < 0.1 || other.age < 0.1) continue;
-
-          const dist = Math.hypot(w.x - other.x, w.y - other.y);
-          const touchDist =
-            (w.kind === 'ripple' || w.kind === 'buoy_pulse' ? w.radius : w.crestWidth * 0.46) +
-            (other.kind === 'ripple' || other.kind === 'buoy_pulse'
-              ? other.radius
-              : other.crestWidth * 0.46);
-
-          if (dist < touchDist * 0.82 && dist > 18) {
-            w.resonatedWith.add(other.id);
-            other.resonatedWith.add(w.id);
-            newResonances.push({
-              x: (w.x + other.x) * 0.5,
-              y: (w.y + other.y) * 0.5,
-            });
-            break;
-          }
-        }
-      }
-
       this.applyWaveToEntities(w, dt, progress, stats);
     }
 
@@ -699,16 +700,7 @@ export class GameSimulation {
       this.audio.playWaveLaunch(0.35, true, this.audio.worldXToPan(bp.x, WORLD_W));
     }
 
-    for (const res of newResonances) {
-      this.resonanceCooldown = 0.52;
-      this.spawnWaveInternal('resonance', res.x, res.y, 0, 1.0, stats, 1.25, 1.25);
-      progress.totalResonances += 1;
-      this.hitstopTimer = 0.024;
-      this.screenShake = Math.max(this.screenShake, 9.5);
-      this.flashAlpha = Math.max(this.flashAlpha, 0.2);
-      this.audio.playResonanceBurst(this.audio.worldXToPan(res.x, WORLD_W));
-      this.text(res.x, res.y - 24, 'RESONANSI!', '#ffe07d', 1.2);
-    }
+
   }
 
   private checkShoreFireSplash(w: Wave): void {
@@ -757,7 +749,7 @@ export class GameSimulation {
     progress: PlayerProgress,
     stats: ComputedStats
   ): void {
-    const isCircle = w.kind === 'ripple' || w.kind === 'resonance' || w.kind === 'buoy_pulse';
+    const isCircle = w.kind === 'ripple' || w.kind === 'buoy_pulse';
     const lifeFade = Math.max(0.25, 1 - (w.age / w.maxAge) * 0.68);
     const cosA = Math.cos(w.angle);
     const sinA = Math.sin(w.angle);
@@ -773,7 +765,7 @@ export class GameSimulation {
 
       if (isCircle) {
         const dist = Math.hypot(dx, dy) || 1;
-        const ringBand = w.kind === 'resonance' ? 48 : 30;
+        const ringBand = 30;
         if (Math.abs(dist - w.radius) < ringBand + e.radius) {
           hit = true;
           pushX = dx / dist;
@@ -794,13 +786,21 @@ export class GameSimulation {
         }
       }
 
+      if (e.tow && !w.hitMap.has(-e.id)) {
+        const bx = dx - Math.cos(e.rotation) * 65, by = dy - Math.sin(e.rotation) * 65;
+        const along = bx * cosA + by * sinA;
+        if (!isCircle && Math.abs(along) < 50 && Math.abs(by * cosA - bx * sinA) < w.crestWidth / 2 + 22) {
+          w.hitMap.set(-e.id, w.age);
+          e.tow.strain += Math.abs(sinA * Math.cos(e.rotation) - cosA * Math.sin(e.rotation)) * (1.1 + w.charge);
+        }
+      }
       if (!hit) continue;
 
       if (e.kind === 'fire') {
         const lastHit = w.hitMap.get(e.id) ?? -1;
         if (w.age - lastHit >= 0.2) {
           w.hitMap.set(e.id, w.age);
-          this.damageFire(e, w.power * (w.kind === 'resonance' ? 1.8 : 1 + w.charge));
+          this.damageFire(e, w.power * (1 + w.charge));
           idx = Math.min(idx, this.entities.length);
         }
         continue;
@@ -841,13 +841,20 @@ export class GameSimulation {
           const tdx = targetX - e.x;
           const tdy = targetY - e.y;
           const td = Math.hypot(tdx, tdy) || 1;
-          const blend = Math.min(0.88, 0.28 + stats.aiGuideStrength * 0.34);
-          finalDirX = pushX * (1 - blend) + (tdx / td) * blend;
-          finalDirY = pushY * (1 - blend) + (tdy / td) * blend;
-          const flen = Math.hypot(finalDirX, finalDirY) || 1;
-          finalDirX /= flen;
-          finalDirY /= flen;
-          e.aiGuidedTimer = 0.85;
+          // it only straightens a push that already heads that way: a push away from the net stays a push away,
+          // and far out in the lagoon the help is small
+          const along = (pushX * tdx + pushY * tdy) / td;
+          const aim = Math.max(0, Math.min(1, (along - 0.25) / 0.6));
+          const near = Math.max(0.35, Math.min(1, 1 - (td - 220) / 520));
+          const blend = Math.min(0.6, 0.18 + stats.aiGuideStrength * 0.2) * aim * near;
+          if (blend > 0) {
+            finalDirX = pushX * (1 - blend) + (tdx / td) * blend;
+            finalDirY = pushY * (1 - blend) + (tdy / td) * blend;
+            const flen = Math.hypot(finalDirX, finalDirY) || 1;
+            finalDirX /= flen;
+            finalDirY /= flen;
+            e.aiGuidedTimer = 0.85 * aim;
+          }
         }
       }
 
@@ -939,15 +946,17 @@ export class GameSimulation {
         const ndx = COLLECTOR_NET.x - e.x;
         const ndy = COLLECTOR_NET.y - e.y;
         const ndist = Math.hypot(ndx, ndy);
-        const pullRange = stats.netRadius + 55 + stats.netPull * 1.85;
+        // how fast it is heading for the net; below zero it was just pushed away and the push should win
+        const toward = ndist > 1 ? (e.vx * ndx + e.vy * ndy) / ndist : 0;
+        const pullRange = stats.netRadius + 55 + stats.netPull * 1.1;
         if (!this.netClosed && ndist < pullRange && ndist > 1) {
-          const pullStrength = (1 - ndist / pullRange) * (62 + stats.netPull * 3.3);
+          const pullStrength = (1 - ndist / pullRange) * (62 + stats.netPull * 2.2) * (toward < -30 ? 0.3 : 1);
           e.vx += (ndx / ndist) * pullStrength * dt;
           e.vy += (ndy / ndist) * pullStrength * dt;
         }
 
-        if (!this.netClosed && e.aiGuidedTimer > 0 && stats.aiGuideStrength > 0 && ndist > 1) {
-          const assist = 68 * stats.aiGuideStrength;
+        if (!this.netClosed && e.aiGuidedTimer > 0 && stats.aiGuideStrength > 0 && toward > 0) {
+          const assist = 44 * stats.aiGuideStrength;
           e.vx += (ndx / ndist) * assist * dt;
           e.vy += (ndy / ndist) * assist * dt;
         }
@@ -1076,8 +1085,10 @@ export class GameSimulation {
     const label =
       rarity === 'legendary' ? 'RELIK!' : rarity === 'epic' ? 'BATERAI!' : rarity === 'rare' ? 'PETI!' : undefined;
     this.story.collected(e);
-    const comboMult = 1 + Math.min(0.5, Math.floor(this.comboCount / 3) * 0.1);
-    const pay = Math.round(e.value * comboMult);
+    const comboMult = comboMultiplier(this.comboCount, stats.comboLevel);
+    const extra = e.bundle ? SALVAGE_VALUE[e.bundle] ?? 0 : 0;
+    if (extra) this.incrementCombo(stats);
+    const pay = Math.round((e.value + extra) * comboMult);
     this.award(
       pay,
       COLLECTOR_NET.x + 12 + (Math.random() - 0.5) * 18,
@@ -1085,7 +1096,8 @@ export class GameSimulation {
       label,
       color
     );
-    progress.totalTrash += 1;
+    progress.totalTrash += e.bundle ? 2 : 1;
+    if (e.bundle && ['trash_crate','trash_battery','trash_relic'].includes(e.bundle)) progress.totalRareTrash++;
     if (rarity === 'rare' || rarity === 'epic' || rarity === 'legendary') progress.totalRareTrash += 1;
     this.netPulse = 1;
     if (rarity === 'legendary') {
@@ -1129,7 +1141,7 @@ export class GameSimulation {
 
   private incrementCombo(stats: ComputedStats): void {
     this.comboCount += 1;
-    this.comboTimer = COMBO_WINDOW;
+    this.comboTimer = stats.comboWindow;
     if (stats.comboEnergyReturn > 0) {
       this.energy = Math.min(stats.maxEnergy, this.energy + stats.comboEnergyReturn);
     }

@@ -23,6 +23,10 @@ import {
   raider,
   shieldShip,
   signalShip,
+  rammerShip,
+  tugShip,
+  cargoBarge,
+  salvageBundle,
   skiff,
   smallFish,
   tideCoil,
@@ -83,12 +87,16 @@ const PIRATE_HULLS = {
   [PIRATE_KIND.heavy]: { piece: 'heavy', geometry: heavyRaider, scale: 1.21 },
   [PIRATE_KIND.shield]: { piece: 'shield', geometry: shieldShip, scale: 1.03 },
   [PIRATE_KIND.dumper]: { piece: 'dumper', geometry: dumperShip, scale: 1.05 },
+  [PIRATE_KIND.rammer]: { piece: 'rammer', geometry: rammerShip, scale: 1 },
+  [PIRATE_KIND.tug]: { piece: 'tug', geometry: tugShip, scale: 1.04 },
   [PIRATE_KIND.signal]: { piece: 'signal', geometry: signalShip, scale: 1.02 },
 } as const;
 
 type ShipPiece = (typeof PIRATE_HULLS)[PirateKind]['piece'] | 'pukat' | 'drumship';
 type Piece =
   | ShipPiece
+  | 'barge'
+  | 'bundle'
   | 'float'
   | 'cork'
   | 'drum'
@@ -137,6 +145,10 @@ const WHITE = new THREE.Color(1, 1, 1);
 const ROPE = hex('#e8d3a0');
 const ROPE_DARK = hex('#6f5a3c');
 const TRAWL = hex('#3fae7a');
+const BAMBOO = hex('#d7bb72');
+const FOAM_ARROW = hex('#a1fff2');
+const RAM_WAKE = hex('#ffb677');
+const TOW_STRAIN = hex('#ff9c54');
 const CHAIN = hex('#5a1a1a');
 const OILED = hex('#57496a');
 const CLOSED = hex('#b8302a');
@@ -220,6 +232,8 @@ export class StoryLayer {
       this.batch[k] = { im, data: im.geometry.attributes.aInst as THREE.InstancedBufferAttribute, n: 0 };
       this.group.add(im);
     };
+    add('bundle', salvageBundle(), 96);
+    add('barge', cargoBarge(), 12);
     for (const { piece, geometry } of Object.values(PIRATE_HULLS)) add(piece, geometry(), 48);
     add('pukat', trawlShip(), 4);
     add('drumship', drumShip(), 4);
@@ -405,15 +419,55 @@ export class StoryLayer {
     if (live) {
       this.moorBoats(dt, sim);
       this.pier(dt, sim);
+      if (sim.story.s.marks.fender) {
+        const x = toX(PIER_END.x), z = toZ(PIER_END.y);
+        const h = this.water.heightAt(x + 0.8, z, this.t, this.swell) + 0.36;
+        for (const offset of [0.28, 0.78, 1.28]) {
+          this.line(x + offset, h, z - 2.65, x + offset, h, z + 2.65, 0.22, BAMBOO);
+        }
+        for (const dz of [-1.85, 0, 1.85]) {
+          this.line(x + 0.14, h + 0.22, z + dz, x + 1.42, h + 0.22, z + dz, 0.08, ROPE_DARK);
+          this.line(x - 0.35, DECK + 0.08, z + dz, x + 0.32, h + 0.16, z + dz, 0.07, ROPE);
+        }
+      }
       for (const e of sim.entities) this.entity(e, dt, sim);
       this.gear(sim);
       this.longRope(sim);
       this.current(dt, sim);
+      const lane = sim.tidalLane;
+      const drag = sim.drag;
+      if (lane) this.flowArrows(lane.x, lane.y, lane.angle, lane.length, FOAM_ARROW, true);
+      else if (drag.active && sim.progress.story.flags.toolbox && sim.laneCooldown <= 0 && drag.charge >= 0.42) {
+        this.flowArrows(drag.startX, drag.startY, Math.atan2(drag.currY - drag.startY, drag.currX - drag.startX), 230 + sim.stats.laneLevel * 30, FOAM_ARROW, false);
+      }
     }
     this.lamp(dt, sim, live, look);
     this.pod(dt, sim, live);
     this.schools(sim, live, rescue);
     this.flush();
+  }
+
+  private flowArrows(x: number, y: number, angle: number, length: number, color: THREE.Color, active = false): void {
+    const dx = Math.cos(angle), dy = Math.sin(angle);
+    const shift = active ? (this.t * 0.65) % 0.31 : 0;
+    const isWarn = color === RAM_WAKE;
+    for (let i = 0; i < 3; i++) {
+      const fraction = 0.16 + i * 0.31 + shift;
+      if (fraction > 0.96) continue;
+      const fade = Math.sin(clamp(fraction, 0.05, 0.96) * Math.PI);
+      const ax = toX(x + dx * length * fraction), az = toZ(y + dy * length * fraction);
+      const h = this.floatAt(ax, az, 0.4) + 0.14;
+      this.fx.sprites.push(
+        ax - dx * 0.7, 0.11, az - dy * 0.7,
+        2.5, 1.15, angle,
+        isWarn ? 1.35 : 0.76, isWarn ? 0.68 : 0.98, isWarn ? 0.36 : 0.96,
+        (active ? 0.48 : 0.34) * fade,
+        SP.puff, MODE.flat, isWarn ? 0.45 : 0.25, 0.35, i * 0.27
+      );
+      for (const side of [-1, 1]) {
+        this.line(ax - dx * 1.25 + dy * side * 0.88, h, az - dy * 1.25 - dx * side * 0.88, ax, h, az, 0.1, color);
+      }
+    }
   }
 
   private flush(): void {
@@ -596,6 +650,15 @@ export class StoryLayer {
     const x = toX(e.x);
     const z = toZ(e.y);
     const s = sim.story.s;
+    if (e.bundle) {
+      const gap = Math.max(1.45, e.radius * UNIT + 0.52);
+      const [bx, bz] = this.local(e, x, z, -gap * 0.72, gap * 0.69);
+      const h = this.floatAt(bx, bz, 0.5);
+      const by = h - 0.04 + Math.sin(e.bobPhase + 1.2) * 0.06;
+      this.put('bundle', bx, by, bz, -e.rotation + 0.35, 0.78, { tilt: 0.8 });
+      this.fx.sprites.shadow(bx, bz, 0.92, 0.62, e.rotation, 0.18, 0.28);
+      this.rope(x, h + 0.32, z, bx, by + 0.32, bz, 0.18, 4, 0.05, ROPE);
+    }
     switch (e.kind) {
       case 'toolbox':
         this.chest(e, x, z, dt);
@@ -604,6 +667,28 @@ export class StoryLayer {
         const variant = pirateKind(e.variant);
         const { piece, scale } = PIRATE_HULLS[variant];
         this.ship(piece, e, x, z, scale, dt);
+        if (variant === PIRATE_KIND.tug) {
+          const [sx, sz] = this.local(e, x, z, -1.58 * scale, -0.32 * scale);
+          if (this.r() < dt * 5) this.fx.spray(sx, 3.6 * scale, sz, 0.5, 1.1, (this.r() - 0.5) * 0.4, lerp(0.45, 0.8, this.r()), 1.4, 1);
+        }
+        if (e.ram?.phase === 'aim') this.flowArrows(e.x, e.y, e.ram.angle, 240, RAM_WAKE, true);
+        if (e.tow && e.tag !== 'leaving') {
+          const dx = Math.cos(e.rotation), dz = Math.sin(e.rotation);
+          const bx = toX(e.x - dx * 82), bz = toZ(e.y - dz * 82);
+          const h = this.floatAt(bx, bz, 0.6);
+          const by = h * 0.78 + 0.08 + Math.sin(this.t * 1.4 + e.id) * 0.05;
+          this.put('barge', bx, by, bz, -e.rotation, 1, { tilt: 0.7, roll: Math.sin(this.t * 1.5 + e.id) * 0.04 });
+          this.fx.sprites.shadow(bx, bz, 2.75, 1.38, e.rotation, 0.68, 0.36);
+          this.fx.sprites.push(bx, 0.1, bz, 2.9, 2.2, -e.rotation, 1, 1, 1, 0.2, SP.ring, MODE.flat, 0, 0.9);
+          const strain = clamp(e.tow.strain, 0, 1);
+          const ax = x - dx * 2.95 * scale, az = z - dz * 2.95 * scale;
+          const cx = bx + dx * 1.94, cz = bz + dz * 1.94;
+          const sag = 0.48 * (1 - strain * 0.88);
+          this.rope(ax, h + 1.38, az, cx, by + 1.12, cz, sag, 7, 0.08, strain > 0.25 ? TOW_STRAIN : ROPE);
+          const mx = (ax + cx) * 0.5, mz = (az + cz) * 0.5;
+          const my = Math.max(this.water.heightAt(mx, mz, this.t, this.swell) + 0.16, (h + 1.38 + by + 1.12) * 0.5 - sag);
+          this.put('cork', mx, my, mz, -e.rotation, 0.54);
+        }
         if (variant === PIRATE_KIND.signal && e.tag !== 'leaving') {
           this.ring(x, z, PIRATE_SIGNAL_RADIUS * UNIT, [1.55, 0.96, 0.37], 0.24 + 0.06 * Math.sin(this.t * 2), SP.dash);
         }

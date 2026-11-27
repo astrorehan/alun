@@ -5,6 +5,9 @@ import { G, outlineMaterial, toon, type ToonPair } from './gfx';
 import { inked, mesh } from './kit';
 import { clamp, groundAt, lerp, rng, shoreAt, smooth, toX, toZ } from './space';
 
+import { movingPerson, type PersonLook, type PersonRig } from './people';
+export { person } from './people';
+
 export const PIER = { x: toX(VILLAGE_PIER.x), z: toZ(VILLAGE_PIER.y) };
 const _c = new THREE.Color();
 
@@ -218,50 +221,13 @@ function house(b: Build, o: HouseOpt): void {
 
 /* ------------------------------------------------------------------ people */
 
-export interface PersonLook {
-  shirt: string;
-  sarong: string;
-  skin?: string;
-  hat?: 'caping' | 'kerudung' | 'none' | 'peci';
-  hatCol?: string;
-  scale?: number;
-}
-
-export function person(o: PersonLook): THREE.BufferGeometry {
-  const b = new Build(1);
-  const skin = o.skin ?? '#b97a50';
-  b.cyl(0.3, 0.36, 0.8, { color: o.sarong, pos: [0, 0.42, 0], seg: 9, ao: (p) => lerp(0.65, 1, smooth(0, 0.7, p.y)) });
-  b.cyl(0.365, 0.365, 0.09, { color: '#f4d27a', pos: [0, 0.16, 0], seg: 9 });
-  b.add(new THREE.CapsuleGeometry(0.31, 0.4, 3, 9), { color: o.shirt, pos: [0, 1.06, 0], scale: [1, 1, 0.82] });
-  b.ball(0.29, { color: skin, pos: [0, 1.68, 0.02], seg: 11 });
-  for (const s of [-1, 1]) b.ball(0.035, { color: '#22160f', pos: [s * 0.1, 1.7, 0.28], seg: 5 });
-  for (const s of [-1, 1]) {
-    b.bar([s * 0.3, 1.28, 0], [s * 0.46, 0.86, 0.16], 0.1, 0.085, { color: o.shirt, sway: 0 });
-    b.ball(0.1, { color: skin, pos: [s * 0.47, 0.82, 0.18], seg: 6 });
-  }
-  if (o.hat === 'caping') {
-    b.add(new THREE.ConeGeometry(0.62, 0.36, 14), { color: '#e2c27a', top: '#c89a4a', pos: [0, 1.98, 0] });
-    b.cyl(0.63, 0.6, 0.05, { color: '#a8783a', pos: [0, 1.82, 0], seg: 14 });
-  } else if (o.hat === 'kerudung') {
-    b.ball(0.35, { color: o.hatCol ?? '#e8607a', pos: [0, 1.73, -0.05], seg: 11, scale: [1, 1.05, 1] });
-    b.add(new THREE.ConeGeometry(0.44, 0.6, 10), { color: o.hatCol ?? '#e8607a', pos: [0, 1.36, -0.03] });
-    b.ball(0.25, { color: skin, pos: [0, 1.68, 0.14], seg: 10 });
-    for (const s of [-1, 1]) b.ball(0.035, { color: '#22160f', pos: [s * 0.09, 1.71, 0.37], seg: 5 });
-  } else if (o.hat === 'peci') {
-    b.cyl(0.27, 0.3, 0.24, { color: '#20242c', pos: [0, 1.92, 0], seg: 11 });
-  } else {
-    b.ball(0.3, { color: '#22160f', pos: [0, 1.76, -0.06], seg: 9 });
-  }
-  const s = o.scale ?? 1;
-  return b.geo(true).scale(s, s, s);
-}
-
 interface Actor {
-  m: THREE.Mesh;
+  rig: PersonRig;
   base: THREE.Vector3;
   yaw: number;
   ph: number;
   cheer: number;
+  wave: number;
   walk?: { a: THREE.Vector3; b: THREE.Vector3; sp: number };
 }
 
@@ -629,23 +595,24 @@ export class Village {
 
     /* ---------------- villagers */
     const add = (l: PersonLook, x: number, z: number, yaw: number, y?: number, walk?: Actor['walk']): void => {
-      const m = inked(mesh(person(l), pair), dynInk);
+      const rig = movingPerson(l, pair, dynInk);
+      const m = rig.root;
       const gy = y ?? groundAt(x, z);
       m.position.set(x, gy, z);
       m.frustumCulled = false;
       this.dynGroup.add(m);
-      this.folk.push({ m, base: new THREE.Vector3(x, gy, z), yaw, ph: r() * 6, cheer: 0, walk });
+      this.folk.push({ rig, base: new THREE.Vector3(x, gy, z), yaw, ph: r() * 6, cheer: 0, wave: 0, walk });
     };
     // Bu Sari waits at the end of the pier
-    add({ shirt: '#f2c14a', sarong: '#7a4fb0', hat: 'kerudung', hatCol: '#e8607a', scale: 1.12 }, x1 + 1.9, pz + 0.5, 1.2, deckY + 0.06);
+    add({ shirt: '#28828b', sarong: '#504465', skin: '#ed9e6d', hat: 'kerudung', hatCol: '#793c81', goggles: true, scale: 1.12 }, x1 + 1.9, pz + 0.5, 1.2, deckY + 0.06);
     add({ shirt: '#f7f2e6', sarong: '#2f6f9c', hat: 'caping', scale: 1.1 }, x0 + 5.4, pz - 0.2, 0.9, deckY + 0.06);
     add({ shirt: '#3fae7a', sarong: '#8a5a3a', hat: 'peci', scale: 1.1 }, px - 4.2, pz - 5.8, 0.6);
-    add({ shirt: '#e8503e', sarong: '#34404c', hat: 'none', scale: 0.78 }, px - 3.4, pz - 9.2, 0.4, undefined, {
+    add({ shirt: '#e8503e', sarong: '#34404c', hat: 'none', shorts: true, scale: 0.78 }, px - 3.4, pz - 9.2, 0.4, undefined, {
       a: new THREE.Vector3(px - 3.4, 0, pz - 9.4),
       b: new THREE.Vector3(shoreAt(pz - 18) - 4.4, 0, pz - 18),
       sp: 0.16,
     });
-    add({ shirt: '#5fb0e0', sarong: '#f2a03a', hat: 'none', scale: 0.74 }, px - 4.4, pz - 10.2, 0.4, undefined, {
+    add({ shirt: '#5fb0e0', sarong: '#f2a03a', hat: 'none', shorts: true, ponytail: true, scale: 0.74 }, px - 4.4, pz - 10.2, 0.4, undefined, {
       a: new THREE.Vector3(px - 4.6, 0, pz - 10),
       b: new THREE.Vector3(shoreAt(pz - 17) - 5.6, 0, pz - 17.4),
       sp: 0.15,
@@ -662,22 +629,39 @@ export class Village {
   update(dt: number, t: number, waterAt: (x: number, z: number) => number): void {
     for (const f of this.folk) {
       f.cheer = Math.max(0, f.cheer - dt * 0.9);
-      const hop = f.cheer > 0 ? Math.abs(Math.sin(t * 11 + f.ph)) * 0.5 * Math.min(1, f.cheer * 2) : 0;
+      const { root, head, arms, forearms, legs } = f.rig;
+      const phase = t * 5.8 + f.ph;
+      f.wave = lerp(f.wave, smooth(0, 0.45, f.cheer), 1 - Math.exp(-12 * dt));
+      const cheer = f.wave;
+      const hop = Math.max(0, Math.sin(phase * 1.45)) ** 1.4 * 0.24 * cheer;
+      let gait = 0;
       if (f.walk) {
         const u = t * f.walk.sp + f.ph;
         const k = 0.5 - 0.5 * Math.cos(u);
         const x = lerp(f.walk.a.x, f.walk.b.x, k) + Math.sin(u * 3.1) * 0.7;
         const z = lerp(f.walk.a.z, f.walk.b.z, k);
-        const dir = Math.sin(u) >= 0 ? 1 : -1;
-        const y = groundAt(x, z);
-        f.m.position.set(x, y + Math.abs(Math.sin(t * 7 + f.ph)) * 0.14 + hop, z);
-        f.m.rotation.y = Math.atan2((f.walk.b.x - f.walk.a.x) * dir, (f.walk.b.z - f.walk.a.z) * dir);
+        const dx = (f.walk.b.x - f.walk.a.x) * 0.5 * Math.sin(u) + 2.17 * Math.cos(u * 3.1);
+        const dz = (f.walk.b.z - f.walk.a.z) * 0.5 * Math.sin(u);
+        const yaw = Math.atan2(dx, dz);
+        root.rotation.y += Math.atan2(Math.sin(yaw - root.rotation.y), Math.cos(yaw - root.rotation.y)) * (1 - Math.exp(-8 * dt));
+        gait = clamp(Math.hypot(dx, dz) * f.walk.sp, 0, 1);
+        root.position.set(x, groundAt(x, z) + gait * 0.032 * Math.abs(Math.cos(phase)) + hop, z);
       } else {
-        f.m.position.y = f.base.y + Math.sin(t * 2 + f.ph) * 0.03 + hop;
-        f.m.rotation.y = f.yaw + Math.sin(t * 0.5 + f.ph) * 0.35;
+        root.position.y = f.base.y + hop;
+        root.rotation.y = f.yaw + Math.sin(t * 0.5 + f.ph) * 0.12;
       }
-      const sq = 1 + Math.sin(t * 2.4 + f.ph) * 0.015;
-      f.m.scale.set(1, sq, 1);
+      const step = Math.sin(phase) * gait;
+      head.rotation.set(0.045 * Math.sin(t * 2 + f.ph) - cheer * 0.12, 0.25 * Math.sin(t * 0.87 + f.ph), -step * 0.055);
+      root.rotation.z = step * 0.041;
+      for (let i = 0; i < 2; i++) {
+        const side = i ? 1 : -1;
+        legs[i].rotation.x = side * step * 0.57;
+        arms[i].rotation.x = -side * step * 0.48 - 0.13 + 0.07 * Math.sin(t * 1.7 + f.ph);
+        const wave = Math.sin(phase * 1.47 + i * 0.84);
+        arms[i].rotation.z = side * (0.045 + cheer * (1.09 + 0.19 * wave));
+        forearms[i].rotation.x = -0.25 - 0.22 * (1 + side * step) - cheer * 0.19;
+        forearms[i].rotation.z = side * cheer * (0.72 + 0.38 * wave);
+      }
     }
     this.moored.forEach((m, i) => {
       const h = waterAt(m.position.x, m.position.z);

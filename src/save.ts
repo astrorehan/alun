@@ -28,10 +28,11 @@ export interface Loaded {
 const num = (v: unknown, fallback: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
 
 function upgradesFrom(raw: unknown): Record<UpgradeId, number> {
-  const src = (raw ?? {}) as Partial<Record<UpgradeId, unknown>>;
+  const src = (raw ?? {}) as Partial<Record<UpgradeId | 'resonance_burst', unknown>>;
   const out = {} as Record<UpgradeId, number>;
   for (const def of UPGRADE_DEFS) {
-    out[def.id] = Math.max(0, Math.min(def.maxLevel, Math.floor(num(src[def.id], 0))));
+    const level = src[def.id] ?? (def.id === 'tidal_lane' ? src.resonance_burst : 0);
+    out[def.id] = Math.max(0, Math.min(def.maxLevel, Math.floor(num(level, 0))));
   }
   out.core = 1;
   return out;
@@ -54,7 +55,7 @@ function storyFrom(raw: unknown, maxPierHp: number): StoryState {
     day,
     chapter: Math.max(1, Math.floor(num(src.chapter, day))),
     cycle,
-    dayTime: Math.max(0, num(src.dayTime, 0)),
+    dayTime: Math.max(0, num(src.dayTime, 0) * (src.marks?.shortDays ? 1 : 0.6)),
     nightTime: Math.max(0, num(src.nightTime, 0)),
     maxPierHp: Math.max(BASE_PIER_HP, num(src.maxPierHp, maxPierHp)),
     pierHp: Math.max(0, Math.min(maxPierHp, num(src.pierHp, maxPierHp))),
@@ -116,7 +117,7 @@ function progressFrom(raw: Partial<PlayerProgress>): PlayerProgress {
     totalBoats: num(raw.totalBoats, 0),
     totalFires: num(raw.totalFires, 0),
     totalWaves: num(raw.totalWaves, 0),
-    totalResonances: num(raw.totalResonances, 0),
+    totalCurrents: num(raw.totalCurrents, 0),
     victoryAchieved: Boolean(raw.victoryAchieved),
     endlessMode: Boolean(raw.endlessMode),
     journalSeen: Array.isArray(raw.journalSeen) ? raw.journalSeen : [],

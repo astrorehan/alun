@@ -14,7 +14,7 @@ export type UpgradeId =
   | 'wave_power'
   | 'tidal_charge'
   | 'echo_wave'
-  | 'resonance_burst'
+  | 'tidal_lane'
   | 'tidal_energy'
   | 'energy_regen'
   | 'combo_flow'
@@ -56,7 +56,7 @@ export interface UpgradeDef {
     | 'power'
     | 'charge'
     | 'echo'
-    | 'resonance'
+    | 'current'
     | 'energy'
     | 'regen'
     | 'combo'
@@ -73,7 +73,7 @@ export interface UpgradeDef {
     | 'shield';
 }
 
-export type WaveKind = 'directional' | 'ripple' | 'echo' | 'resonance' | 'buoy_pulse';
+export type WaveKind = 'directional' | 'ripple' | 'echo' | 'buoy_pulse';
 
 export interface Wave {
   id: number;
@@ -92,7 +92,6 @@ export interface Wave {
   age: number;
   maxAge: number;
   hitMap: Map<number, number>;
-  resonatedWith: Set<number>;
   triggeredBuoys: Set<number>;
   isEcho?: boolean;
 }
@@ -156,6 +155,7 @@ export interface Entity {
   stranded?: boolean;
   /** One of the six pieces that close the pier at the start. */
   opening?: boolean;
+  bundle?: EntityKind;
   /** Pollution this very thing added, taken back when it is lifted. */
   pollution?: number;
   /** Which part of a job this is ("A" and "B" for the two ends of a trawl). */
@@ -169,6 +169,8 @@ export interface Entity {
   pirateDmg?: number;
   pirateBounty?: number;
   pirateDumpTime?: number;
+  ram?: { phase: 'aim' | 'rush' | 'stun'; time: number; angle: number };
+  tow?: { strain: number; returning: boolean };
   anchorIdx?: number;
   attackWork?: number;
 }
@@ -262,7 +264,7 @@ export interface PlayerProgress {
   totalBoats: number;
   totalFires: number;
   totalWaves: number;
-  totalResonances: number;
+  totalCurrents: number;
   victoryAchieved: boolean;
   endlessMode: boolean;
   /** Village journal pages already opened by the player. */
@@ -356,13 +358,14 @@ export interface SavedTrash {
   snagged?: boolean;
   stranded?: boolean;
   opening?: boolean;
+  bundle?: EntityKind;
   pollution?: number;
 }
 
 export type CyclePhase = 'prep' | 'day' | 'night';
 
 /** Stable IDs for pirate variants in saves and wave plans. */
-export const PIRATE_KIND = { raider: 0, skiff: 1, heavy: 2, shield: 3, dumper: 4, signal: 5 } as const;
+export const PIRATE_KIND = { raider: 0, skiff: 1, heavy: 2, shield: 3, dumper: 4, signal: 5, rammer: 6, tug: 7 } as const;
 export type PirateKind = (typeof PIRATE_KIND)[keyof typeof PIRATE_KIND];
 
 export interface SavedPirate {
@@ -378,7 +381,11 @@ export interface SavedPirate {
   dmg: number;
   bounty: number;
   rotation?: number;
+  vx?: number;
+  vy?: number;
   dumpTime?: number;
+  ram?: { phase: 'aim' | 'rush' | 'stun'; time: number; angle: number };
+  tow?: { strain: number; returning: boolean };
 }
 
 export interface WaveSpawn {
@@ -391,6 +398,9 @@ export interface WaveSpawn {
 }
 
 export interface StoryState {
+  tidalLane?: { x: number; y: number; angle: number; left: number; length: number };
+  laneReadyAt?: number;
+  morningJob?: JobState;
   version: 4;
   /** Current day (1..5 for story climax, 6+ for endless). */
   day: number;
@@ -466,8 +476,12 @@ export interface ComputedStats {
   chargeUnlocked: boolean;
   maxChargeBonus: number;
   echoCount: number;
-  resonanceLevel: number;
+  laneLevel: number;
   comboEnergyReturn: number;
+  /** Seconds a run of catches waits for the next one. */
+  comboWindow: number;
+  /** Harmoni Kombo level: faster and higher coin bonus for a run of catches. */
+  comboLevel: number;
   aiGuideStrength: number;
   aiSonarLevel: number;
   /** Extra hull damage multiplier from Sonar prediction targeting. */

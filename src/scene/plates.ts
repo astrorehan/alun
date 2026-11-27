@@ -34,6 +34,8 @@ const PIRATE_PLATE_DROP: Record<PirateKind, number> = {
   [PIRATE_KIND.shield]: 4.7,
   [PIRATE_KIND.dumper]: 5.4,
   [PIRATE_KIND.signal]: 4.7,
+  [PIRATE_KIND.rammer]: 4,
+  [PIRATE_KIND.tug]: 4,
 };
 
 function plateFor(sim: GameSimulation, e: Entity): Plate | null {
@@ -45,6 +47,9 @@ function plateFor(sim: GameSimulation, e: Entity): Plate | null {
       const variant = pirateKind(e.variant);
       const drop = PIRATE_PLATE_DROP[variant];
       const hpBar = variant === PIRATE_KIND.heavy ? Math.max(0, e.hp / Math.max(1, e.maxHp)) : hurt(e);
+      if (e.ram?.phase === 'aim') return at(drop, 'BIDIK DERMAGA', 'busy', 1 - e.ram.time / 2, hpBar);
+      if (e.ram?.phase === 'stun') return at(drop, 'OLENG!', 'open', -1, hpBar);
+      if (e.tow) return at(drop, 'SAPU TONGKANG', 'busy', Math.min(1, e.tow.strain), hpBar);
       if (e.tag === 'attack') {
         return at(drop, 'SERANG DERMAGA!', 'busy', e.attackWork ?? 0, hpBar);
       }

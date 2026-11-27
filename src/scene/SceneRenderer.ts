@@ -962,6 +962,7 @@ void main(){ gl_FragColor = vec4(texture2D(tSrc, vUv).rgb, uOpacity); }`,
     this.text.resize(w, h, Math.min(2, window.devicePixelRatio || 1));
     G.uRes.value.set(pw, ph);
     this.director.fit(w / h, w > h && window.matchMedia('(pointer: coarse)').matches);
+    this.flora.updatePlayCulling(this.director.playPose, w / h);
     this.staticValid = false;
     this.movingCamera = false;
     this.cameraBlend = 0;
@@ -1000,8 +1001,8 @@ void main(){ gl_FragColor = vec4(texture2D(tSrc, vUv).rgb, uOpacity); }`,
   }
 
   /**
-   * Multi-frame horizontal scissor-band static refresh into pre-allocated rtStaticBack so gradual
-   * ToD/eco/litter transitions stay under ~4 ms per frame and swap atomically with zero hitches.
+   * Refreshes the cached world in scissor bands for gradual coast and litter changes.
+   * The back buffer only becomes visible once all bands are ready.
    */
   private stepIncrementalRefresh(cam: THREE.Camera): void {
     const back = this.rtStaticBack;
@@ -1024,11 +1025,6 @@ void main(){ gl_FragColor = vec4(texture2D(tSrc, vUv).rgb, uOpacity); }`,
       this.pendingSunDir.copy(this.look.sunDir);
       this.pendingSunCol.copy(this.look.sun);
       this.refreshStage = 1;
-      if (this.look.sunDir.distanceToSquared(this.cachedShadowSunDir) > 0.0004) {
-        this.shadow.render(this.gl, [this.worldScene], this.shadowCenter);
-        this.cachedShadowSunDir.copy(this.look.sunDir);
-        return;
-      }
     }
 
     const band = this.refreshStage - 1;
@@ -1142,8 +1138,19 @@ void main(){ gl_FragColor = vec4(texture2D(tSrc, vUv).rgb, uOpacity); }`,
 
     const cam = this.director.camera;
     const cine = this.director.cinematic();
-    // In overhead gameplay view, land covers the entire screen so the sky dome can be skipped.
+    // In overhead gameplay view, land covers the entire screen so the sky dome and off-screen/hidden forest meshes can be skipped.
     this.sky.mesh.visible = cine > 0.01;
+    const playOnly =
+      !onTitle &&
+      !this.director.inCutscene &&
+      !this.director.focused &&
+      cam.position.distanceToSquared(this.director.playPose.pos) < 4;
+    if (this.flora.setPlayMode(playOnly)) {
+      this.staticValid = false;
+      this.refreshStage = -1;
+      this.shadow.invalidateStatic();
+      this.cachedShadowSunDir.set(0, 0, 0);
+    }
 
     this.reef.update(this.time, sim);
     if (this.beach.update(dt, this.eco)) this.litterDirty = true;
@@ -1193,6 +1200,7 @@ void main(){ gl_FragColor = vec4(texture2D(tSrc, vUv).rgb, uOpacity); }`,
 
     if (Q.cached) {
       const settled = this.director.isSettled();
+      const shadowDirty = !this.look.sunDir.equals(this.cachedShadowSunDir);
       // Keep one reduced-resolution frame at the exact resting pose for a short blend into the cache.
       const movingView = !settled || this.movingCamera;
       this.movingCamera = !settled;
@@ -1200,14 +1208,16 @@ void main(){ gl_FragColor = vec4(texture2D(tSrc, vUv).rgb, uOpacity); }`,
       G.uRes.value.set(output?.width ?? this.rtStatic.width, output?.height ?? this.rtStatic.height);
       if (movingView) {
         this.refreshStage = -1;
-        this.renderStaticFull(cam, this.rtScene, this.cachedShadowSunDir.lengthSq() === 0);
+        this.renderStaticFull(cam, this.rtScene, shadowDirty);
       } else if (
         !this.staticValid ||
         this.cachedPoseVersion !== this.director.poseVersion ||
+        // Keep land and water on the same shadow map throughout a lighting transition.
+        shadowDirty || this.lastTod !== tod ||
         (this.fixedDt !== null && this.staticNeedsGradualRefresh())
       ) {
         this.refreshStage = -1;
-        this.renderStaticFull(cam, this.rtStatic, this.look.sunDir.distanceToSquared(this.cachedShadowSunDir) > 0.0004);
+        this.renderStaticFull(cam, this.rtStatic, shadowDirty);
         this.recordStaticState();
       } else if (this.refreshStage >= 0) {
         this.stepIncrementalRefresh(cam);
@@ -1339,7 +1349,7 @@ void main(){ gl_FragColor = vec4(texture2D(tSrc, vUv).rgb, uOpacity); }`,
   /** Turns waves reaching the sand into run-up, so the beach answers every swipe. */
   private trackShore(sim: GameSimulation, _stats: ComputedStats): void {
     for (const w of sim.waves) {
-      const ring = w.kind === 'ripple' || w.kind === 'resonance' || w.kind === 'buoy_pulse';
+      const ring = w.kind === 'ripple' || w.kind === 'buoy_pulse';
       const z = toZ(w.y);
       const sx = shoreAt(z);
       if (!ring) {
@@ -1351,7 +1361,7 @@ void main(){ gl_FragColor = vec4(texture2D(tSrc, vUv).rgb, uOpacity); }`,
         }
       } else if (toX(w.x) - w.radius * UNIT < sx + 2 && !this.hitShore.has(w.id)) {
         this.hitShore.set(w.id, this.time);
-        this.shore.push(z, w.radius * UNIT * 0.6, w.kind === 'resonance' ? 0.9 : 0.5);
+        this.shore.push(z, w.radius * UNIT * 0.6, 0.5);
       }
     }
     for (const [id, t] of this.hitShore) if (this.time - t > 4) this.hitShore.delete(id);
