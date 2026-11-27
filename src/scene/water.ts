@@ -326,6 +326,7 @@ void main(){
     const initDefs: Record<string, number> = { ...qualityDefines(), WATER_DETAIL: Q.waterDetail };
     if (Q.cached) initDefs.SPLIT_WATER = 1;
     this.material = new THREE.ShaderMaterial({
+      glslVersion: THREE.GLSL3,
       defines: initDefs,
       uniforms: {
         ...G,
@@ -765,18 +766,10 @@ const swellGlsl = SWELLS.map(
     float sa = ${s[4].toFixed(4)} * k; o.y += sin(sp) * sa; o.xz += sd * cos(sp) * sa * .8; g += sd * cos(sp) * sa * ${s[2].toFixed(3)}; }`
 ).join('');
 
-export const WATER_FN = /* glsl */ `
+export const GLSL_SURF = /* glsl */ `
 #ifndef NZ_LOD
 #define NZ_LOD(f) 0.
 #endif
-vec2 fieldUv(vec2 xz){ return (xz - uField.xy) / uField.zw; }
-float inField(vec2 uv){ vec2 b = min(uv, 1. - uv); return smoothstep(0., .025, min(b.x, b.y)); }
-float softH(float h){ return tanh(h / 4.6) * 4.6; }
-vec3 swellAt(vec2 xz, float k, out vec2 g){
-  vec3 o = vec3(0.); g = vec2(0.);
-  ${swellGlsl}
-  return o;
-}
 /** small breakers that roll up to the beach: x height, y breaking lip, z foam left behind it, w slope */
 vec4 surfAt(float d, float z){
   float n = textureLod(uNoise, vec2(z * .013, uTime * .006), NZ_LOD(.013)).b;
@@ -800,6 +793,18 @@ vec4 surfAt(float d, float z){
   float line = smoothstep(.5 - w, .5 - w * .4, x) * (1. - smoothstep(.5 + w * .3, .5 + w * 1.3, x)) * smoothstep(.1, .5, a * near);
   float trail = smoothstep(.492, .5, x) * (1. - smoothstep(.5, .5 + .15 * a, x)) * a * near;
   return vec4(lift * a * .38, line, trail, slope);
+}
+`;
+
+export const WATER_FN = /* glsl */ `
+${GLSL_SURF}
+vec2 fieldUv(vec2 xz){ return (xz - uField.xy) / uField.zw; }
+float inField(vec2 uv){ vec2 b = min(uv, 1. - uv); return smoothstep(0., .025, min(b.x, b.y)); }
+float softH(float h){ return tanh(h / 4.6) * 4.6; }
+vec3 swellAt(vec2 xz, float k, out vec2 g){
+  vec3 o = vec3(0.); g = vec2(0.);
+  ${swellGlsl}
+  return o;
 }
 vec3 waterPosEx(vec2 xz, out float hWave, out float surfF, out vec3 swOut){
   vec2 uv = fieldUv(xz);
@@ -832,72 +837,13 @@ vec3 waterPos(vec2 xz, out float hWave, out float surfF){
 }
 `;
 
-const WATER_FRAG = (rocks: number): string => /* glsl */ `
-${GLSL_UNIFORMS}
-${GLSL_LIGHT}
-#include <packing>
-uniform sampler2D tWave, tWave1, tFoam, tRipple, tNrm, tScene, tDepth;
-uniform vec2 uWaterSurfRes;
-uniform mat4 uInvVP;
-uniform vec2 uNearFar;
-uniform vec4 uField;
-uniform vec3 uShallow, uMid, uDeep, uAbyss, uCrest, uFoamC, uFoamS, uZenith, uHorizon, uGlow;
-uniform float uCaustic, uGlint, uSheen, uSwell, uMurk, uRain, uPxK, uCine, uWaterActive;
-uniform vec3 uRocks[${rocks}];
-uniform vec4 uNet;
-varying vec3 vWP; varying vec2 vXZ; varying float vZ; varying float vH; varying float vSurf; varying vec3 vSw;
-
-// World units per pixel. Noise is always fetched with an explicit level, which is what lets the
-// branches below be real: open water skips everything that belongs to crests, beach and rocks.
+export const GLSL_WATER_NOISE = /* glsl */ `
 float pxw;
 #define NZ_LOD(f) max(0., log2(pxw * (f) * 512.))
-${WATER_FN}
 vec4 nz(vec2 uv, float f){ return textureLod(uNoise, uv, NZ_LOD(f)); }
+`;
 
-vec3 worldAt(vec2 uv, float z){
-  vec4 p = uInvVP * vec4(uv * 2. - 1., z * 2. - 1., 1.);
-  return p.xyz / p.w;
-}
-float lin(float z){ return -perspectiveDepthToViewZ(z, uNearFar.x, uNearFar.y); }
-float shadowAt(vec3 wp){
-  vec4 sc = uShadowMat * vec4(wp + vec3(0., .14, 0.) + uSunDir * .05, 1.);
-  vec3 p = sc.xyz / sc.w * .5 + .5;
-  vec2 e = min(p.xy, 1. - p.xy);
-  float edge = smoothstep(0., .04, min(e.x, e.y));
-  if (edge <= 0. || p.z > 1.) return 1.;
-  float z = p.z - .0009;
-  #if WATER_DETAIL <= 1
-    return mix(1., textureLod(uShadowMap, vec3(p.xy, z), 0.), edge);
-  #else
-    vec2 t = uShadowTexel * 1.3;
-    float s = textureLod(uShadowMap, vec3(p.xy, z), 0.);
-    s += textureLod(uShadowMap, vec3(p.xy + t * vec2( .9,  .4), z), 0.);
-    s += textureLod(uShadowMap, vec3(p.xy + t * vec2(-.4,  .9), z), 0.);
-    s += textureLod(uShadowMap, vec3(p.xy + t * vec2(-.9, -.4), z), 0.);
-    s += textureLod(uShadowMap, vec3(p.xy + t * vec2( .4, -.9), z), 0.);
-    return mix(1., s * .2, edge);
-  #endif
-}
-float web(vec2 p, float t){
-  vec4 w4 = nz(p * .032 + vec2(t * .011, -t * .008), .032);
-  vec2 w = w4.ba - .5;
-  float thick = .07 + .16 * w4.b;
-  float a = nz(p * .115 + w * .16 + vec2(t * .012, t * .006), .115).g;
-  float l = 1. - smoothstep(thick * .25, thick, a);
-  #if WATER_DETAIL >= 2
-    float b = nz(p * .27 - w * .14 - vec2(t * .009, -t * .013), .27).g;
-    l = max(l, (1. - smoothstep(.02, .17, b)) * .62);
-  #endif
-  return l;
-}
-float causticAt(vec2 p){
-  float t = uTime;
-  vec2 w = nz(p * .035 + t * .008, .035).ba - .5;
-  float a = nz(p * .056 + w * .12 + vec2(t * .011, t * .006), .056).g;
-  float b = nz(p * .044 - w * .1 - vec2(t * .009, -t * .012), .044).g;
-  float m = min(a, b);
-  return pow(1. - smoothstep(0., .22, m), 2.2);
-}
+export const GLSL_FOAM_PATTERNS = /* glsl */ `
 /** foam that erodes into rounded islands as it thins */
 float laceMask(float amt, vec2 p){
   #if WATER_DETAIL <= 1
@@ -944,6 +890,77 @@ float threads(float amt, vec2 p){
   #endif
   return l * smoothstep(.03, .52, amt);
 }
+`;
+
+const WATER_FRAG = (rocks: number): string => /* glsl */ `
+${GLSL_UNIFORMS}
+${GLSL_LIGHT}
+#include <packing>
+uniform sampler2D tWave, tWave1, tFoam, tRipple, tNrm, tScene, tDepth;
+uniform vec2 uWaterSurfRes;
+uniform mat4 uInvVP;
+uniform vec2 uNearFar;
+uniform vec4 uField;
+uniform vec3 uShallow, uMid, uDeep, uAbyss, uCrest, uFoamC, uFoamS, uZenith, uHorizon, uGlow;
+uniform float uCaustic, uGlint, uSheen, uSwell, uMurk, uRain, uPxK, uCine, uWaterActive;
+uniform vec3 uRocks[${rocks}];
+uniform vec4 uNet;
+varying vec3 vWP; varying vec2 vXZ; varying float vZ; varying float vH; varying float vSurf; varying vec3 vSw;
+layout(location = 0) out highp vec4 waterColor;
+#ifdef SPLIT_WATER
+layout(location = 1) out highp vec4 foamAmount;
+#endif
+
+${GLSL_WATER_NOISE}
+${WATER_FN}
+${GLSL_FOAM_PATTERNS}
+
+vec3 worldAt(vec2 uv, float z){
+  vec4 p = uInvVP * vec4(uv * 2. - 1., z * 2. - 1., 1.);
+  return p.xyz / p.w;
+}
+float lin(float z){ return -perspectiveDepthToViewZ(z, uNearFar.x, uNearFar.y); }
+float shadowAt(vec3 wp){
+  vec4 sc = uShadowMat * vec4(wp + vec3(0., .14, 0.) + uSunDir * .05, 1.);
+  vec3 p = sc.xyz / sc.w * .5 + .5;
+  vec2 e = min(p.xy, 1. - p.xy);
+  float edge = smoothstep(0., .04, min(e.x, e.y));
+  if (edge <= 0. || p.z > 1.) return 1.;
+  float z = p.z - .0009;
+  #if WATER_DETAIL == 0
+    return mix(1., softShadow(p.xy, z), edge * .88);
+  #elif WATER_DETAIL == 1
+    return mix(1., textureLod(uShadowMap, vec3(p.xy, z), 0.), edge);
+  #else
+    vec2 t = uShadowTexel * 1.3;
+    float s = textureLod(uShadowMap, vec3(p.xy, z), 0.);
+    s += textureLod(uShadowMap, vec3(p.xy + t * vec2( .9,  .4), z), 0.);
+    s += textureLod(uShadowMap, vec3(p.xy + t * vec2(-.4,  .9), z), 0.);
+    s += textureLod(uShadowMap, vec3(p.xy + t * vec2(-.9, -.4), z), 0.);
+    s += textureLod(uShadowMap, vec3(p.xy + t * vec2( .4, -.9), z), 0.);
+    return mix(1., s * .2, edge);
+  #endif
+}
+float web(vec2 p, float t){
+  vec4 w4 = nz(p * .032 + vec2(t * .011, -t * .008), .032);
+  vec2 w = w4.ba - .5;
+  float thick = .07 + .16 * w4.b;
+  float a = nz(p * .115 + w * .16 + vec2(t * .012, t * .006), .115).g;
+  float l = 1. - smoothstep(thick * .25, thick, a);
+  #if WATER_DETAIL >= 2
+    float b = nz(p * .27 - w * .14 - vec2(t * .009, -t * .013), .27).g;
+    l = max(l, (1. - smoothstep(.02, .17, b)) * .62);
+  #endif
+  return l;
+}
+float causticAt(vec2 p){
+  float t = uTime;
+  vec2 w = nz(p * .035 + t * .008, .035).ba - .5;
+  float a = nz(p * .056 + w * .12 + vec2(t * .011, t * .006), .056).g;
+  float b = nz(p * .044 - w * .1 - vec2(t * .009, -t * .012), .044).g;
+  float m = min(a, b);
+  return pow(1. - smoothstep(0., .22, m), 2.2);
+}
 /** crest foam; on a steep face the pattern is laid along the wall instead of smeared down it */
 float crestFoam(float amt, vec2 p, float h, vec2 wd, float steep){
   float m = laceMask(amt, p * 1.25);
@@ -964,8 +981,8 @@ void main(){
   vec4 gInfo = groundInfo(vWP.xz);
   float gy = gInfo.r;
   #ifdef SPLIT_WATER
-  // Deep inland under the forest: never visible, but keep a 4 m shoreline apron for smooth bilinear upsample.
-  if (d < -4. && gy > 1.2) discard;
+  // Leave an apron beyond the highest swash so water depth still interpolates at the shoreline.
+  if (d < -6. && gy > 1.6) discard;
   #endif
   float reefK = gInfo.g;
   float rockNear = gInfo.b;
@@ -1282,19 +1299,20 @@ void main(){
   float foam = 0.;
   float lace = fm.g * .86;
   float lip = 0.;
+  #ifdef SPLIT_WATER
+  float beachFoam = 0.;
+  #endif
   if (d < 14.){
     // beach: thin bright lip where the sheet thins out, lace behind it
     float ln = nz(xz * .22 + uTime * .015, .22).a - .5;
-    lip = 1. - smoothstep(.02, .05, depth + ln * .05);
     float sheet = (1. - smoothstep(.04, .24, depth + ln * .08)) * smoothstep(.5, .62, nz(xz * .06 + uTime * .006, .06).b + .12);
     float wash = smoothstep(1.5, .1, depth) * smoothstep(13., .5, d);
     float surfZone = smoothstep(16., 2., d) * smoothstep(-2., 1., d);
     float washLace = wash * (.2 + .26 * sin(uTime * .9 + xz.y * .1));
-    #if WATER_DETAIL <= 1
-    float bAmt = max(max(sheet * .65, sfc.z * .74 * surfZone), max(washLace * .55 * surfZone, si.w * .95 * smoothstep(7., 1., d)));
-    float bWash = bAmt > .02 ? holes(bAmt, xz * 1.25) * .68 : 0.;
-    foam = max(lip, max(sfc.y * surfZone, bWash));
+    #ifdef SPLIT_WATER
+    beachFoam = max(max(sheet * .65, sfc.z * .74 * surfZone), max(washLace * .55 * surfZone, si.w * .95 * smoothstep(7., 1., d)));
     #else
+    lip = 1. - smoothstep(.02, .05, depth + ln * .05);
     if (sheet > .02) lip = max(lip, holes(sheet * .8, xz * 1.5) * .6);
     float wet = 0.;
     if (sfc.z > .01) wet = holes(sfc.z * .74, xz * 1.25) * .62;
@@ -1317,13 +1335,17 @@ void main(){
       float ringw = smoothstep(.16, .0, abs(fract(rr * .42 - uTime * .16 + nn * .5) - .5) - .02) * smoothstep(2.6, .6, rr) * smoothstep(-.4, .5, rr);
       rockF = max(rockF, max(collar * .62, ringw * .34));
     }
+    #ifndef SPLIT_WATER
     if (rockF > .05) foam = max(foam, threads(rockF, xz * 1.1) * smoothstep(.06, .3, rockF) * .9);
+    #endif
   }
+  #ifndef SPLIT_WATER
   float solid = 0.;
   if (w0.a > .01){
     solid = crestFoam(w0.a, xz, hf, wd, steep);
     foam = max(foam, solid);
   }
+  #endif
   if (fm.a > .02){
     float aer = smoothstep(.02, .75, fm.a) * (.55 + .45 * nz(xz * .11 + uTime * .02, .11).b);
     float am = aer * .4 * smoothstep(1.2, .2, hf);
@@ -1332,11 +1354,13 @@ void main(){
     underK *= 1. - am;
     #endif
   }
-  if (lace > .02){
-    float lk = lace * (.45 + 1.1 * nz(xz * .05 + 2., .05).b);
-    foam = max(foam, threads(sat(lk * 1.2), xz) * .8 * smoothstep(.9, .15, hf));
-  }
-  #ifndef SPLIT_WATER
+  float wake = lace > .02 ? sat(lace * 1.2 * (.45 + 1.1 * nz(xz * .05 + 2., .05).b)) : 0.;
+  #ifdef SPLIT_WATER
+  float crestAmount = min(w0.a, 1.3);
+  float wakeAmount = wake * smoothstep(.9, .15, hf);
+  foamAmount = vec4(crestAmount, wakeAmount, rockF, beachFoam);
+  #else
+  if (wake > .0) foam = max(foam, threads(wake, xz) * .8 * smoothstep(.9, .15, hf));
   // a tight line wherever anything solid breaks the surface
   if (thick < 1.2 && depth > .3 && far < .9){
     float cn = nz(xz * .27 + vec2(uTime * .03, -uTime * .02), .27).a - .5;
@@ -1359,7 +1383,7 @@ void main(){
   #endif
 
   // relief: foam is lit from the sun side and shades the water behind it
-  if (foam > .004 || w0.a > .01){
+  if (foam > .004){
     float bev = 0.;
     #if WATER_DETAIL >= 2
     if (crest){
@@ -1397,6 +1421,9 @@ void main(){
 
   // ---------------- energy: resonance gold, AI cyan, plankton at night
   float gold = fm.b * (1. - .8 * uCine);
+  #ifdef SPLIT_WATER
+  foam = max(foam, max(max(crestAmount, wakeAmount), max(rockF, beachFoam)) * .7);
+  #endif
   if (gold > .004) col += vec3(1., .68, .2) * gold * (.22 + .42 * foam + .5 * hN) * 1.1;
   if (uBio > .01){
     vec3 bioC = vec3(.04, .78, 1.);
@@ -1438,9 +1465,10 @@ void main(){
   float fogS = pow(sat(dot(df / max(fl, 1e-4), uSunDir) * .5 + .5), 5.);
   col = mix(col, mix(uFogCol, uFogSunCol, fogS), fogF);
   underK *= 1. - fogF;
-  gl_FragColor = vec4(col, sat(underK));
+  waterColor = vec4(col, sat(underK));
+  foamAmount *= 1. - fogF;
   #else
   col = applyFog(col, vWP);
-  gl_FragColor = vec4(col, 1.);
+  waterColor = vec4(col, 1.);
   #endif
 }`;

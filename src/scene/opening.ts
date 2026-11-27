@@ -553,6 +553,12 @@ export class Opening {
     }
   }
 
+  drawBoatShadow(): void {
+    if (!this.active || !this.group.visible) return;
+    const { x, z } = this.boat.position;
+    this.fx.sprites.shadow(x, z, 5.4, 2.2, -this.boat.rotation.y, .85, .4);
+  }
+
   private placeBoat(t: number, time: number, swell: number): void {
     routeAt(t, this.p);
     headingAt(t, this.h);

@@ -823,6 +823,11 @@ void main(){
 
       /* ground every object in the water, then say what it is worth */
       const rad = e.radius * UNIT;
+      if (e.kind === 'boat') {
+        sp.shadow(x, z, Math.max(2.4, rad) * grow, Math.max(1.15, rad * .48) * grow, e.rotation, .65, .38 * grow);
+      } else {
+        sp.shadow(x, z, rad * 1.06 * grow, rad * .82 * grow, e.rotation, .16, .3 * grow);
+      }
       sp.push(x, h + 0.06, z, rad * 1.12 * grow, rad * 1.02 * grow, e.id, 1, 1, 1, 0.34 * (1 - look.bio * 0.5), SP.ring, MODE.flat, 0, 0.9);
       if (look.bio > 0.2) sp.push(x, h + 0.06, z, rad * 1.5, rad * 1.5, 0, 0.1, 0.9, 1.1, 0.5 * look.bio, SP.glow, MODE.flat, 1);
       if (e.kind === 'boat') {
@@ -856,6 +861,7 @@ void main(){
       const h = this.floatAt(b.x, b.z, t, swell, 1.4);
       const w = Math.sin(t * 1.15 + b.z);
       this.put(b.variant % 2 ? 'boat1' : 'boat0', b.x, h + SINK.boat0 + w * 0.05, b.z, b.yaw, SCALE.boat0, 1, b.variant * 0.37, 0, true, w * 0.06, w * 0.03);
+      sp.shadow(b.x, b.z, 3.2, 1.55, -b.yaw, .65, .38);
       sp.push(b.x, h + 0.06, b.z, 2.7, 2.45, b.yaw, 1, 1, 1, 0.3 * (1 - look.bio * 0.5), SP.ring, MODE.flat, 0, 0.9);
     }
 
@@ -979,6 +985,7 @@ void main(){
     b.quaternion.copy(this.q).premultiply(this.q2);
     const dx = Math.cos(e.rotation);
     const dz = Math.sin(e.rotation);
+    this.fx.sprites.shadow(x, z, 7.3, 3.3, e.rotation, 1.2, .42);
     if (this.r() < dt * 30) this.water.splash({ x: x + dx * 6, z: z + dz * 6 + (this.r() - 0.5) * 3, radius: 1.3, foam: 0.9, impulse: 0.6 });
     if (this.r() < dt * 24) this.water.splash({ x: x - dx * 6.4, z: z - dz * 6.4 + (this.r() - 0.5) * 3, radius: 1.4, foam: 0.8, impulse: 0.5 });
     if (this.r() < dt * 14) this.fx.spray(x - dx * 4.6, 5.8, z - dz * 4.6, 1.6, 1.6, (this.r() - 0.5) * 0.6, lerp(1.0, 1.7, this.r()), 2.2, 1);
@@ -1037,6 +1044,7 @@ void main(){
     const happy = this.heroJoy > 0.15 ? 0.45 : 1;
     for (const e of this.eyes) e.scale.set(1, blink * happy, 1);
     const sp = this.fx.sprites;
+    sp.shadow(p.x, p.z, 1.85, 1.55, -this.heroYaw, .42 + hop, .38);
     sp.push(p.x, h + 0.06, p.z, 2.55, 2.45, 0, 1, 1, 1, 0.4 * (1 - look.bio * 0.5), SP.ring, MODE.flat, 0, 0.9);
     const ring = (t * 0.4) % 1;
     sp.push(p.x, h + 0.1, p.z, 2 + ring * 2.2, 2 + ring * 2.2, 0, 1.2, 0.9, 0.4, (1 - ring) * 0.22, SP.ring, MODE.flat, 0.7);

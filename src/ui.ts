@@ -654,6 +654,7 @@ export class GameUI {
     this.settingsActiveChip.textContent =
       state.setting === 'auto' ? `Aktif: ${tierName} (Otomatis)` : `Aktif: ${tierName}`;
     this.settingsResChip.textContent = `${state.width}×${state.height}`;
+    el('graphics-warning').hidden = state.recommendedTier === 'high' || state.recommendedTier === 'ultra';
   }
 
   public showPerfHint(suggested: Tier): void {

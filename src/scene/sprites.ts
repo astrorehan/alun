@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { G, GLSL_GRADE_LDR, GLSL_UNIFORMS, registerDirectLdr } from './gfx';
+import { Q } from './quality';
 import { FLOAT_HEAD, type Water } from './water';
 
 /** Shapes the one sprite shader can draw. */
@@ -15,6 +16,7 @@ export const SP = {
   flame: 8,
   halo: 9,
   mist: 10,
+  shadow: 11,
 } as const;
 
 /** flat drapes over the water, ground lies flat at a fixed height. */
@@ -98,6 +100,12 @@ ${GLSL_GRADE_LDR}
 varying vec2 vQ; varying vec4 vC; varying vec4 vK; varying vec3 vWP;
 void main(){
   float kind = vK.x, add = vK.y, lit = vK.z, seed = vK.w;
+  if (kind > 10.5){
+    if (groundH(vWP.xz) > vWP.y - .05) discard;
+    float opacity = (1. - smoothstep(0., 1., dot(vQ, vQ))) * vC.a;
+    gl_FragColor = vec4(vec3(.012, .024, .032) * opacity, opacity);
+    return;
+  }
   float r = length(vQ);
   float a = 0.;
   vec3 col = vC.rgb;
@@ -221,9 +229,19 @@ export class Sprites {
   /** add: 0 alpha, 1 additive. lit: 0 self-lit, 1 takes scene light. */
   push(x: number, y: number, z: number, sx: number, sy: number, rot: number, r: number, g: number, b: number, a: number, kind: number, mode: number, add = 0, lit = 0, seed = 0): void {
     const flat = mode === MODE.flat || mode === MODE.ground;
-    if (mode === MODE.flat) a *= this.rings;
+    if (mode === MODE.flat && kind !== SP.shadow) a *= this.rings;
     if (a < 0.004) return;
     (flat ? this.flat : this.bill).push(x, y, z, sx, sy, rot, r, g, b, a, kind, mode, add, lit, seed);
+  }
+
+  /** Cheap contact shadow for floating objects on the cached tiers. */
+  shadow(x: number, z: number, length: number, width: number, yaw: number, height: number, opacity: number): void {
+    if (!Q.cached) return;
+    const sun = G.uSunDir.value;
+    const light = G.uSunCol.value;
+    const offset = height / Math.max(.32, sun.y);
+    const strength = opacity * Math.min(1, .22 + light.r * .3 + light.g * .5 + light.b * .2);
+    this.push(x - sun.x * offset, 0, z - sun.z * offset, length, width, yaw, 0, 0, 0, strength, SP.shadow, MODE.flat);
   }
 
   end(): void {
