@@ -7,17 +7,17 @@ export interface Quality {
   lite: boolean;
   /** Extra shader detail reserved for Ultra. */
   ultra: boolean;
-  /** Render static world into a native-res 4x MSAA cache when the play/title camera is fixed. */
+  /** Keep the static world at native resolution once the camera is fixed. */
   cached: boolean;
+  /** Render scale while a cached tier's camera is moving. */
+  cameraScale: number;
   /** Composite and draw dynamic objects directly to the default framebuffer in sRGB (skips rtFinal + post.comp). */
   directLdr: boolean;
   /** Water shader detail level: 0 = Low, 1 = Medium, 2 = High, 3 = Ultra. */
   waterDetail: 0 | 1 | 2 | 3;
-  /** MSAA samples used when baking the static world cache. */
-  staticMsaa: 0 | 4;
   /** MSAA samples on live render targets (rtScene / rtFinal). */
   msaa: 0 | 4;
-  /** Water surface resolution multiplier (0.42..0.56 on cached tiers, 1.0 on live tiers). */
+  /** Water surface resolution multiplier. */
   waterScale: number;
   /** Full-screen FXAA post pass. */
   fxaa: boolean;
@@ -27,7 +27,6 @@ export interface Quality {
   /** Max devicePixelRatio and megapixel cap. */
   dprCap: number;
   mp: number;
-  minMp: number;
   /** Frame time target in milliseconds. */
   target: number;
   field: [number, number];
@@ -48,9 +47,9 @@ export const TIERS: Record<Tier, Quality> = {
     lite: true,
     ultra: false,
     cached: true,
+    cameraScale: 0.38,
     directLdr: true,
     waterDetail: 0,
-    staticMsaa: 4,
     msaa: 0,
     waterScale: 0.32,
     fxaa: false,
@@ -58,7 +57,6 @@ export const TIERS: Record<Tier, Quality> = {
     bloomStartDiv: 6,
     dprCap: 1,
     mp: 2.6,
-    minMp: 1.85,
     target: 16.7,
     field: [320, 240],
     foam: [320, 240],
@@ -74,9 +72,9 @@ export const TIERS: Record<Tier, Quality> = {
     lite: false,
     ultra: false,
     cached: true,
+    cameraScale: 0.43,
     directLdr: true,
     waterDetail: 1,
-    staticMsaa: 4,
     msaa: 0,
     waterScale: 0.56,
     fxaa: false,
@@ -84,7 +82,6 @@ export const TIERS: Record<Tier, Quality> = {
     bloomStartDiv: 4,
     dprCap: 1.25,
     mp: 2.6,
-    minMp: 1.6,
     target: 21,
     field: [640, 480],
     foam: [512, 384],
@@ -100,9 +97,9 @@ export const TIERS: Record<Tier, Quality> = {
     lite: false,
     ultra: false,
     cached: false,
+    cameraScale: 1,
     directLdr: false,
     waterDetail: 2,
-    staticMsaa: 4,
     msaa: 4,
     waterScale: 1,
     fxaa: true,
@@ -110,7 +107,6 @@ export const TIERS: Record<Tier, Quality> = {
     bloomStartDiv: 2,
     dprCap: 1.5,
     mp: 3.7,
-    minMp: 1.6,
     target: 16.7,
     field: [1280, 960],
     foam: [960, 720],
@@ -126,9 +122,9 @@ export const TIERS: Record<Tier, Quality> = {
     lite: false,
     ultra: true,
     cached: false,
+    cameraScale: 1,
     directLdr: false,
     waterDetail: 3,
-    staticMsaa: 4,
     msaa: 4,
     waterScale: 1,
     fxaa: true,
@@ -136,7 +132,6 @@ export const TIERS: Record<Tier, Quality> = {
     bloomStartDiv: 2,
     dprCap: 2,
     mp: 5.5,
-    minMp: 2.2,
     target: 16.7,
     field: [1408, 1056],
     foam: [1152, 864],
@@ -198,14 +193,14 @@ export function setActiveTier(tier: Tier): Quality {
 
 export function chooseQuality(gl: WebGLRenderingContext | WebGL2RenderingContext): {
   setting: QualitySetting;
-  tier: Tier;
+  recommendedTier: Tier;
   fromUrl: boolean;
 } {
   const urlPref = getUrlQualityOverride();
   const setting: QualitySetting = urlPref ?? loadQualitySetting();
-  const tier: Tier = setting === 'auto' ? guessTier(gl) : setting;
-  setActiveTier(tier);
-  return { setting, tier, fromUrl: urlPref !== null };
+  const recommendedTier = guessTier(gl);
+  setActiveTier(setting === 'auto' ? recommendedTier : setting);
+  return { setting, recommendedTier, fromUrl: urlPref !== null };
 }
 
 /** Initial tier guess from GPU renderer string; Auto refines this from measured frame times. */

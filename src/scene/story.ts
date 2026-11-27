@@ -701,6 +701,7 @@ export class StoryLayer {
     const v = Math.hypot(e.vx, e.vy) * UNIT;
     const c = Math.cos(e.rotation);
     const s = Math.sin(e.rotation);
+    this.fx.sprites.shadow(x, z, 4.2 * scale, 1.65 * scale, e.rotation, .8, .4);
     if (v > 0.8 && this.r() < dt * (10 + v * 3)) {
       const side = this.r() < 0.5 ? -1 : 1;
       this.water.splash({ x: x + c * 3.2 - s * side * 1.2, z: z + s * 3.2 + c * side * 1.2, radius: 0.9, foam: 0.75, impulse: 0.4 });

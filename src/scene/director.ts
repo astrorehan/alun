@@ -82,7 +82,7 @@ export class Director {
   parallaxY = 0;
   private px = 0;
   private py = 0;
-  /** When true, parallax and shake become a 2D post offset so the 3D play/title camera stays fixed for caching. */
+  /** Keep parallax and shake in screen space so they do not invalidate the cached 3D view. */
   use2DShift = false;
   /** UV offset (x, y) and overscan zoom (z) applied in post when use2DShift is active. */
   readonly screenShift = new THREE.Vector3(0, 0, 1);
@@ -338,7 +338,7 @@ export class Director {
       sx = Math.sin(this.shakeT * 71) * s + Math.sin(this.shakeT * 113) * s * 0.5;
       sy = Math.sin(this.shakeT * 89 + 1) * s;
     }
-    if (this.use2DShift && this.isSettled() && !this.hold) {
+    if (this.use2DShift && !this.hold) {
       // Translate subtle parallax and shake into a 2D post UV shift so the 3D frustum stays locked.
       const ox = clamp((this.px * amt + sx) * 0.0045, -0.006, 0.006);
       const oy = clamp((-this.py * amt * 0.5 + sy) * 0.0045, -0.005, 0.005);

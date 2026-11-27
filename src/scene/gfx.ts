@@ -119,25 +119,38 @@ vec3 alunGrade(vec3 c, vec2 screenUv){
 }
 `;
 
+/** Reconstructs cached surface depth without interpolating across cleared texels. */
+export const GLSL_WATER_DEPTH = /* glsl */ `
+uniform sampler2D tWaterDepth;
+uniform vec2 uWaterRes, uWaterTexel;
+float waterDepthAt(vec2 uv, float sceneDepth){
+  float nearest = textureLod(tWaterDepth, uv, 0.).r;
+  if (nearest >= 1. || nearest - sceneDepth > .008) return nearest;
+  vec2 wt = uv * uWaterRes - .5;
+  vec2 wf = fract(wt);
+  vec2 w0 = (floor(wt) + .5) * uWaterTexel;
+  vec4 depths = vec4(
+    textureLod(tWaterDepth, w0, 0.).r,
+    textureLod(tWaterDepth, w0 + vec2(uWaterTexel.x, 0.), 0.).r,
+    textureLod(tWaterDepth, w0 + vec2(0., uWaterTexel.y), 0.).r,
+    textureLod(tWaterDepth, w0 + uWaterTexel, 0.).r
+  );
+  vec4 weights = vec4((1. - wf.x) * (1. - wf.y), wf.x * (1. - wf.y), (1. - wf.x) * wf.y, wf.x * wf.y);
+  weights *= 1. - step(1., depths);
+  return dot(depths, weights) / max(dot(weights, vec4(1.)), .001);
+}
+`;
+
 /** Helper chunk for dynamic underwater geometry (fish, manta, turtles, submerged net bag) in cached mode. */
 export const GLSL_CACHED_UNDERWATER = /* glsl */ `
 #ifdef CACHED_UNDER
 #include <packing>
+${GLSL_WATER_DEPTH}
 uniform float uMurkG;
-uniform sampler2D tStaticDepth, tWaterTex, tWaterDepth;
-uniform vec2 uWaterRes, uWaterTexel, uNearFar;
+uniform sampler2D tStaticDepth, tWaterTex;
+uniform vec2 uNearFar;
 uniform vec3 uShiftG;
 float uwLin(float z){ return -perspectiveDepthToViewZ(z, uNearFar.x, uNearFar.y); }
-float uwWaterDepth(vec2 uv){
-  vec2 wt = uv * uWaterRes - .5;
-  vec2 wf = fract(wt);
-  vec2 w0 = (floor(wt) + .5) * uWaterTexel;
-  float d00 = textureLod(tWaterDepth, w0, 0.).x;
-  float d10 = textureLod(tWaterDepth, w0 + vec2(uWaterTexel.x, 0.), 0.).x;
-  float d01 = textureLod(tWaterDepth, w0 + vec2(0., uWaterTexel.y), 0.).x;
-  float d11 = textureLod(tWaterDepth, w0 + uWaterTexel, 0.).x;
-  return mix(mix(d00, d10, wf.x), mix(d01, d11, wf.x), wf.y);
-}
 #endif
 `;
 
@@ -148,7 +161,7 @@ export const GLSL_UNDERWATER_END = /* glsl */ `
     vec2 suv = clamp((gl_FragCoord.xy / uRes - .5) / uShiftG.z + .5 + uShiftG.xy, .001, .999);
     float sd = textureLod(tStaticDepth, suv, 0.).x;
     if (gl_FragCoord.z > sd) discard;
-    float wd = uwWaterDepth(suv);
+    float wd = waterDepthAt(suv, sd);
     if (gl_FragCoord.z > wd){
       float thick = max(uwLin(gl_FragCoord.z) - uwLin(wd), 0.);
       vec4 wt = textureLod(tWaterTex, suv, 0.);
@@ -172,6 +185,15 @@ uniform vec4 uLampPos[${LAMP_MAX}];
 uniform vec3 uLampCol[${LAMP_MAX}];
 uniform float uLampI;
 
+float softShadow(vec2 p, float z){
+  vec2 t = uShadowTexel * 2.15;
+  float s = textureLod(uShadowMap, vec3(p + t * vec2(.79, .34), z), 0.);
+  s += textureLod(uShadowMap, vec3(p + t * vec2(-.34, .79), z), 0.);
+  s += textureLod(uShadowMap, vec3(p + t * vec2(-.79, -.34), z), 0.);
+  s += textureLod(uShadowMap, vec3(p + t * vec2(.34, -.79), z), 0.);
+  return s * .25;
+}
+
 float sunShadow(vec3 wp, vec3 n){
   vec4 sc = uShadowMat * vec4(wp + n * .14 + uSunDir * .05, 1.);
   vec3 p = sc.xyz / sc.w * .5 + .5;
@@ -180,7 +202,7 @@ float sunShadow(vec3 wp, vec3 n){
   if (edge <= 0. || p.z > 1.) return 1.;
   float z = p.z - .0009;
   #ifdef LITE
-  return mix(1., texture(uShadowMap, vec3(p.xy, z)), edge);
+  return mix(1., softShadow(p.xy, z), edge * .88);
   #else
   float s = 0.;
   vec2 t = uShadowTexel * 1.35;
@@ -349,7 +371,7 @@ export function qualityDefines(forStatic = false): Record<string, number> {
   const d: Record<string, number> = {};
   if (Q.lite) d.LITE = 1;
   if (Q.ultra) d.ULTRA = 1;
-  if (forStatic ? Q.staticMsaa > 0 : Q.msaa > 0) d.MSAA = 1;
+  if (Q.msaa > 0) d.MSAA = 1;
   if (!forStatic && Q.directLdr) d.DIRECT_LDR = 1;
   if (forStatic && Q.cached && Q.tier === 'low') d.STATIC_PACK = 1;
   return d;
@@ -372,7 +394,7 @@ export function syncToonQuality(): void {
   const wantPackStatic = Q.cached && Q.tier === 'low';
   for (const item of trackedToon) {
     const m = item.mat;
-    const wantMsaa = item.isStatic ? (Q.cached ? Q.staticMsaa > 0 : Q.msaa > 0) : Q.msaa > 0;
+    const wantMsaa = Q.msaa > 0;
     const wantLite = Q.lite;
     const wantUltra = Q.ultra;
     const wantDirect = !item.isStatic && Q.directLdr;
@@ -444,7 +466,7 @@ export interface ToonOpts {
   fEnd?: string;
   fDepth?: string;
   alphaToCoverage?: boolean;
-  /** True for static-world materials that render into the 4x MSAA static cache on cached tiers. */
+  /** True for materials that belong in the static world cache. */
   isStatic?: boolean;
   transparent?: boolean;
   depthTest?: boolean;
@@ -475,7 +497,7 @@ export function toon(o: ToonOpts = {}): ToonPair {
   const uniforms = { ...G, ...(o.uniforms ?? {}) };
   const side = o.side ?? THREE.FrontSide;
   const isStatic = o.isStatic ?? false;
-  const wantMsaa = isStatic ? (Q.cached ? Q.staticMsaa > 0 : Q.msaa > 0) : Q.msaa > 0;
+  const wantMsaa = Q.msaa > 0;
   const defines: Record<string, string | number> = { ...qualityDefines(isStatic), ...(o.defines ?? {}) };
   if (wantMsaa) defines.MSAA = 1;
   else delete defines.MSAA;

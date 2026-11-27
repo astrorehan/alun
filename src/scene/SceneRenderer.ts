@@ -1,10 +1,9 @@
 import * as THREE from 'three';
 import type { ComputedStats, GamePhase, PlayerProgress, TimeOfDay } from '../types';
 import type { GameSimulation } from '../simulation';
-import { bakeNoise, fsMaterial, fsQuad, FullScreen, G, GLSL_GRADE_LDR, GLSL_UNIFORMS, SunShadow, syncToonQuality } from './gfx';
+import { bakeNoise, fsMaterial, fsQuad, FullScreen, G, GLSL_GRADE_LDR, GLSL_UNIFORMS, GLSL_WATER_DEPTH, SunShadow, syncToonQuality } from './gfx';
 import {
   chooseQuality,
-  guessTier,
   Q,
   saveQualitySetting,
   setActiveTier,
@@ -14,7 +13,7 @@ import {
 } from './quality';
 import { blendLook, cloneLook, LOOKS, type Look } from './look';
 import { buildLand, Shore } from './land';
-import { Water } from './water';
+import { GLSL_FOAM_PATTERNS, GLSL_SURF, GLSL_WATER_NOISE, Water } from './water';
 import { Sky } from './sky';
 import { Post } from './post';
 import { Director } from './director';
@@ -33,78 +32,94 @@ import { StoryLayer } from './story';
 import { shoreAt, simX, simY, toX, toZ, UNIT } from './space';
 
 const REFRESH_BANDS = 16;
+const CAMERA_BLEND_SECONDS = 0.16;
+const MANUAL_SCALE_STEP = 0.125;
+const MIN_MANUAL_SCALE = 0.5;
 
 const WATER_COMP_FRAG = /* glsl */ `
 ${GLSL_UNIFORMS}
 ${GLSL_GRADE_LDR}
+${GLSL_WATER_DEPTH}
+${GLSL_WATER_NOISE}
+${GLSL_SURF}
+#define WATER_DETAIL 0
+${GLSL_FOAM_PATTERNS}
 #include <packing>
 varying vec2 vUv;
-uniform sampler2D tStatic, tStaticDepth, tWater, tWaterDepth, tNrm, tBloom;
-uniform vec2 uWaterRes, uWaterTexel, uNearFar;
+uniform sampler2D tStatic, tStaticDepth, tWater, tFoamAmount, tNrm, tBloom;
+uniform vec2 uNearFar;
 uniform mat4 uInvVP;
-uniform float uCaustic, uMurk, uBloom;
-uniform vec3 uFoamLit, uShift;
+uniform float uCaustic, uMurk, uBloom, uPxK;
+uniform vec3 uFoamLit, uFoamShade, uShift;
 
 float lin(float z){ return -perspectiveDepthToViewZ(z, uNearFar.x, uNearFar.y); }
 vec3 worldAt(vec2 uv, float z){
   vec4 p = uInvVP * vec4(uv * 2. - 1., z * 2. - 1., 1.);
   return p.xyz / p.w;
 }
-vec3 readStatic(vec2 p){
-  vec3 s = textureLod(tStatic, p, 0.).rgb;
+vec3 readStatic(vec2 p, bool filterColor){
+  // Use the texel paired with scene depth at water crossings. Away from those edges,
+  // filter the static color so small camera shifts do not make dry foliage shimmer.
+  vec3 s = filterColor ? textureLod(tStatic, p, 0.).rgb :
+    texelFetch(tStatic, ivec2(p * vec2(textureSize(tStatic, 0))), 0).rgb;
   #ifdef STATIC_PACK
     return s * s * 2.;
   #else
     return s;
   #endif
 }
+
+float fineFoam(vec4 amount, vec3 surface, float viewZ){
+  vec2 p = surface.xz;
+  pxw = viewZ * uPxK / sqrt(max(normalize(cameraPosition - surface).y, .12));
+  float foam = 0.;
+  if (amount.r > .02) foam = laceMask(amount.r, p * 1.25);
+  if (amount.g > .02) foam = max(foam, threads(amount.g, p) * .8);
+  if (amount.b > .05) foam = max(foam, threads(amount.b, p * 1.1) * smoothstep(.06, .3, amount.b) * .9);
+  if (amount.a > .02){
+    float d = p.x - shoreInfo(p.y).x;
+    float surf = surfAt(d, p.y).y * smoothstep(16., 2., d) * smoothstep(-2., 1., d);
+    foam = max(foam, max(holes(amount.a, p * 1.25) * .68, surf));
+  }
+  return sat(foam);
+}
+
 void main(){
   vec2 uv = clamp((vUv - .5) / uShift.z + .5 + uShift.xy, .001, .999);
-  float sd = textureLod(tStaticDepth, uv, 0.).x;
-  // Adaptive bilinear depth sample: 1 tap across inland & deep sea, 4 taps near shorelines/rocks/reefs.
-  vec2 wt = uv * uWaterRes - .5;
-  vec2 w0 = (floor(wt) + .5) * uWaterTexel;
-  float d00 = textureLod(tWaterDepth, w0, 0.).x;
-  float wd = d00;
-  if (abs(sd - d00) < .014 && d00 < .99999){
-    vec2 wf = fract(wt);
-    float d10 = textureLod(tWaterDepth, w0 + vec2(uWaterTexel.x, 0.), 0.).x;
-    float d01 = textureLod(tWaterDepth, w0 + vec2(0., uWaterTexel.y), 0.).x;
-    float d11 = textureLod(tWaterDepth, w0 + uWaterTexel, 0.).x;
-    wd = mix(mix(d00, d10, wf.x), mix(d01, d11, wf.x), wf.y);
-  }
+  float sd = textureLod(tStaticDepth, uv, 0.).r;
+  float wd = waterDepthAt(uv, sd);
+  float depthWidth = fwidth(sd - wd);
 
   vec3 col;
-  float outDepth;
-  if (sd <= wd || wd >= .99999){
-    col = readStatic(uv);
-    outDepth = sd;
+  if (sd <= wd){
+    col = readStatic(uv, wd - sd > 2. * depthWidth + .0001);
   } else {
     vec4 w = textureLod(tWater, uv, 0.);
     float zs = lin(sd);
     float zw = lin(wd);
     float thick = max(zs - zw, 0.);
     col = w.rgb;
+    bool shallow = thick < 6.2;
+    vec3 uw = shallow ? worldAt(uv, sd) : vec3(0.);
 
     if (w.a > .004 && thick < 30.){
       float ud = thick * .77;
       float reefK = 0.;
       vec2 ruv = uv;
-      bool shallow = thick < 6.2;
-      vec3 uw = vec3(0.);
       if (shallow){
-        uw = worldAt(uv, sd);
         ud = max(-uw.y, 0.);
         reefK = groundInfo(uw.xz).g;
         #ifdef COMP_REFRACT
         if (thick > .04){
-          vec2 ch = texture2D(tNrm, uw.xz * .07 + vec2(uTime * .014, -uTime * .012)).xy - .5;
+          vec2 ch = textureLod(tNrm, uw.xz * .07 + vec2(uTime * .014, -uTime * .012), 0.).xy - .5;
           vec2 cand = clamp(uv + ch * .005 * sat(thick * .45), .001, .999);
-          if (textureLod(tStaticDepth, cand, 0.).x > wd) ruv = cand;
+          float cd = textureLod(tStaticDepth, cand, 0.).r;
+          // A refracted sample must stay on the same surface at a rock or pier edge.
+          if (cd > wd && abs(lin(cd) - zs) < max(.22, thick * .24)) ruv = cand;
         }
         #endif
       }
-      vec3 under = readStatic(ruv);
+      vec3 under = readStatic(ruv, false);
       if (shallow && ud < 4.5 && uCaustic > .05){
         vec2 cp = uw.xz + uSunDir.xz * ud * .5;
         float t = uTime;
@@ -120,24 +135,35 @@ void main(){
       col += under * T * w.a * smoothstep(30., 14., thick);
     }
 
-    // Crisp 1-pixel native contact lip along sand and rocks.
-    if (thick < .22){
-      float edge = smoothstep(.18, .02, thick);
-      col = mix(col, uFoamLit, edge * .42 * w.a);
+    // Match the dry sand at zero thickness, then draw the swash lip from native depth.
+    float contact = 0.;
+    if (thick < .6 && uw.y < 1.4 && abs(uw.x - shoreInfo(uw.z).x) < 8.){
+      float aa = clamp(depthWidth * zw * zw / uNearFar.x, .008, .048);
+      col = mix(readStatic(uv, false), col, smoothstep(0., .56, thick));
+      contact = smoothstep(0., aa, thick) * (1. - smoothstep(.032, .082 + aa, thick));
     }
-    outDepth = wd;
+
+    vec4 amount = textureLod(tFoamAmount, uv, 0.);
+    if (max(max(amount.r, amount.g), max(amount.b, amount.a)) > .02 || contact > .001){
+      vec3 surface = worldAt(uv, wd);
+      float foam = fineFoam(amount, surface, zw);
+      float grain = nz(surface.xz * .28 + uTime * .015, .28).r;
+      vec3 foamColor = mix(uFoamShade, uFoamLit, clamp(.92 - grain * .58, .25, 1.));
+      col = mix(col, foamColor, max(foam * .87, contact * (.66 + .22 * grain)));
+    }
   }
 
   if (uBloom > .005) col += texture2D(tBloom, uv).rgb * uBloom;
   float dither = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(.06711056, .00583715))));
   gl_FragColor = vec4(alunGrade(col, vUv) + (dither - .5) / 255., 1.);
-  gl_FragDepth = outDepth;
+  gl_FragDepth = min(sd, wd);
 }
 `;
 
 export interface QualityState {
   setting: QualitySetting;
   tier: Tier;
+  recommendedTier: Tier;
   fromUrl: boolean;
   fps: number;
   width: number;
@@ -164,8 +190,10 @@ export class SceneRenderer {
   private rtStatic!: THREE.WebGLRenderTarget;
   private rtStaticBack: THREE.WebGLRenderTarget | null = null;
   private rtWater!: THREE.WebGLRenderTarget;
+  private rtWaterMoving: THREE.WebGLRenderTarget | null = null;
   private rtFinal!: THREE.WebGLRenderTarget;
   private copyMat: THREE.ShaderMaterial;
+  private cameraBlendMat: THREE.ShaderMaterial;
   private compMat: THREE.ShaderMaterial;
 
   private shadow: SunShadow;
@@ -201,6 +229,7 @@ export class SceneRenderer {
   private frame = 0;
   private pixelRatio = 1;
   private scale = 1;
+  private liveScale = 1;
   private samples: number[] = [];
   private sampleMs = 0;
   private warm = 0;
@@ -218,10 +247,13 @@ export class SceneRenderer {
 
   /** Quality selection state. */
   private setting: QualitySetting = 'auto';
+  private readonly recommendedTier: Tier;
   private fromUrl = false;
 
   /** Static world cache tracking for Low/Medium. */
   private staticValid = false;
+  private movingCamera = false;
+  private cameraBlend = 0;
   private cachedPoseVersion = -1;
   private cachedEco = -1;
   private cachedSunDir = new THREE.Vector3();
@@ -237,6 +269,7 @@ export class SceneRenderer {
   private pendingSunCol = new THREE.Color();
   private litterDirty = false;
   private foamLit = new THREE.Color();
+  private foamShade = new THREE.Color();
 
   /** Callbacks for UI integration. */
   onQualityChange: ((state: QualityState) => void) | null = null;
@@ -273,6 +306,8 @@ export class SceneRenderer {
     const picked = chooseQuality(this.gl.getContext());
     this.setting = picked.setting;
     this.fromUrl = picked.fromUrl;
+    this.recommendedTier = picked.recommendedTier;
+    this.liveScale = this.initialLiveScale();
     this.post = new Post();
 
     this.reef = new Reef();
@@ -335,6 +370,16 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     this.copyQuad.renderOrder = -1000;
     this.overScene.add(this.copyQuad, this.water.mesh, this.actors.overGroup, this.fx.group);
 
+    this.cameraBlendMat = fsMaterial(
+      /* glsl */ `
+varying vec2 vUv;
+uniform sampler2D tSrc;
+uniform float uOpacity;
+void main(){ gl_FragColor = vec4(texture2D(tSrc, vUv).rgb, uOpacity); }`,
+      { tSrc: { value: null }, uOpacity: { value: 1 } },
+      { transparent: true }
+    );
+
     this.compMat = fsMaterial(
       WATER_COMP_FRAG,
       {
@@ -342,17 +387,17 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
         tStatic: { value: null },
         tStaticDepth: { value: null },
         tWater: { value: null },
-        tWaterDepth: { value: null },
+        tFoamAmount: { value: null },
         tNrm: { value: this.water.nrmTexture },
         tBloom: { value: null },
-        uWaterRes: { value: new THREE.Vector2(4, 4) },
-        uWaterTexel: { value: new THREE.Vector2(0.25, 0.25) },
         uNearFar: { value: new THREE.Vector2(1, 1400) },
         uInvVP: { value: new THREE.Matrix4() },
         uCaustic: { value: 1 },
         uMurk: { value: 0 },
         uBloom: { value: 0.3 },
+        uPxK: { value: 0.001 },
         uFoamLit: { value: this.foamLit },
+        uFoamShade: { value: this.foamShade },
         uShift: { value: new THREE.Vector3(0, 0, 1) },
       },
       { depthTest: true, depthWrite: true, depthFunc: THREE.AlwaysDepth }
@@ -390,6 +435,7 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
       this.water.init(this.gl, this.fs);
       this.compMat.uniforms.tNrm.value = this.water.nrmTexture;
       this.shadow.invalidateStatic();
+      this.cachedShadowSunDir.set(0, 0, 0);
       this.allocTargets();
       this.resize();
       this.staticValid = false;
@@ -417,7 +463,8 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     samples: number,
     withDepthTex: boolean,
     nearestDepth = false,
-    type: THREE.TextureDataType = THREE.HalfFloatType
+    type: THREE.TextureDataType = THREE.HalfFloatType,
+    count = 1
   ): THREE.WebGLRenderTarget {
     const depthTex = withDepthTex ? new THREE.DepthTexture(w, h, THREE.UnsignedIntType) : undefined;
     if (depthTex && nearestDepth) {
@@ -426,6 +473,7 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     }
     return new THREE.WebGLRenderTarget(w, h, {
       type,
+      count,
       format: THREE.RGBAFormat,
       samples,
       minFilter: THREE.LinearFilter,
@@ -447,37 +495,48 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     this.disposeRT(this.rtStaticBack);
     this.rtStaticBack = null;
     this.disposeRT(this.rtWater);
+    this.disposeRT(this.rtWaterMoving);
     this.disposeRT(this.rtFinal);
 
     const staticType = Q.cached && Q.tier === 'low' ? THREE.UnsignedByteType : THREE.HalfFloatType;
-    this.rtScene = this.makeRT(4, 4, Q.cached ? 0 : Q.msaa, true);
-    this.rtStatic = this.makeRT(4, 4, Q.cached ? Q.staticMsaa : 0, true, true, staticType);
-    // Pre-allocate back buffer in cached mode so incremental ToD/eco refreshes never stall mid-play.
-    if (Q.cached) {
-      this.rtStaticBack = this.makeRT(4, 4, Q.staticMsaa, true, true, staticType);
-    }
-    this.rtWater = this.makeRT(4, 4, 0, true, true);
-    this.rtFinal = this.makeRT(4, 4, Q.cached ? 0 : Q.msaa, false);
+    // A single color/depth sample keeps submerged and dry pixels coherent at silhouettes.
+    const makeStatic = (): THREE.WebGLRenderTarget => this.makeRT(4, 4, 0, true, true, staticType);
+    const makeWater = (): THREE.WebGLRenderTarget =>
+      this.makeRT(4, 4, 0, true, true, THREE.HalfFloatType, Q.cached ? 2 : 1);
+    this.rtScene = Q.cached ? makeStatic() : this.makeRT(4, 4, Q.msaa, true);
+    this.rtStatic = makeStatic();
+    if (Q.cached) this.rtStaticBack = makeStatic();
+    this.rtWater = makeWater();
+    this.rtWaterMoving = Q.cached ? makeWater() : null;
+    this.rtFinal = this.makeRT(
+      4, 4, Q.msaa, false, false, Q.cached ? THREE.UnsignedByteType : THREE.HalfFloatType
+    );
     this.bindTargetUniforms();
   }
 
   private bindTargetUniforms(): void {
     this.copyMat.uniforms.tSrc.value = this.rtScene.texture;
     this.copyMat.uniforms.tDepth.value = this.rtScene.depthTexture;
-    this.compMat.uniforms.tStatic.value = this.rtStatic.texture;
-    this.compMat.uniforms.tStaticDepth.value = this.rtStatic.depthTexture;
-    this.compMat.uniforms.tWater.value = this.rtWater.texture;
-    this.compMat.uniforms.tWaterDepth.value = this.rtWater.depthTexture;
-    if (Q.cached) {
-      this.water.material.uniforms.tScene.value = this.rtStatic.texture;
-      this.water.material.uniforms.tDepth.value = this.rtStatic.depthTexture;
-    } else {
-      this.water.material.uniforms.tScene.value = this.rtScene.texture;
-      this.water.material.uniforms.tDepth.value = this.rtScene.depthTexture;
-    }
-    G.tStaticDepth.value = this.rtStatic.depthTexture;
-    G.tWaterTex.value = this.rtWater.texture;
-    G.tWaterDepth.value = this.rtWater.depthTexture;
+    this.cameraBlendMat.uniforms.tSrc.value = this.rtFinal.texture;
+    this.bindStaticTarget(Q.cached ? this.rtStatic : this.rtScene);
+    this.bindWaterTarget(this.rtWater);
+  }
+
+  private bindStaticTarget(rt: THREE.WebGLRenderTarget): void {
+    this.compMat.uniforms.tStatic.value = rt.texture;
+    this.compMat.uniforms.tStaticDepth.value = rt.depthTexture;
+    this.water.material.uniforms.tScene.value = rt.texture;
+    this.water.material.uniforms.tDepth.value = rt.depthTexture;
+    G.tStaticDepth.value = rt.depthTexture;
+  }
+
+  private bindWaterTarget(rt: THREE.WebGLRenderTarget): void {
+    this.compMat.uniforms.tWater.value = rt.texture;
+    this.compMat.uniforms.tFoamAmount.value = rt.textures[1] ?? null;
+    G.tWaterTex.value = rt.texture;
+    G.tWaterDepth.value = rt.depthTexture;
+    G.uWaterRes.value.set(rt.width, rt.height);
+    G.uWaterTexel.value.set(1 / rt.width, 1 / rt.height);
   }
 
   private applyModeFlags(): void {
@@ -525,10 +584,19 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     const add = (s: THREE.Scene, c: THREE.Camera = cam): void => void jobs.push(this.gl.compileAsync(s, c));
     add(this.worldScene);
     add(this.overScene);
-    if (Q.cached) add(this.compScene);
+    if (Q.cached) {
+      add(this.compScene);
+      passes.add(fsQuad(this.cameraBlendMat));
+    }
     add(passes);
     this.shadow.asCasters([this.worldScene], () => add(this.worldScene));
     await Promise.all(jobs);
+    if (this.disposed) return;
+    if (this.rtWaterMoving) {
+      this.gl.initRenderTarget(this.rtScene);
+      this.gl.initRenderTarget(this.rtWaterMoving);
+      this.gl.initRenderTarget(this.rtFinal);
+    }
     // Prime D3D11/ANGLE PSOs for MRT wave-stamps and overScene (aim, sprites, oil, rain) with a 1x1 scissor draw
     // against the live render target format so the player's first swipe never hitches.
     this.water.warmStamp(this.gl);
@@ -552,7 +620,6 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     this.fx.sprites.begin();
     this.fx.sprites.end();
     for (const o of hidden) o.visible = false;
-    if (this.disposed) return;
     this.ready = true;
     this.last = performance.now();
     this.forceNextFrame = true;
@@ -667,6 +734,7 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     return {
       setting: this.setting,
       tier: Q.tier,
+      recommendedTier: this.recommendedTier,
       fromUrl: this.fromUrl,
       fps: Math.round(this.smoothFps),
       width: this.gl.domElement.width,
@@ -676,6 +744,7 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
 
   /** Live quality switch from the Settings UI or lab; never reloads or loses progress. */
   setQualitySetting(setting: QualitySetting, persist = true): void {
+    if (setting === this.setting && !this.fromUrl) return;
     this.setting = setting;
     this.fromUrl = false;
     if (persist) saveQualitySetting(setting);
@@ -683,28 +752,39 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     this.autoChanges = 0;
     this.autoCooldown = 0;
     this.hintedTier = null;
-    const nextTier = setting === 'auto' ? guessTier(this.gl.getContext()) : setting;
+    const nextTier = setting === 'auto' ? this.recommendedTier : setting;
     this.applyTier(nextTier);
+  }
+
+  private get scalesManualTier(): boolean {
+    return !Q.cached && this.setting !== 'auto' && !this.fromUrl;
+  }
+
+  private initialLiveScale(): number {
+    if (!this.scalesManualTier) return 1;
+    if (this.recommendedTier === 'low') return Q.tier === 'ultra' ? .5 : .625;
+    return this.recommendedTier === 'medium' ? .875 : 1;
   }
 
   private applyTier(tier: Tier): void {
     const prevTier = Q.tier;
     const prevCached = Q.cached;
     const prevMsaa = Q.msaa;
-    const prevStaticMsaa = Q.staticMsaa;
     setActiveTier(tier);
+    this.liveScale = this.initialLiveScale();
     syncToonQuality();
     this.syncNoiseFilter();
     this.flora.setBrushDensity(Q.brush);
     this.shadow.resize(Q.shadow);
     this.shadow.invalidateStatic();
+    this.cachedShadowSunDir.set(0, 0, 0);
     this.water.applyQuality(this.gl, Q.cached);
     this.post.syncQuality();
     this.applyModeFlags();
 
     const prevPack = prevCached && prevTier === 'low';
     const nextPack = Q.cached && Q.tier === 'low';
-    if (prevCached !== Q.cached || prevMsaa !== Q.msaa || prevStaticMsaa !== Q.staticMsaa || prevPack !== nextPack) {
+    if (prevCached !== Q.cached || prevMsaa !== Q.msaa || prevPack !== nextPack) {
       this.allocTargets();
     } else {
       this.bindTargetUniforms();
@@ -731,11 +811,12 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
       this.autoCooldown -= ms / 1000;
       return;
     }
-    if (++this.warm < 35) return;
+    const manualLive = this.scalesManualTier;
+    if (++this.warm < (manualLive ? 12 : 35)) return;
 
     this.samples.push(ms);
     this.sampleMs += ms;
-    if (this.samples.length < 24 || this.sampleMs < 2200) return;
+    if (this.samples.length < (manualLive ? 12 : 24) || this.sampleMs < (manualLive ? 1000 : 2200)) return;
 
     const sorted = this.samples.slice().sort((x, y) => x - y);
     this.frameMs = sorted[sorted.length >> 1];
@@ -743,14 +824,14 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     this.sampleMs = 0;
 
     if (this.setting !== 'auto' || this.fromUrl) {
-      // Respect explicit user choice: never silently switch, only offer a one-time hint if very slow.
+      if (manualLive && this.adaptLiveScale()) return;
       if (!this.fromUrl && Q.tier !== 'low' && this.hintedTier !== Q.tier) {
         if (this.frameMs > 36) {
           if (++this.badWindows >= 2) {
             this.hintedTier = Q.tier;
             this.badWindows = 0;
-            const idx = TIER_ORDER.indexOf(Q.tier);
-            this.onPerfHint?.(TIER_ORDER[Math.max(0, idx - 1)]);
+            const idx = Math.min(TIER_ORDER.indexOf(Q.tier) - 1, TIER_ORDER.indexOf(this.recommendedTier));
+            this.onPerfHint?.(TIER_ORDER[idx]);
           }
         } else {
           this.badWindows = 0;
@@ -784,11 +865,31 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     }
   }
 
+  private adaptLiveScale(): boolean {
+    let next = this.liveScale;
+    if (this.frameMs > 32) {
+      this.goodWindows = 0;
+      next = Math.max(MIN_MANUAL_SCALE, next - MANUAL_SCALE_STEP);
+    } else if (this.frameMs < Q.target * 1.12 && next < 1) {
+      if (++this.goodWindows >= 3) next = Math.min(1, next + MANUAL_SCALE_STEP);
+    } else {
+      this.goodWindows = 0;
+    }
+    if (next === this.liveScale) return false;
+    this.liveScale = next;
+    this.goodWindows = 0;
+    this.badWindows = 0;
+    this.autoCooldown = 1.5;
+    this.resize();
+    this.onQualityChange?.(this.getQualityState());
+    return true;
+  }
+
   resize(): void {
     const w = Math.max(1, window.innerWidth);
     const h = Math.max(1, window.innerHeight);
     const dpr = Math.min(Q.dprCap, window.devicePixelRatio || 1);
-    this.scale = Math.min(1, Math.sqrt((Q.mp * 1e6) / (w * h * dpr * dpr)));
+    this.scale = Math.min(1, Math.sqrt((Q.mp * 1e6) / (w * h * dpr * dpr))) * this.liveScale;
     this.pixelRatio = dpr * this.scale;
     this.gl.setPixelRatio(this.pixelRatio);
     this.gl.setSize(w, h, false);
@@ -798,8 +899,10 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     const pw = Math.max(4, this.gl.domElement.width);
     const ph = Math.max(4, this.gl.domElement.height);
     if (Q.cached) {
-      this.rtScene.setSize(4, 4);
-      this.rtFinal.setSize(4, 4);
+      const cw = Math.max(4, Math.round(pw * Q.cameraScale));
+      const ch = Math.max(4, Math.round(ph * Q.cameraScale));
+      this.rtScene.setSize(cw, ch);
+      this.rtFinal.setSize(cw, ch);
       this.rtStatic.setSize(pw, ph);
       if (this.rtStaticBack) {
         this.rtStaticBack.scissorTest = false;
@@ -808,10 +911,10 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
       const ww = Math.max(4, Math.round(pw * Q.waterScale));
       const wh = Math.max(4, Math.round(ph * Q.waterScale));
       this.rtWater.setSize(ww, wh);
-      this.compMat.uniforms.uWaterRes.value.set(ww, wh);
-      this.compMat.uniforms.uWaterTexel.value.set(1 / ww, 1 / wh);
-      G.uWaterRes.value.set(ww, wh);
-      G.uWaterTexel.value.set(1 / ww, 1 / wh);
+      this.rtWaterMoving?.setSize(
+        Math.max(4, Math.min(ww, Math.round(cw * .75))),
+        Math.max(4, Math.min(wh, Math.round(ch * .75)))
+      );
     } else {
       this.rtScene.setSize(pw, ph);
       this.rtFinal.setSize(pw, ph);
@@ -824,6 +927,8 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     G.uRes.value.set(pw, ph);
     this.director.fit(w / h, w > h && window.matchMedia('(pointer: coarse)').matches);
     this.staticValid = false;
+    this.movingCamera = false;
+    this.cameraBlend = 0;
     this.refreshStage = -1;
     this.forceNextFrame = true;
   }
@@ -905,7 +1010,6 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
       const prev = this.rtStatic;
       this.rtStatic = back;
       this.rtStaticBack = prev;
-      this.bindTargetUniforms();
       this.cachedEco = this.pendingEco;
       this.cachedBio = this.pendingBio;
       this.cachedLamp = this.pendingLamp;
@@ -1012,6 +1116,7 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
       this.staticValid = false;
       this.refreshStage = -1;
       this.shadow.invalidateStatic();
+      this.cachedShadowSunDir.set(0, 0, 0);
     }
     // none of it has happened yet on the title, nor on the first morning of the opening
     const veiled = onTitle || this.opening.pristine;
@@ -1023,6 +1128,7 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
       this.story.reset();
     }
     this.fx.update(dt, this.time, sim, stats, this.look, cam.position, cine);
+    this.opening.drawBoatShadow();
     // after the sprite batch is opened, so the marker rings make it to the screen
     if (this.ending.active) this.ending.update(Math.max(0, this.director.clock));
     this.story.update(dt, this.time, sim, this.look, this.rescue);
@@ -1045,17 +1151,21 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
 
     if (Q.cached) {
       const settled = this.director.isSettled();
-      if (!settled) {
+      // Keep one reduced-resolution frame at the exact resting pose for a short blend into the cache.
+      const movingView = !settled || this.movingCamera;
+      this.movingCamera = !settled;
+      const output = movingView ? this.rtFinal : null;
+      G.uRes.value.set(output?.width ?? this.rtStatic.width, output?.height ?? this.rtStatic.height);
+      if (movingView) {
         this.refreshStage = -1;
-        this.staticValid = false;
-        this.renderStaticFull(cam, this.rtStatic, this.frame % 4 === 0);
+        this.renderStaticFull(cam, this.rtScene, this.cachedShadowSunDir.lengthSq() === 0);
       } else if (
         !this.staticValid ||
         this.cachedPoseVersion !== this.director.poseVersion ||
         (this.fixedDt !== null && this.staticNeedsGradualRefresh())
       ) {
         this.refreshStage = -1;
-        this.renderStaticFull(cam, this.rtStatic, true);
+        this.renderStaticFull(cam, this.rtStatic, this.look.sunDir.distanceToSquared(this.cachedShadowSunDir) > 0.0004);
         this.recordStaticState();
       } else if (this.refreshStage >= 0) {
         this.stepIncrementalRefresh(cam);
@@ -1063,24 +1173,28 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
         this.refreshStage = 0;
         this.stepIncrementalRefresh(cam);
       }
+      const staticTarget = movingView ? this.rtScene : this.rtStatic;
+      const waterTarget = movingView && this.rtWaterMoving ? this.rtWaterMoving : this.rtWater;
+      this.bindStaticTarget(staticTarget);
+      this.bindWaterTarget(waterTarget);
 
-      // Render reduced-res water into rtWater.
-      wu.uWaterSurfRes.value.set(this.rtWater.width, this.rtWater.height);
-      wu.uPxK.value = (2 * Math.tan((cam.fov * Math.PI) / 360)) / this.rtWater.height;
+      // Render the base water color and foam envelopes at reduced resolution.
+      wu.uWaterSurfRes.value.set(waterTarget.width, waterTarget.height);
+      wu.uPxK.value = (2 * Math.tan((cam.fov * Math.PI) / 360)) / waterTarget.height;
       this.copyQuad.visible = false;
       this.water.mesh.visible = true;
       this.actors.overGroup.visible = false;
       this.fx.group.visible = false;
-      this.gl.setRenderTarget(this.rtWater);
+      this.gl.setRenderTarget(waterTarget);
       this.gl.setClearColor(0x000000, 0);
       this.gl.clear(true, true, false);
       this.gl.render(this.overScene, cam);
 
-      // Quarter-res bloom: always active on Medium, and active on Low for dawn/sunset/monsoon lamps & bioluminescence.
+      // Bloom stays sparse on Low, where it mainly lights the village and bioluminescence.
       const wantBloom = Q.tier !== 'low' || this.look.bio > 0.02 || this.look.lamp > 0.05;
       const cu = this.compMat.uniforms;
       if (wantBloom) {
-        cu.tBloom.value = this.post.renderDirectBloom(this.gl, this.fs, this.rtWater, this.rtStatic, this.look.lamp);
+        cu.tBloom.value = this.post.renderDirectBloom(this.gl, this.fs, waterTarget, staticTarget, this.look.lamp);
         cu.uBloom.value = this.look.bloom;
       } else {
         cu.uBloom.value = 0;
@@ -1091,11 +1205,13 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
       cu.uNearFar.value.set(cam.near, cam.far);
       cu.uCaustic.value = this.look.caustic;
       cu.uMurk.value = G.uMurkG.value;
+      cu.uPxK.value = (2 * Math.tan((cam.fov * Math.PI) / 360)) / staticTarget.height;
       cu.uShift.value.copy(sh);
       const sunL = this.look.sun.r * 0.3 + this.look.sun.g * 0.5 + this.look.sun.b * 0.2;
       this.foamLit.copy(this.look.foam).multiplyScalar(0.34 + 0.68 * sunL);
+      this.foamShade.copy(this.look.foamShade).multiplyScalar(0.34 + 0.68 * sunL);
 
-      this.gl.setRenderTarget(null);
+      this.gl.setRenderTarget(output);
       this.gl.clear(true, true, false);
       this.gl.render(this.compScene, cam);
 
@@ -1125,6 +1241,16 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
       this.gl.render(this.overScene, cam);
 
       pm[0] = p0; pm[5] = p5; pm[8] = p8; pm[9] = p9;
+
+      if (movingView) {
+        this.cameraBlend = CAMERA_BLEND_SECONDS;
+        this.cameraBlendMat.uniforms.uOpacity.value = 1;
+        this.fs.render(this.gl, this.cameraBlendMat, null);
+      } else if (this.cameraBlend > 0) {
+        this.cameraBlend = Math.max(0, this.cameraBlend - real);
+        this.cameraBlendMat.uniforms.uOpacity.value = this.cameraBlend / CAMERA_BLEND_SECONDS;
+        this.fs.render(this.gl, this.cameraBlendMat, null);
+      }
     } else {
       // Live pipeline (High / Ultra): split static+dynamic shadow map + single render per MSAA target.
       if (this.frame % Q.shadowEvery === 0) {
@@ -1239,7 +1365,9 @@ void main(){ gl_FragColor = texture2D(tSrc, vUv); gl_FragDepth = texture2D(tDept
     this.disposeRT(this.rtStatic);
     this.disposeRT(this.rtStaticBack);
     this.disposeRT(this.rtWater);
+    this.disposeRT(this.rtWaterMoving);
     this.disposeRT(this.rtFinal);
+    this.cameraBlendMat.dispose();
     this.shadow.dispose();
     this.post.dispose();
     this.water.dispose();

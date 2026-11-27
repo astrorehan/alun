@@ -129,6 +129,13 @@
   padding: 0;
 }
 
+.graphics-warning {
+  margin: 0;
+  color: #ffe1a3;
+  font-size: clamp(12px, 1.8vw, 15px);
+  font-weight: 700;
+}
+
 /* ---------------------------------------------------------------- cards shared by sound & game */
 .set-switch,
 .set-slider,
