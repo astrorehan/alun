@@ -287,6 +287,7 @@ class AlunApp {
         const scene: Scene = SCENES[id];
         this.ui.startTalk(scene.lines, scene.hold !== false);
       },
+      unsay: (id) => this.ui.dropRadio(SCENES[id].lines.map((l) => l.text)),
       coins: (amount, x, y) => {
         // what was earned in the water flies up to the purse
         const at = this.renderer.worldToScreen?.(x, y);
