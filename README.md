@@ -1,6 +1,6 @@
 # ALUN: Gema Pesisir Tropis
 
-ALUN adalah permainan dengan satu mekanik di laguna tropis. Saat sampah menutup dermaga dan Pak Damar tertahan di laut, Bu Sari menghidupkan A.L.U.N. untuk membuka jalur pulang. Dalam delapan bab, sapuan ombak yang sama dipakai untuk mengangkat sampah, membebaskan lumba-lumba, menjaga muatan ikan, dan menghadang kapal induk saat muson. Dibuat untuk **IT RUSH 2026 Game Jam (Universitas Bengkulu)**, tema *Only One Mechanics in a Tropical*.
+ALUN adalah permainan dengan satu mekanik di laguna tropis. Saat sampah menutup dermaga dan Pak Damar tertahan di laut, Bu Sari menghidupkan A.L.U.N. untuk membuka jalur pulang. Selama lima hari, pemain membersihkan pesisir, membantu nelayan, dan mempertahankan dermaga dari kapal penjarah. Kapal Induk memasuki laguna pada malam kelima. Dibuat untuk **IT RUSH 2026 Game Jam (Universitas Bengkulu)**, tema *Only One Mechanics in a Tropical*.
 
 ![Laguna di pagi hari](docs/main.jpg)
 
@@ -24,9 +24,11 @@ Klik atau sentuh air, geser ke sasaran, lalu lepas untuk mengirim ombak. Ketuk t
 | Esc / Enter / Spasi | Lewati film |
 | Klik / Spasi / Enter | Lanjutkan omongan Bu Sari (Esc melewati adegannya) |
 
-Sapu enam sampah pertama ke Jaring Desa, lalu dorong peti perkakas ke ujung dermaga. Bu Sari membuka Bengkel Kalibrasi dan menawarkan Bentang Ombak serta Kapasitas Energi. Pilih simpul di pohon alat untuk melihat efek dan harga. Koin membayar pemasangan, sedangkan cetak biru dan batas tingkat mengikuti kemajuan cerita. Semua bab bisa ditamatkan dengan ombak dasar.
+Sapu enam sampah pembuka ke Jaring Desa, lalu dorong peti perkakas ke ujung dermaga. Bu Sari membuka Bengkel dan memasang **Jalur Pasang**. Tahan sampai tiga panah muncul, geser, lalu lepas. Arus bertahan tiga detik dan siap lagi delapan detik setelah dilepas.
 
-Setelah jaga malam selesai dan pencemaran turun ke 30 atau kurang, jawab panggilan Operasi Badai Muson di bengkel saat siap. Sesudah fajar, Patroli Laguna melanjutkan permainan dengan saldo, peralatan, dan keadaan pesisir yang sama. Jurnal menyimpan riwayat pekerjaan desa.
+Siang berlangsung **90 detik**. Ikatan rongsok membawa dua barang dalam satu sapuan. Muatan senja masuk menjelang malam dan bengkel tutup saat gelap. Bengkel tumbuh bertahap: Hari 1 hanya ada **Tenaga** dan **Muatan**, cetak biru baru datang setiap fajar, dan batas level tiap alat naik satu per hari. Setiap pagi bengkel terbuka sendiri dan hari baru dimulai setelah kamu kembali ke laguna. Di samping tombol Bengkel, chip alat berikutnya menunjukkan harga dan koin yang sudah terkumpul, lalu berkilau saat alat itu terbeli. Pada malam pertama, bantu perahu terakhir Pak Damar merapat untuk mendapat pelindung bambu yang menahan satu serangan. Kapal Pendobrak mengunci arah sebelum melaju. Sapu dari samping agar meleset. Kapal Tunda menarik tongkang berpeti. Sapu melintang pada tongkang untuk mengambil muatannya.
+
+Saat muson, belokkan kedua pelampung pukat dan jauhkan drum dari karang. Setiap alat yang digagalkan merusak Kapal Induk dan membuka kesempatan menghantam lambungnya. Patroli berlanjut setelah fajar.
 
 Kapal penjarah pertama diperkenalkan sekali per simpanan. Kamera mengikuti lima awak dan memperlihatkan dermaga lewat teropong kapten. Awak bersorak saat menyerang dan terhuyung saat terkena ombak.
 

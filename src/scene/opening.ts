@@ -8,6 +8,7 @@ import type { Fx } from './fx';
 import { outlineMaterial } from './gfx';
 import { inked, mesh } from './kit';
 import { clamp, lerp, rng, simX, simY, smooth, toX, toZ } from './space';
+import { movingPerson, type PersonRig } from './people';
 import { perahu, person, propPair } from './village';
 import type { Water } from './water';
 
@@ -38,7 +39,7 @@ const CAPTIONS: { from: number; to: number; kicker: string; line: string }[] = [
   { from: 10.6, to: 14.2, kicker: 'TEMPAT PEMIJAHAN', line: 'Di sekitar karang inilah ikan bertelur.' },
   { from: 15.2, to: 18.9, kicker: 'TAMU DATANG', line: 'Rombongan wisatawan menyeberang ke laguna...' },
   { from: 19.6, to: 25.2, kicker: 'TAPI...', line: '...sampahnya dibuang begitu saja ke laut.' },
-  { from: 25.9, to: 31.6, kicker: 'BU SARI MENGHIDUPKAN A.L.U.N.', line: 'Dermaga tertutup sampah — bersihkan sebelum malam datang!' },
+  { from: 25.9, to: 31.6, kicker: 'BU SARI MENGHIDUPKAN A.L.U.N.', line: 'Dermaga tertutup sampah. Bersihkan sebelum malam datang!' },
 ];
 
 /** When A.L.U.N. comes online. */
@@ -198,22 +199,25 @@ function jukung(): THREE.BufferGeometry {
 type Hat = 'sun' | 'cap' | 'none';
 
 /** A day-tripper: loud shirt, shorts, a hat against the sun, maybe sunglasses. Faces +Z, feet at 0. */
-function tourist(shirt: string, shorts: string, skin: string, hat: Hat, hatCol: string, shades: boolean): THREE.BufferGeometry {
+function touristHat(hat: Hat, hatCol: string, shades: boolean): Build {
   const b = new Build(7);
-  b.merge(person({ shirt, sarong: shorts, skin, hat: 'none' }));
   if (hat === 'sun') {
     b.cyl(0.52, 0.52, 0.04, { color: hatCol, pos: [0, 1.93, 0.01], seg: 16 });
     b.cyl(0.25, 0.3, 0.24, { color: hatCol, pos: [0, 2.05, -0.01], seg: 12 });
     b.cyl(0.305, 0.305, 0.06, { color: '#2f3a4c', pos: [0, 1.97, -0.01], seg: 12 });
   } else if (hat === 'cap') {
-    b.ball(0.31, { color: hatCol, pos: [0, 1.82, -0.02], scale: [1, 0.62, 1], seg: 12 });
-    b.box(0.34, 0.04, 0.26, { color: hatCol, pos: [0, 1.86, 0.32], rot: [0.12, 0, 0], r: 0.015 });
+    b.profile([[1.827, 0.312, 0.29], [1.902, 0.308, 0.285], [2.0, 0.222, 0.205], [2.035, 0.099, 0.084]], 10,
+      { color: hatCol, pos: [0, 0, 0.022] });
+    b.cyl(0.213, 0.208, 0.032, { color: hatCol, pos: [0, 1.841, 0.258], scale: [1, 1, 0.89], rot: [0.08, 0, 0], seg: 8 });
   }
   if (shades) {
-    b.box(0.42, 0.09, 0.05, { color: '#15202c', pos: [0, 1.715, 0.305], r: 0.02, gloss: 0.9 });
-    for (const s of [-1, 1]) b.box(0.03, 0.03, 0.22, { color: '#15202c', pos: [s * 0.22, 1.73, 0.19], r: 0.005 });
+    b.box(0.12, 0.024, 0.026, { color: '#342d35', pos: [0, 1.728, 0.288], r: 0 });
+    for (const side of [-1, 1]) {
+      b.cyl(0.083, 0.083, 0.024, { color: '#233542', pos: [side * 0.118, 1.717, 0.276], rot: [Math.PI / 2, 0, -side * 0.26], seg: 6, gloss: 0.8 });
+      b.bar([side * 0.18, 1.734, 0.25], [side * 0.279, 1.74, 0.015], 0.014, 0.01, { color: '#342d35', seg: 4 });
+    }
   }
-  return b.geo(true);
+  return b;
 }
 
 function sack(): THREE.BufferGeometry {
@@ -229,7 +233,7 @@ function sack(): THREE.BufferGeometry {
 /* ================================================================== the plan */
 
 interface Rider {
-  m: THREE.Mesh;
+  rig: PersonRig;
   base: THREE.Vector3;
   ph: number;
 }
@@ -315,14 +319,15 @@ export class Opening {
       ['#ff8a2a', '#3a4a5c', '#c98a5c', 'sun', '#fbf4e2', true, -1.55, -0.36],
     ];
     folk.forEach(([shirt, shorts, skin, hat, hatCol, shades, x, z], i) => {
-      const m = inked(mesh(tourist(shirt, shorts, skin, hat, hatCol, shades), pair), ink);
+      const rig = movingPerson({ shirt, sarong: shorts, shorts: true, camera: true, skin, hat: 'none' }, pair, ink, touristHat(hat, hatCol, shades));
+      const m = rig.root;
       m.frustumCulled = false;
       m.scale.setScalar(0.9);
       const base = new THREE.Vector3(x, -0.24, z);
       m.position.copy(base);
       m.rotation.set(0, FACE, 0, 'YXZ');
       this.boat.add(m);
-      this.riders.push({ m, base, ph: i * 1.7 });
+      this.riders.push({ rig, base, ph: i * 1.7 });
     });
 
     this.bag = inked(mesh(sack(), pair), ink);
@@ -601,18 +606,31 @@ export class Opening {
     let yaw = FACE + Math.sin(time * 0.7 + rd.ph) * 0.12;
     let lean = Math.sin(time * 1.3 + rd.ph) * 0.03;
     let rise = 0;
+    const { root, head, arms, forearms } = rd.rig;
+    head.rotation.set(-0.045, 0.22 * Math.sin(time * 0.83 + rd.ph), -lean);
+    arms.forEach((arm, k) => arm.rotation.set(-0.23 + Math.sin(time * 1.3 + rd.ph + k) * 0.12, 0, k ? 0.1 : -0.1));
+    for (const forearm of forearms) forearm.rotation.x = -0.32;
     for (const th of this.plan) {
       if (th.who !== i) continue;
       const p = (t - (th.at - 0.45)) / 0.95;
       if (p < 0 || p > 1) continue;
       const turn = smooth(0, 0.25, p) * (1 - smooth(0.72, 1, p));
+      const wind = smooth(0, 0.38, p) * (1 - smooth(0.38, 0.54, p));
+      const snap = smooth(0.36, 0.5, p) * (1 - smooth(0.52, 1, p));
+      const hand = th.side > 0 ? 1 : 0;
+      forearms[hand].rotation.x += -1.22 * wind + 0.27 * snap;
+      const arm = arms[hand];
+      arm.rotation.x += wind * 1.12 - snap * 2.03;
+      arm.rotation.z += th.side * (wind * 0.82 + snap * 0.25);
+      if (th.dump) arms[0].rotation.x = arms[1].rotation.x = -1.75 * turn;
+      head.rotation.x += wind * 0.15 - snap * 0.18;
       yaw = lerp(yaw, th.side > 0 ? 0.15 : Math.PI - 0.15, turn);
       // back on the wind-up, through on the throw
       lean += -0.4 * smooth(0.05, 0.4, p) * (1 - smooth(0.4, 0.5, p)) + 0.45 * smooth(0.42, 0.52, p) * (1 - smooth(0.6, 0.95, p));
       rise = Math.max(rise, (th.dump ? 0.42 : 0.28) * Math.sin(clamp(p, 0, 1) * Math.PI));
     }
-    rd.m.position.set(rd.base.x, rd.base.y + rise + Math.abs(Math.sin(time * 2.1 + rd.ph)) * 0.015, rd.base.z);
-    rd.m.rotation.set(lean, yaw, 0, 'YXZ');
+    root.position.set(rd.base.x, rd.base.y + rise + Math.abs(Math.sin(time * 2.1 + rd.ph)) * 0.015, rd.base.z);
+    root.rotation.set(lean, yaw, 0, 'YXZ');
 
     // the sack comes up with whoever empties it
     if (i === 3 && !this.dumped) {
@@ -662,7 +680,7 @@ export class Opening {
     }
     const from = th.dump
       ? this.boat.localToWorld(new THREE.Vector3(-1.6, 1.55, -0.8))
-      : this.boat.localToWorld(new THREE.Vector3(this.riders[th.who].base.x, 1.35, this.riders[th.who].base.z + th.side * 0.75));
+      : this.riders[th.who].rig.forearms[th.side > 0 ? 1 : 0].localToWorld(new THREE.Vector3(th.side * 0.048, (-0.18 + th.side * 0.04) * 0.89, 0.115 + th.side * 0.04));
     this.actors.toss(e, from, to, th.dur, th.arc, land);
     if (!th.dump) this.hooks.sound?.('throw', 1);
   }

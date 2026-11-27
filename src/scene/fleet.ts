@@ -232,6 +232,27 @@ export function raider(): THREE.BufferGeometry {
 export function skiff(): THREE.BufferGeometry {
   const b = new Build(421);
   hull(b, { side: '#d45522', band: '#fff0c9', bottom: '#502a24', rail: '#d39244', deck: '#aa7843', rust: 0.38 }, [1, 0.55, 0.52]);
+  // Baskets of coiled line under a short suncloth, lashed to a pair of bent hoops.
+  const hood = (u: number, v: number): Vec => [
+    0.12 + 1.55 * u + 0.12 * v,
+    1.13 + 0.53 * (1 - v * v) + 0.15 * u - 0.11 * Math.sin(Math.PI * u),
+    v * (0.76 - 0.12 * u),
+  ];
+  for (const u of [0, 1]) {
+    const hoop: Vec[] = [hood(u, -1), hood(u, 0), hood(u, 1)];
+    b.tube(hoop, () => 0.046, { color: '#70593b', seg: 5, rings: 6 });
+    for (const v of [-1, 1]) {
+      const top = hood(u, v);
+      b.bar([top[0] - 0.14, 0.42, top[2]], top, 0.046, 0.04, { color: '#977448' });
+    }
+  }
+  for (let j = 0; j < 6; j++) {
+    const v = j / 3 - 1;
+    b.quad(hood(0,v), hood(0,v+1/3), hood(0.55,v+1/3), hood(0.55,v), { color: '#566d69' });
+    b.quad(hood(0.55,v), hood(0.55,v+1/3), hood(1,v+1/3), hood(1,v), { color: '#78887b' });
+  }
+  b.cyl(0.34, 0.27, 0.36, { color: '#c49452', pos: [0.92, 0.54, 0.06], seg: 10 });
+  b.add(new THREE.TorusGeometry(0.28, 0.07, 5, 11), { color: '#dfd0a4', pos: [0.92, 0.72, 0.06], rot: [Math.PI / 2, 0.14, 0] });
   const float: Vec[] = [[-2.78, 0.28, -2.08], [-2.0, 0.08, -2.16], [0.4, 0.06, -2.17], [2.15, 0.12, -2.14], [2.88, 0.48, -2.03]];
   b.tube(float, (t) => 0.08 + 0.19 * Math.pow(Math.sin(Math.PI * t), 0.4), { color: '#e6a746', top: '#f6d18a', seg: 7, rings: 14 });
   for (const x of [-1.56, 1.42]) {
@@ -398,6 +419,210 @@ export function dumperShip(): THREE.BufferGeometry {
   for (const x of [-2.41, -1.48, -0.37]) b.bar([x, 0.58, 1.22], [x, 1.36, 1.30], 0.072, 0.063, { color: beams });
   b.bar([-2.48, 1.25, 1.29], [-0.33, 1.30, 1.30], 0.095, 0.065, { color: '#9b7d58' });
   b.merge(person({ shirt: '#8b623a', sarong: '#3c4f3b', hat: 'caping', scale: 0.83 }), matrixOf([1.88, 0.56, 0.15], [0, 1.5, 0]));
+  return b.geo(true);
+}
+
+/** Narrow sailing canoe with a brass-shod battering prow, crimson-tipped outriggers, and a working red sail. */
+export function rammerShip(): THREE.BufferGeometry {
+  const b = new Build(426);
+  hull(b, { side: '#793e31', band: '#c89969', bottom: '#332e2c', rail: '#51372b', deck: '#957653', rust: 0.18 }, [1.12, 0.80, 0.85]);
+  // Solid faceted iron-and-brass battering beak gripping the high stempost so the prow reads at play scale.
+  const ridgeA: Vec = [2.78, 1.38, 0];
+  const ridgeB: Vec = [4.38, 1.76, 0];
+  const noseTop: Vec = [5.72, 1.44, 0];
+  const noseBot: Vec = [5.60, 0.82, 0];
+  const keelA: Vec = [2.62, 0.14, 0];
+  const keelB: Vec = [4.26, 0.46, 0];
+  for (const side of [-1, 1]) {
+    const collarTop: Vec = [2.72, 1.24, side * 0.74];
+    const collarBot: Vec = [2.62, 0.28, side * 0.62];
+    const shoulderTop: Vec = [4.28, 1.56, side * 0.38];
+    const shoulderBot: Vec = [4.18, 0.56, side * 0.34];
+    const tipTop: Vec = [5.66, 1.38, side * 0.13];
+    const tipBot: Vec = [5.56, 0.84, side * 0.11];
+    // Timber bolster cheeks & top deck cap merging the ram into the bow hull
+    b.quad(collarBot, shoulderBot, shoulderTop, collarTop, { color: '#5b392c' });
+    b.quad(collarTop, shoulderTop, ridgeB, ridgeA, { color: '#7b5139', top: '#a8784e' });
+    b.quad(collarBot, keelA, keelB, shoulderBot, { color: '#3b2c27' });
+    // Forged iron side cheeks + burnished brass dorsal bevels tapering to a blunt chisel shoe
+    b.quad(shoulderBot, tipBot, tipTop, shoulderTop, { color: '#4d535b', top: '#6d757e', gloss: 0.46 });
+    b.quad(shoulderTop, tipTop, noseTop, ridgeB, { color: '#ce8c46', top: '#f2c174', gloss: 0.58 });
+    b.quad(shoulderBot, keelB, noseBot, tipBot, { color: '#393e44', gloss: 0.35 });
+    // Two iron collar straps and brass rivet bosses along the ram shoulder
+    b.bar(collarBot, collarTop, 0.085, 0.085, { color: '#3a3f46', seg: 6 });
+    b.bar(shoulderBot, shoulderTop, 0.08, 0.075, { color: '#3a3f46', seg: 6 });
+    b.bar(collarTop, ridgeA, 0.075, 0.07, { color: '#3a3f46', seg: 6 });
+    b.bar(shoulderTop, ridgeB, 0.07, 0.07, { color: '#c48a46', seg: 6, gloss: 0.5 });
+    for (const q of [0.28, 0.64]) {
+      b.ball(0.075, {
+        color: '#efc072',
+        pos: [lerp(shoulderTop[0], tipTop[0], q), lerp(shoulderTop[1], tipTop[1], q) - 0.24, side * lerp(0.39, 0.15, q)],
+        seg: 6,
+        gloss: 0.6,
+      });
+    }
+    // Twin bamboo outriggers with crimson-painted war tips and dark rattan lashings
+    const outrigger: Vec[] = [[-3.05,0.52,side*1.74],[-2.15,0.17,side*1.9],[0.6,0.14,side*1.98],[2.55,0.34,side*1.86],[3.48,0.72,side*1.66]];
+    b.tube(outrigger, t => 0.05 + Math.sin(t*Math.PI)*0.165, {
+      color: (p) => _c.set(p.x > 1.75 ? '#be3e2c' : '#a67f52').lerp(hex(p.x > 1.75 ? '#df6a48' : '#d8c08e'), smooth(0.1, 0.6, p.y)),
+      seg: 7,
+      rings: 14,
+    });
+    for (const x of [-1.9, 1.32]) {
+      b.bar([x,0.7,side*0.68],[x+0.16,0.34,side*1.92],0.09,0.075,{color:'#b09465'});
+      b.bar([x+0.08,0.30,side*1.91],[x+0.26,0.30,side*1.91],0.16,0.16,{color:'#4c3829'});
+    }
+  }
+  // Closed blunt brass impact nose plate at the very tip of the ram
+  b.quad([5.66, 1.38, -0.13], [5.56, 0.84, -0.11], [5.56, 0.84, 0.11], [5.66, 1.38, 0.13], { color: '#e6b264', gloss: 0.62 });
+  b.quad([5.66, 1.38, -0.13], [5.66, 1.38, 0.13], [5.72, 1.44, 0.04], [5.72, 1.44, -0.04], { color: '#f2c87b', gloss: 0.62 });
+  b.box(0.52, 0.16, 1.48, { color: '#7a593d', pos: [1.58, 0.68, 0], r: 0.03 });
+  b.add(new THREE.TorusGeometry(0.28, 0.07, 5, 10), { color: '#c8ae7c', pos: [1.98, 0.72, -0.28], rot: [Math.PI / 2, 0.08, 0] });
+  // The head and foot follow separate yards. Bias-cut cloth sags away from the lacing.
+  const cloth = (u: number, v: number): Vec => [
+    lerp(lerp(1.85, -2.1, u), lerp(1.44, -1.26, u), v),
+    lerp(lerp(1.93, 4.52, u), lerp(1.64, 2.0, u), v) - 0.16 * Math.sin(Math.PI*u),
+    0.17 - 0.8*u + 0.82*Math.sin(Math.PI*u)*Math.sin(Math.PI*v),
+  ];
+  b.bar([0.1,0.52,0],[0.02,3.65,-0.11],0.12,0.085,{color:'#5b4530'});
+  for (let u = 0; u < 8; u++) {
+    for (let v = 0; v < 5; v++) {
+      const color = v === 4 ? '#a47e5c' : u === 5 && v >= 1 && v <= 2 ? '#b57854' : ['#a84f37','#b65c3d','#a9533b'][u % 3];
+      b.quad(cloth(u/8,v/5),cloth((u+1)/8,v/5),cloth((u+1)/8,(v+1)/5),cloth(u/8,(v+1)/5),{color});
+    }
+  }
+  for (const v of [0,1]) b.bar(cloth(0,v),cloth(1,v),0.067,0.05,{color:'#c8a670'});
+  b.bar(cloth(1,1),[-2.9,0.9,-0.84],0.03,0.03,{color:'#7b6447'});
+  b.bar([0.02,3.55,-0.11],[2.87,0.99,0.48],0.03,0.03,{color:'#786247'});
+  b.merge(person({ shirt: '#424c50', sarong: '#944b3b', hat: 'peci', scale: 0.86 }), matrixOf([-2.24,0.58,0.02],[0,1.36,0]));
+  b.bar([-2.35,1.33,0.44],[-3.79,0.09,0.98],0.07,0.09,{color:'#563726'});
+  return b.geo(true);
+}
+
+/** Harbor tug with a chamfered watertight pilothouse, bow push-fender, tire fenders, and aft towing arch. */
+export function tugShip(): THREE.BufferGeometry {
+  const b = new Build(427);
+  hull(b, { side: '#234849', band: '#b7a482', bottom: '#3e3330', rail: '#51483a', deck: '#8b7559', rust: 0.34 }, [0.97,1.19,1.04]);
+  // Chamfered forward panes wrap around the helm, closed tightly into the cambered roof fascia.
+  const footprint: [number,number][] = [[-0.67,-0.97],[0.95,-0.97],[1.59,-0.57],[1.59,0.57],[0.95,0.97],[-0.67,0.97]];
+  const corner = (i: number,h: number,scale: number): Vec => {
+    const [x,z] = footprint[i % footprint.length];
+    return [0.48 + (x-0.48)*scale,h,z*scale];
+  };
+  for (let i=0; i<footprint.length; i++) {
+    const j=i+1;
+    b.quad(corner(i,0.65,1.03),corner(j,0.65,1.03),corner(j,1.59,1),corner(i,1.59,1),{color:'#477671'});
+    b.quad(corner(i,1.59,1),corner(j,1.59,1),corner(j,2.32,0.94),corner(i,2.32,0.94),{
+      color: i === 2 ? '#e3bd78' : i === 1 || i === 3 ? '#3b5d60' : '#243d43',
+      gloss: 0.55,
+      glow: i === 2 ? 0.24 : 0,
+    });
+    // Solid upper header fascia closing the gap between window tops and the cambered roof
+    b.quad(corner(i,2.30,0.945),corner(j,2.30,0.945),corner(j,2.56,0.94),corner(i,2.56,0.94),{color:'#d1bea0'});
+    b.bar(corner(i,1.55,1.02),corner(i,2.46,0.96),0.064,0.066,{color:'#d1bea0'});
+    b.bar(corner(i,1.58,1.02),corner(j,1.58,1.02),0.055,0.055,{color:'#b69572'});
+    if (i===0 || i===4) {
+      const z=i===0?-0.97:0.97;
+      b.bar([0.13,1.6,z],[0.15,2.33,z*0.94],0.045,0.045,{color:'#c3ad8a'});
+    }
+  }
+  // Cambered roof, with solid underside thickness, visible eaves, helm hatch, and brass brow lamp.
+  const roof = (u:number,v:number):Vec => [
+    lerp(-0.91,1.98-0.32*Math.pow(Math.abs(v),3),u),
+    2.48 + 0.23*(1-v*v) - 0.06*u, v*1.12,
+  ];
+  for (let i=0;i<8;i++) {
+    const a=i/4-1, d=(i+1)/4-1;
+    b.quad(roof(0,a),roof(0,d),roof(1,d),roof(1,a),{color:i%2?'#b8ab8e':'#c4b79a'});
+    for (const u of [0,1]) b.bar(roof(u,a),roof(u,d),0.075,0.075,{color:'#786b54'});
+  }
+  for (const s of [-1, 1]) b.bar(roof(0, s), roof(1, s), 0.07, 0.07, { color: '#786b54' });
+  b.box(0.71,0.11,0.66,{color:'#726e58',pos:[0.53,2.71,-0.13],r:0.04});
+  // Roof brow searchlight
+  b.cyl(0.16, 0.14, 0.28, { color: '#584b3e', pos: [1.76, 2.74, 0], rot: [0, 0, Math.PI / 2], seg: 9 });
+  b.cyl(0.13, 0.13, 0.05, { color: '#ffe5a0', pos: [1.91, 2.74, 0], rot: [0, 0, Math.PI / 2], seg: 9, glow: 0.7 });
+  // Raked smokestack with soot crown and slender brass steam pipe
+  b.bar([-1.12,0.62,-0.32],[-1.56,3.31,-0.32],0.42,0.32,{color:'#855641',seg:12});
+  b.bar([-1.50,2.91,-0.32],[-1.58,3.37,-0.32],0.35,0.36,{color:'#333b39',seg:12});
+  b.cyl(0.245,0.245,0.03,{color:'#1b2528',pos:[-1.58,3.38,-0.32],seg:12,rot:[0,0,0.16]});
+  b.bar([-0.74,1.25,-0.32],[-1.16,3.06,-0.32],0.055,0.05,{color:'#c89956',seg:6,gloss:0.5});
+  b.bar([0.06,2.65,0.27],[-0.12,3.8,0.27],0.07,0.045,{color:'#604939'});
+  b.ball(0.16,{color:'#f1cd8b',pos:[-0.12,3.8,0.27],seg:8,glow:0.22});
+  // Heavy rubber/rope bow push-fender wrapping the blunt tug stem
+  const bowPad: Vec[] = [[2.88,1.52,-0.86],[3.58,1.68,-0.42],[3.82,1.76,0],[3.58,1.68,0.42],[2.88,1.52,0.86]];
+  b.tube(bowPad, t => 0.17 + 0.09 * Math.sin(t * Math.PI), { color: '#2d3230', top: '#464d4a', seg: 7, rings: 12 });
+  for (const [x, y, z] of [[3.32, 1.56, -0.60], [3.76, 1.66, 0], [3.32, 1.56, 0.60]] as const) {
+    b.bar([x, y - 0.34, z], [x, y + 0.24, z], 0.05, 0.05, { color: '#9c7e54', seg: 5 });
+  }
+  for (const side of [-1,1]) {
+    for (const [x,y] of [[-2.16,0.6],[0.03,0.48],[1.72,0.68]]) {
+      const z=side*(x>1?1.42:1.51);
+      b.bar([x-0.12,1.02,z*0.93],[x,y+0.19,z],0.038,0.038,{color:'#907853'});
+      b.add(new THREE.TorusGeometry(0.33,0.135,6,12),{color:'#323733',pos:[x,y,z],rot:[side*0.18,0,0.17]});
+    }
+  }
+  // Aft towing winch, curved steel towing arch to keep the hawser clear, and a deckhand watching the tow
+  b.cyl(0.32,0.32,1.12,{color:'#937856',pos:[-2.24,1.08,0],rot:[Math.PI/2,0,0],seg:10});
+  for (const z of [-0.58,0.58]) b.cyl(0.44,0.44,0.09,{color:'#51544a',pos:[-2.24,1.08,z],rot:[Math.PI/2,0,0],seg:10});
+  const arch: Vec[] = [[-2.82, 1.12, -1.16], [-2.88, 1.48, -0.58], [-2.92, 1.58, 0], [-2.88, 1.48, 0.58], [-2.82, 1.12, 1.16]];
+  b.tube(arch, () => 0.075, { color: '#4c524c', top: '#787e74', seg: 6, rings: 10 });
+  for (const s of [-1, 1]) b.bar([-2.82, 0.85, s * 1.12], [-2.82, 1.18, s * 1.16], 0.07, 0.07, { color: '#4c524c' });
+  b.add(new THREE.TorusGeometry(0.32,0.087,6,14),{color:'#c8734d',pos:[-0.48,1.26,1.02]});
+  b.merge(person({ shirt: '#566d68', sarong: '#3b373e', hat: 'caping', scale: 0.78 }), matrixOf([-1.28, 0.76, 0.68], [0, -1.25, 0]));
+  return b.geo(true);
+}
+
+/** Recovered canvas roll, creased by two rope lashings with an orange cork tag float. */
+export function salvageBundle(): THREE.BufferGeometry {
+  const b = new Build(429);
+  b.tube([[-0.94,0.31,-0.06],[-0.58,0.4,0],[-0.12,0.43,0.04],[0.49,0.38,0],[0.91,0.33,0.06]],
+    t=>0.36 + 0.09*Math.sin(t*Math.PI)-0.07*Math.cos(t*Math.PI*4),{color:'#8e8d72',top:'#baae86',seg:9,rings:11});
+  for (const x of [-0.47,0.51]) b.add(new THREE.TorusGeometry(0.425,0.045,5,10),{color:'#705637',pos:[x,0.4,0],rot:[0,Math.PI/2,0]});
+  for (const x of [-0.91,0.9]) b.ball(0.32,{color:'#8e8062',pos:[x,0.34,0.01],scale:[0.32,1,1],seg:7});
+  striped(b, [0.52, 0.76, 0.24], 0.22);
+  return b.geo(true);
+}
+
+/** A timber lighter carrying a bow towing bitt, a lashed tarp, a slatted tea chest, and two weathered steel drums. */
+export function cargoBarge(): THREE.BufferGeometry {
+  const b = new Build(428);
+  hull(b,{side:'#565346',band:'#8e7557',deck:'#89785d',rail:'#594538',bottom:'#373b35',rust:0.27},[0.66,1.02,0.66]);
+  // Stout timber towing bollard (bitt) at the bow where the tug's hawser fastens
+  b.cyl(0.16, 0.19, 0.72, { color: '#4d3a2c', pos: [1.94, 1.06, 0], seg: 8 });
+  b.bar([1.94, 1.24, -0.34], [1.94, 1.24, 0.34], 0.075, 0.075, { color: '#6b513b', seg: 6 });
+  b.add(new THREE.TorusGeometry(0.21, 0.055, 5, 10), { color: '#d0b583', pos: [1.94, 1.08, 0], rot: [Math.PI / 2, 0.1, 0] });
+  const tarp = (u:number,v:number):Vec => [
+    -1.08 + u*(0.89-0.14*v), 0.47 + Math.cos(v*Math.PI/2)*0.98 + 0.11*u - 0.085*Math.cos(2*Math.PI*u),
+    v*(0.96-0.09*u)+0.08*u,
+  ];
+  for(let i=0;i<8;i++) for(let j=0;j<6;j++) {
+    const u=i/4-1,v=j/3-1;
+    b.quad(tarp(u,v),tarp(u+0.25,v),tarp(u+0.25,v+1/3),tarp(u,v+1/3),{color:i<2?'#656f63':'#717e70'});
+  }
+  for(const u of [-1,1]) {
+    for(let j=0;j<6;j++){
+      const a=tarp(u,j/3-1), d=tarp(u,(j+1)/3-1);
+      b.quad(a,d,[d[0],0.42,d[2]],[a[0],0.42,a[2]],{color:'#53645b'});
+    }
+  }
+  for(const u of [-0.57,0.51]) {
+    const rope:Vec[]=[];
+    for(let j=0;j<=8;j++){const p=tarp(u,j/4-1);p[1]+=0.045;rope.push(p);}
+    b.tube(rope,()=>0.044,{color:'#c8ae80',seg:5,rings:10});
+  }
+  b.box(0.97,0.82,1.07,{color:'#9e7950',pos:[0.43,0.8,-0.42],r:0.035});
+  for(const x of [0.02,0.84]) b.box(0.1,0.91,1.11,{color:'#634e3a',pos:[x,0.82,-0.42],r:0});
+  b.bar([0,0.48,0.14],[0.84,1.16,0.14],0.061,0.061,{color:'#c3a776',seg:4});
+  // Two varied steel drums (rust-red and weathered sea-slate) with rolled hoops
+  const drums: [number, number, number, string, string][] = [
+    [0.31, 0.62, 0.89, '#a05336', '#b87654'],
+    [1.16, 0.18, 0.78, '#486a70', '#6d9096'],
+  ];
+  for (const [x, z, h, col, top] of drums) {
+    b.cyl(0.35, 0.33, h, { color: col, top, pos: [x, 0.45 + h / 2, z], seg: 10 });
+    for (const q of [0.22, 0.72, 0.98]) b.cyl(0.368, 0.368, 0.043, { color: '#4d4f48', pos: [x, 0.45 + h * q, z], seg: 10 });
+  }
+  b.add(new THREE.TorusGeometry(0.24, 0.06, 5, 10), { color: '#c8ae80', pos: [1.34, 0.78, -0.50], rot: [Math.PI / 2, -0.1, 0] });
   return b.geo(true);
 }
 

@@ -6,7 +6,7 @@ import { TropicalAudio } from './audio';
 import { markRead } from './journal';
 import { browserStore, clearGame, loadBest, loadGame, saveGame, updateBest } from './save';
 import { loadSettings, saveSettings, skipFilms, type GameSettings, type VolumeChannel } from './settings';
-import { COMBO_WINDOW, GameSimulation } from './simulation';
+import { GameSimulation } from './simulation';
 import { HudJuice } from './juice';
 import { RadioVoice } from './voice';
 import { dayTitle } from './story/state';
@@ -18,7 +18,7 @@ import type { PirateHooks } from './scene/pirates';
 import type { RescueHooks } from './scene/rescue';
 import type { QualitySetting, Tier } from './scene/quality';
 import type { QualityState } from './scene/SceneRenderer';
-import { computeStats, createInitialProgress, getUpgradeCost, isForSale, UPGRADE_MAP } from './upgrades';
+import { computeStats, createInitialProgress, getUpgradeCost, isForSale, UPGRADE_DEFS, UPGRADE_MAP } from './upgrades';
 
 interface GameRenderer {
   resize(): void;
@@ -312,6 +312,7 @@ class AlunApp {
         if (kind !== 'trash') this.ui.pulseHealth();
       },
       ending: () => this.startEnding(),
+      shopNudge: (what) => this.ui.nudgeShop(what),
     });
 
     this.landscape = new LandscapeMode(() => {
@@ -411,7 +412,7 @@ class AlunApp {
     this.sim.lagoonInitialized = false;
     this.audio.setShopDuck(false);
     this.enterLagoon(true);
-    this.ui.showWaveBanner('HARI 1 · MULAI ULANG!', 'Bengkel sudah terbuka — sapu sampah & perkuat pertahanan!', 'green');
+    this.ui.showWaveBanner('HARI 1 · MULAI ULANG!', 'Bengkel sudah terbuka. Sapu sampah & perkuat pertahanan!', 'green');
   }
 
   private enterLagoon(reinit: boolean): void {
@@ -648,7 +649,16 @@ class AlunApp {
     this.ui.showPhase('upgrade');
   }
 
+  /** The first visit: the workshop stays open until Muatan (or any tool) is in, while the purse can pay for it. */
+  private get firstToolPending(): boolean {
+    const p = this.progress;
+    return p.story.cycle === 'prep' && p.story.step === 'shop' &&
+      !UPGRADE_DEFS.some((d) => d.id !== 'core' && (p.upgrades[d.id] ?? 0) > 0) &&
+      p.coins >= getUpgradeCost('trash_density', 0);
+  }
+
   private closeShop(): void {
+    if (this.firstToolPending) return;
     if (this.ui.sawWorkshopTools && this.sim.story.leaveWorkshop()) this.save();
     this.audio.setShopDuck(false);
     this.audio.playUiClose();
@@ -685,7 +695,7 @@ class AlunApp {
   private buyUpgrade(id: UpgradeId, originEl?: HTMLElement | null): void {
     const lv = this.progress.upgrades[id] ?? 0;
     const cost = getUpgradeCost(id, lv);
-    if (!isForSale(id, this.progress) || this.progress.coins < cost) {
+    if (this.sim.story.s.cycle === 'night' || !isForSale(id, this.progress) || this.progress.coins < cost) {
       this.audio.playUiError();
       return;
     }
@@ -712,6 +722,7 @@ class AlunApp {
     document.addEventListener('visibilitychange', () => {
       this.audio.setPaused(document.hidden);
       if (document.hidden) {
+        this.sim.clearTransientEffects();
         this.audio.setMotor(0);
         this.audio.setWaveCharge(0);
         this.saveOnLeave();
@@ -900,10 +911,16 @@ class AlunApp {
     this.ui.updatePointer(visible ? null : target);
   }
 
+  private get lagoonPlaying(): boolean {
+    return this.phase === 'playing' && !this.ui.isSettingsOpen() && !this.ui.isTalking(true) &&
+      !this.ending && !this.pirates && this.rescue !== 'film' && this.rescue !== 'free';
+  }
+
   private loop(now: number): void {
     const dt = Math.min(0.05, Math.max(0.001, (now - this.lastFrameTime) / 1000));
     this.lastFrameTime = now;
     if (this.landscape.paused) {
+      this.sim.clearTransientEffects();
       requestAnimationFrame((t) => this.loop(t));
       return;
     }
@@ -911,13 +928,11 @@ class AlunApp {
     const stats = computeStats(this.progress);
     // a film the renderer has dropped (something else took the camera) is over here too
     if (this.pirates && this.renderer.piratesActive === false) this.finishPirates();
-    const filming = this.ending || this.pirates || this.rescue === 'film' || this.rescue === 'free';
-    const activePlay = this.phase === 'playing' && !this.ui.isSettingsOpen() && !this.ending && !this.pirates && !this.ui.isTalking();
     let guideObjective: Objective | null = null;
 
-    if (activePlay) {
+    if (this.lagoonPlaying) {
       this.sim.update(dt, this.progress, stats);
-      if (!filming) {
+      if (this.lagoonPlaying) {
         const obj = this.sim.story.objective();
         const boss = this.sim.getBossEntity();
         const bossRatio = boss ? boss.hp / boss.maxHp : null;
@@ -933,7 +948,9 @@ class AlunApp {
           this.sim.story.waveHud()
         );
         guideObjective = obj;
-        this.juice.combo(this.sim.comboCount, this.sim.comboTimer / COMBO_WINDOW);
+        this.juice.combo(this.sim.comboCount, this.sim.comboTimer / stats.comboWindow);
+        // every dawn the workshop opens by itself; the day waits until the player leaves it
+        if (this.progress.shopUnlocked && this.sim.story.dawnShopDue()) this.openShop('tree');
       }
 
       this.autoSaveTimer += dt;
@@ -952,11 +969,22 @@ class AlunApp {
       this.audio.updateBirds(dt, birds.level, birds.gulls);
     }
 
-    // the player can turn the camera's jolt off; everything else about a hit stays
-    if (!this.settings.shake) this.sim.screenShake = 0;
+    // A film or dialogue can take over during the update above.
+    const activePlay = this.lagoonPlaying;
+    if (!activePlay) this.sim.clearTransientEffects();
+    else if (!this.settings.shake) this.sim.screenShake = 0;
     this.renderer.setPhase?.(this.phase);
     this.renderer.render(this.sim, this.progress, stats, activePlay);
     this.updateGuides(guideObjective);
+    const st = this.progress.story;
+    this.ui.updateCoach(
+      this.progress.shopUnlocked && st.cycle === 'prep' && st.step === 'shop' &&
+        (this.phase === 'playing' || this.phase === 'upgrade') && !this.ui.isTalking(true) &&
+        !this.ui.isSettingsOpen() && !this.ui.isConfirmOpen() && !this.ending && !this.pirates &&
+        this.rescue !== 'film' && this.rescue !== 'free'
+        ? this.progress
+        : null
+    );
     requestAnimationFrame((t) => this.loop(t));
   }
 }

@@ -14,15 +14,21 @@ import type { Objective } from './story/jobs';
 import type { Mood, TalkLine } from './story/talk';
 import { dayTitle, nextSupply, P_DIRTY, P_HEALTHY, REPAIR_HEAL } from './story/state';
 import {
+  comboMultiplier,
   countAffordableUpgrades,
+  dayForLevel,
   getUpgradeCost,
+  isCappedToday,
   isForSale,
   isUpgradeShown,
+  newBlueprints,
+  nextGoal,
   UPGRADE_DEFS,
   UPGRADE_MAP,
 } from './upgrades';
 import { getUiIconSvg, type UiIconName } from './ui-kit/icons';
 import type { HudJuice } from './juice';
+import { Coach } from './coach';
 import type { QualitySetting, Tier } from './scene/quality';
 import type { QualityState } from './scene/SceneRenderer';
 import { TEXT_CPS, type GameSettings, type VolumeChannel } from './settings';
@@ -212,7 +218,11 @@ export class GameUI {
   private hudEnergy = el('hud-energy');
   private hudComboPill = el('hud-combo-pill');
   private hudComboVal = el('hud-combo-val');
+  /** What the run is worth: the coin multiplier of the combo, beside its count. */
+  private hudComboMult = el('hud-combo-mult');
+  private lastComboMult = '';
   private hudSaveWarning = el('hud-save-warning');
+  private hudEnergyLabel = el('hud-energy-label');
   private hudEnergyVal = el('hud-energy-val');
   private hudEnergyBar = el('hud-energy-bar');
   private hudTimePill = el('hud-time-pill');
@@ -245,6 +255,16 @@ export class GameUI {
   private shopBtnIcon = el('shop-btn-icon');
   private shopBtnLabel = el('shop-btn-label');
   private shopBadge = el('shop-badge');
+  /** The cheapest tool on sale and how far the purse is from it. */
+  private btnShopGoal = el('btn-shop-goal') as HTMLButtonElement;
+  private goalIcon = el('hud-goal-icon');
+  private goalName = el('hud-goal-name');
+  private goalFill = el('hud-goal-fill');
+  private goalCount = el('hud-goal-count');
+  private goalId: UpgradeId | null = null;
+  /** The tool the workshop opens on when the goal on the HUD was pressed. */
+  private goalFocus: UpgradeId | null = null;
+  private nudgeTimer = 0;
   private btnOpenJournal = el('btn-open-journal') as HTMLButtonElement;
   private actionStack = el('hud-action-stack');
   private journalBadge = el('journal-badge');
@@ -368,6 +388,7 @@ export class GameUI {
   private currentWave: WaveHudState | null = null;
   private headline = '';
   private handlers: UIHandlers;
+  private coach = new Coach(this.app);
 
   constructor(handlers: UIHandlers) {
     this.handlers = handlers;
@@ -425,6 +446,11 @@ export class GameUI {
     });
     click('btn-skip-intro', () => this.handlers.onSkipIntro());
     this.btnOpenShop.addEventListener('click', () => this.handlers.onOpenShop('tree'));
+    this.btnShopGoal.addEventListener('click', () => {
+      this.goalFocus = this.goalId;
+      this.handlers.onOpenShop('tree');
+      this.goalFocus = null;
+    });
     this.btnOpenJournal.addEventListener('click', () => this.handlers.onOpenShop('journal'));
 
     const openSettingsFrom = (e: Event): void => {
@@ -761,7 +787,10 @@ export class GameUI {
 
   /** Letterbox and subtitles over play, for a short film in the middle of the game; the HUD steps aside. */
   public setFilm(on: boolean): void {
-    if (on && this.introOverlay.classList.contains('hidden')) this.setIntroCaption('', '');
+    if (on && this.introOverlay.classList.contains('hidden')) {
+      this.setIntroCaption('', '');
+      this.pauseRadio();
+    }
     this.introOverlay.classList.toggle('hidden', !on);
     this.syncHudVisibility();
   }
@@ -880,8 +909,8 @@ export class GameUI {
     }
   }
 
-  public isTalking(): boolean {
-    return this.talkActive;
+  public isTalking(includeQueued = false): boolean {
+    return this.talkActive || (includeQueued && this.talkQueue.length > 0);
   }
 
   /** A click, a tap, Space or Enter: the rest of the line at once, or the next line. */
@@ -921,16 +950,20 @@ export class GameUI {
     this.handlers.onTalk?.(false);
   }
 
+  private pauseRadio(): void {
+    if (this.radioOn) {
+      this.radioSpeech.stop(false);
+      this.radioQueue.unshift(this.radioOn);
+      this.radioOn = null;
+    }
+    this.radio.hideNow();
+  }
+
   private tickTalk(dt: number): void {
     if (!this.talkActive) {
       if (this.talkQueue.length === 0) return;
       // a line on the small radio steps aside and comes back after the scene
-      if (this.radioOn) {
-        this.radioSpeech.stop(false);
-        this.radioQueue.unshift(this.radioOn);
-        this.radioOn = null;
-      }
-      this.radio.hideNow();
+      this.pauseRadio();
       this.talkActive = true;
       this.talkLayer.classList.remove('hidden');
       this.handlers.onTalk?.(true);
@@ -955,6 +988,7 @@ export class GameUI {
     }
     this.tickNotices(dt);
     this.tickRadio(dt);
+    if (this.nudgeTimer > 0) this.nudgeTimer -= dt;
   }
 
   private tickNotices(dt: number): void {
@@ -1025,6 +1059,9 @@ export class GameUI {
     wave: WaveHudState
   ): void {
     this.currentWave = wave;
+    const cooldown = Math.ceil((progress.story.laneReadyAt ?? 0) - progress.story.clock);
+    const laneLabel = progress.story.flags.toolbox ? (cooldown > 0 ? `Jalur · ${cooldown} dtk` : 'Jalur siap') : 'Energi Ombak';
+    if (this.hudEnergyLabel.textContent !== laneLabel) this.hudEnergyLabel.textContent = laneLabel;
     const inRun = wave.cycle !== 'prep';
     const wallet = progress.totalCoinsEarned > 0 || progress.coins > 0 || progress.shopUnlocked;
     const waves = progress.totalWaves > 0 || progress.shopUnlocked;
@@ -1077,7 +1114,7 @@ export class GameUI {
             ? `Kapal Induk + ${wave.activePirates} pengawal`
             : `Sisa ${wave.remainingPirates}/${wave.waveTotal} kapal`;
       const swatch: UiSwatch = wave.cycle === 'night' ? (wave.isBossNight ? 'red' : 'purple') : 'blue';
-      const fillSwatch: UiSwatch = wave.cycle === 'night' ? 'red' : remSec <= 25 ? 'orange' : 'gold';
+      const fillSwatch: UiSwatch = wave.cycle === 'night' ? 'red' : remSec <= 15 ? 'orange' : 'gold';
       const waveSig = `${title}|${sub}|${pct}|${swatch}|${fillSwatch}`;
       if (waveSig !== this.lastWaveSig) {
         this.lastWaveSig = waveSig;
@@ -1117,6 +1154,13 @@ export class GameUI {
       this.lastComboText = comboText;
       this.hudComboPill.classList.toggle('hidden', comboText === '');
       this.hudComboVal.textContent = comboText;
+    }
+    const mult = comboCount >= 2 ? comboMultiplier(comboCount, stats.comboLevel) : 1;
+    const multText = mult > 1.001 ? `×${mult.toFixed(1)}` : '';
+    if (multText !== this.lastComboMult) {
+      this.lastComboMult = multText;
+      this.hudComboMult.innerHTML = multText ? `${getUiIconSvg('coin', 'combo-mult-icon')}${multText}` : '';
+      this.hudComboMult.setAttribute('aria-label', multText ? `koin ${multText}` : '');
     }
 
     // Energy meter pill
@@ -1173,9 +1217,11 @@ export class GameUI {
     const guided = open && wave.cycle === 'prep';
     const affordable = open && !locked ? countAffordableUpgrades(progress) : 0;
     const unread = open ? unreadPages(progress).length : 0;
+    this.updateGoal(progress, open && !locked && !guided);
     const sig = `${open}:${locked}:${guided}:${affordable}:${unread}:${wave.canRepair}`;
     if (sig === this.lastShopSig) return;
     this.lastShopSig = sig;
+    this.btnOpenShop.classList.toggle('is-ready', !locked && !guided && affordable > 0);
 
     this.actionStack.classList.toggle('hidden', !open);
     if (!open) return;
@@ -1194,6 +1240,61 @@ export class GameUI {
     if (unread > 0) this.journalBadge.textContent = String(unread);
   }
 
+  /** The chip beside the workshop: the next tool, its price, and the coins towards it. Gold when it can be bought. */
+  /**
+   * The first workshop visit, one press at a time: the Bengkel button, Muatan, its buy button, then back to the lagoon.
+   * Null while something else (a talk, a film, a menu) holds the screen.
+   */
+  public updateCoach(p: PlayerProgress | null): void {
+    const phase = this.app.dataset.phase;
+    if (!p) return this.coach.hide();
+    if (phase === 'playing') {
+      if (this.hud.classList.contains('hidden') || this.actionStack.classList.contains('hidden')) return this.coach.hide();
+      return this.coach.show('shop', this.btnOpenShop, 'Buka Bengkel');
+    }
+    if (phase !== 'upgrade') return this.coach.hide();
+    const boughtAny = UPGRADE_DEFS.some((d) => d.id !== 'core' && (p.upgrades[d.id] ?? 0) > 0);
+    if (this.activeTab !== 'tree') return this.coach.show('tab', this.tabTree, 'Buka Pohon Alat');
+    if (boughtAny) return this.coach.show('start', this.btnReturn, 'Mulai Hari 1');
+    const node = this.nodeEls.get('trash_density');
+    if (!node) return this.coach.hide();
+    if (this.selectedNode !== 'trash_density') return this.coach.show('pick', node, 'Pilih Muatan');
+    if (this.btnBuyNode.disabled) return this.coach.hide();
+    this.coach.show('buy', this.btnBuyNode, 'Pasang Muatan');
+  }
+
+  private updateGoal(progress: PlayerProgress, show: boolean): void {
+    const goal = show ? nextGoal(progress) : null;
+    this.btnShopGoal.classList.toggle('hidden', !goal);
+    this.goalId = goal?.id ?? null;
+    if (!goal) return;
+    const def = UPGRADE_MAP[goal.id];
+    const coins = Math.floor(progress.coins);
+    const ready = coins >= goal.cost;
+    const key = `${goal.id}:${goal.level}`;
+    if (this.btnShopGoal.dataset.goal !== key) {
+      this.btnShopGoal.dataset.goal = key;
+      this.btnShopGoal.dataset.swatch = def.cardSwatch;
+      this.goalIcon.innerHTML = getUiIconSvg(def.icon);
+      this.goalName.textContent = `${def.shortName} Lv ${goal.level}`;
+    }
+    const count = ready ? 'SIAP!' : `${coins}/${goal.cost}`;
+    if (this.goalCount.textContent !== count) this.goalCount.textContent = count;
+    this.goalFill.style.width = `${Math.min(100, (coins / Math.max(1, goal.cost)) * 100).toFixed(1)}%`;
+    this.btnShopGoal.dataset.ready = String(ready);
+    this.btnShopGoal.setAttribute('aria-label', ready ? `${def.name} Lv ${goal.level} siap dipasang di bengkel` : `Alat berikutnya: ${def.name} Lv ${goal.level}, ${coins} dari ${goal.cost} koin`);
+  }
+
+  /** The purse could have bought a tool for a while: the workshop button calls once, with what it can be. */
+  public nudgeShop(what: string): void {
+    if (this.nudgeTimer > 0) return;
+    this.nudgeTimer = 2.6;
+    this.btnOpenShop.classList.remove('is-nudged');
+    void this.btnOpenShop.offsetWidth;
+    this.btnOpenShop.classList.add('is-nudged');
+    this.queueNotice(`Koin cukup untuk ${what}! Buka Bengkel [E].`, 'gold', 3.4);
+  }
+
   private updateObjectiveBanner(o: Objective): void {
     const key = [o.key, o.title, o.progress, o.sub].join('|');
     if (key === this.lastObjectiveKey) return;
@@ -1208,6 +1309,7 @@ export class GameUI {
   /* ================================================================ workshop */
 
   public setShopTab(tab: ShopTab): void {
+    if (tab === 'tree' && this.currentProgress?.story.cycle === 'night') return;
     if (this.activeTab === tab) return;
     this.activeTab = tab;
     this.handlers.onTabSwitch?.();
@@ -1217,6 +1319,8 @@ export class GameUI {
   }
 
   private applyShopTabVisuals(): void {
+    this.tabTree.disabled = this.currentProgress?.story.cycle === 'night';
+    this.tabTree.title = this.tabTree.disabled ? NIGHT_SHOP : '';
     const tabs: [ShopTab, HTMLButtonElement, HTMLElement, UiSwatch][] = [
       ['tree', this.tabTree, this.panelTree, 'teal'],
       ['journal', this.tabJournal, this.panelJournal, 'blue'],
@@ -1238,13 +1342,15 @@ export class GameUI {
     this.currentStats = stats;
     if (wave) this.currentWave = wave;
     this.headline = headline;
-    if (entering) this.activeTab = forceTab ?? 'tree';
-    else if (forceTab) this.activeTab = forceTab;
+    if (progress.story.cycle === 'night') this.activeTab = 'journal';
+    else if (entering || forceTab) this.activeTab = forceTab ?? 'tree';
     if (entering) {
       this.freshPages.clear();
       this.sawWorkshopTools = false;
       this.journalAnchor = { cerita: null, patroli: null };
-      this.selectedNode = this.pickTool(progress);
+      const fresh = isDawnShop(progress) ? newBlueprints(progress).find((id) => this.nodeShown(id, progress)) : undefined;
+      const goal = this.goalFocus && this.nodeShown(this.goalFocus, progress) ? this.goalFocus : undefined;
+      this.selectedNode = goal ?? fresh ?? this.pickTool(progress);
       this.panToTools = true;
       this.hideShopToast();
     }
@@ -1455,7 +1561,7 @@ export class GameUI {
   }
 
   private pickTool(progress: PlayerProgress): UpgradeId {
-    if (this.isIntro(progress) && this.nodeShown('wave_width', progress)) return 'wave_width';
+    if (this.isIntro(progress) && this.nodeShown('trash_density', progress)) return 'trash_density';
     if (this.selectedNode !== 'core' && this.nodeShown(this.selectedNode, progress)) return this.selectedNode;
     const shown = UPGRADE_DEFS.filter((d) => d.id !== 'core' && this.nodeShown(d.id, progress));
     return (shown.find((d) => this.nodeState(d.id, progress).canBuy) ?? shown[0])?.id ?? 'core';
@@ -1471,7 +1577,7 @@ export class GameUI {
     const lv = progress.upgrades[id] ?? 0;
     const cost = getUpgradeCost(id, lv);
     const forSale = isForSale(id, progress);
-    return { def, lv, cost, maxed: lv >= def.maxLevel, forSale, canBuy: forSale && progress.coins >= cost };
+    return { def, lv, cost, maxed: lv >= def.maxLevel, forSale, capped: isCappedToday(id, progress), canBuy: forSale && progress.coins >= cost };
   }
 
   /** Updates the buttons on the map in place: a purchase changes their marks, never their places or focus. */
@@ -1480,6 +1586,7 @@ export class GameUI {
     if (!this.nodeShown(this.selectedNode, progress)) this.selectedNode = this.pickTool(progress);
     const intro = this.isIntro(progress);
     const boughtAny = UPGRADE_DEFS.some((d) => d.id !== 'core' && (progress.upgrades[d.id] ?? 0) > 0);
+    const fresh = new Set(newBlueprints(progress));
     const shown = new Set(UPGRADE_DEFS.filter((d) => this.nodeShown(d.id, progress)).map((d) => d.id));
     for (const [id, btn] of this.nodeEls) {
       if (shown.has(id)) continue;
@@ -1496,6 +1603,7 @@ export class GameUI {
         btn.dataset.swatch = def.cardSwatch;
         btn.setAttribute('aria-controls', 'tool-panel');
         btn.innerHTML = `
+          <span class="tree-node-new t-stroke-xs" aria-hidden="true">BARU</span>
           <span class="tree-node-lv t-stroke-xs num"></span>
           ${getUiIconSvg(def.icon, 'tree-node-icon')}
           <span class="tree-node-label t-stroke-xs">${def.shortName}</span>
@@ -1518,7 +1626,8 @@ export class GameUI {
       btn.classList.toggle('maxed', st.maxed);
       btn.classList.toggle('affordable', st.canBuy);
       btn.classList.toggle('is-selected', selected);
-      btn.classList.toggle('is-guided', intro && !boughtAny && (def.id === 'wave_width' || def.id === 'trash_density'));
+      btn.classList.toggle('is-guided', intro && !boughtAny && def.id === 'trash_density');
+      btn.classList.toggle('is-new', fresh.has(def.id) && st.lv === 0);
       btn.setAttribute('aria-pressed', String(selected));
       btn.setAttribute('aria-label', `${def.name}, ${badge}`);
       btn.querySelector('.tree-node-lv')!.textContent = st.maxed ? '✓' : badge;
@@ -1819,11 +1928,16 @@ export class GameUI {
         ? 'Alat pertamamu sudah terpasang! Tekan "Mulai Hari 1" di bawah untuk kembali ke laguna.'
         : 'Alat sudah terpasang. Kamu bisa kembali ke laguna dan mencoba kekuatannya!';
     }
-    const widthCost = getUpgradeCost('wave_width', 0);
     const densityCost = getUpgradeCost('trash_density', 0);
-    return progress.coins >= Math.min(widthCost, densityCost)
-      ? `Pasang alat pertamamu — Bentang (${widthCost}) untuk ombak lebar atau Muatan (${densityCost}) agar rongsok makin melimpah!`
-      : `Kumpulkan koin di laguna untuk memasang Bentang (${widthCost}) atau Muatan (${densityCost}).`;
+    return progress.coins >= densityCost
+      ? 'Muatan membuat rongsok yang hanyut lebih banyak, jadi koin lebih cepat terkumpul. Alat lain datang tiap fajar.'
+      : `Kumpulkan koin di laguna untuk memasang Muatan (${densityCost}).`;
+  }
+
+  /** Morning in the workshop: what arrived, and that the day starts when the player leaves. */
+  private dawnNote(progress: PlayerProgress): string {
+    const fresh = newBlueprints(progress).filter((id) => isUpgradeShown(id, progress)).map((id) => UPGRADE_MAP[id].shortName);
+    return fresh.length ? `Pagi! Cetak biru baru: ${fresh.join(', ')}.` : 'Pagi! Alat-alatmu bisa naik satu level lagi.';
   }
 
   /** The picked tool. Its button sits at the foot of the panel whatever the tool, the text above it fits itself. */
@@ -1851,22 +1965,29 @@ export class GameUI {
       const delta = st.maxed || !st.forSale ? def.statBefore(st.lv) : `${def.statBefore(st.lv)} ➜ ${def.statAfter(st.lv)}`;
       rows = row(def.statLabel, delta) + row('Efek', def.effectText(st.lv));
       if (st.forSale && !st.canBuy) rows += row('Harga', `${st.cost.toLocaleString('id-ID')} koin`, true);
+      if (st.capped) rows += row('Lv berikutnya', `Hari ${dayForLevel(def.id, st.lv + 1)}`, true);
     }
     this.inspStats.innerHTML = rows;
 
     const intro = this.isIntro(progress);
+    const dawn = isDawnShop(progress);
     const supply = nextSupply(progress.story.flags);
     const note = intro
       ? this.introNote(progress)
-      : supply && !st.maxed && !st.forSale
-        ? supply
-        : '';
+      : dawn
+        ? this.dawnNote(progress)
+        : st.capped
+          ? `Bu Sari baru bisa merakit ${def.shortName} Lv ${st.lv + 1} besok pagi. Tiap fajar batas level naik satu.`
+          : supply && !st.maxed && !st.forSale
+            ? supply
+            : '';
     this.toolNote.textContent = note;
     this.toolNote.hidden = note === '';
-    this.btnReturn.classList.toggle('hidden', !intro);
+    this.btnReturn.classList.toggle('hidden', !intro && !dawn);
     const returnLabel = this.btnReturn.querySelector('span:last-child');
     if (returnLabel) {
-      returnLabel.textContent = progress.story.cycle === 'prep' ? 'Mulai Hari 1' : 'Kembali ke laguna';
+      returnLabel.textContent =
+        progress.story.cycle === 'prep' ? 'Mulai Hari 1' : dawn ? `Mulai Hari ${progress.story.day}` : 'Kembali ke laguna';
     }
 
     let swatch: UiSwatch = 'slate';
@@ -1881,6 +2002,9 @@ export class GameUI {
       swatch = 'gold';
       icon = 'check';
       label = 'Sudah maksimal';
+    } else if (st.capped) {
+      icon = 'lock';
+      label = `Lv ${st.lv + 1} buka Hari ${dayForLevel(def.id, st.lv + 1)}`;
     } else if (!st.forSale) {
       icon = 'lock';
       label = 'Buka cabang dulu';
@@ -2025,7 +2149,7 @@ export class GameUI {
       renderStatTile('Waktu bermain', `${minutes}:${String(seconds).padStart(2, '0')}`, 'sun', 'blue'),
       renderStatTile('Bajak laut dihalau', s.piratesSunk.toLocaleString('id-ID'), 'raider', 'red'),
       renderStatTile('Rongsok terangkat', progress.totalTrash.toLocaleString('id-ID'), 'net', 'green'),
-      renderStatTile('Resonansi terpicu', progress.totalResonances.toLocaleString('id-ID'), 'resonance', 'purple'),
+      renderStatTile('Jalur Pasang dibuat', progress.totalCurrents.toLocaleString('id-ID'), 'current', 'purple'),
       renderStatTile('HP Dermaga', `${Math.round(s.pierHp)}/${Math.round(s.maxPierHp)}`, 'shield', 'teal'),
       renderStatTile('Koin terkumpul', progress.totalCoinsEarned.toLocaleString('id-ID'), 'coin', 'gold'),
     ].join('');
@@ -2035,19 +2159,25 @@ export class GameUI {
   public renderDefeat(progress: PlayerProgress, best: BestRecord): void {
     const s = progress.story;
     const when = s.cycle === 'night' ? `MALAM ${s.day}` : `HARI ${s.day}`;
-    this.defeatSub.textContent = `${when} · ${dayTitle(s.day).toUpperCase()} — REKOR TERBAIK: HARI ${best.bestDay}`;
+    this.defeatSub.textContent = `${when} · ${dayTitle(s.day).toUpperCase()} · REKOR TERBAIK: HARI ${best.bestDay}`;
     this.defeatStats.innerHTML = [
       renderStatTile('Bertahan hingga', `Hari ${s.day}`, 'moon', 'purple'),
       renderStatTile('Malam dilewati', `${s.nightsSurvived} malam`, 'trophy', 'gold'),
       renderStatTile('Bajak laut dihalau', s.piratesSunk.toLocaleString('id-ID'), 'raider', 'red'),
       renderStatTile('Rongsok terangkat', progress.totalTrash.toLocaleString('id-ID'), 'net', 'green'),
-      renderStatTile('Resonansi terpicu', progress.totalResonances.toLocaleString('id-ID'), 'resonance', 'teal'),
+      renderStatTile('Jalur Pasang dibuat', progress.totalCurrents.toLocaleString('id-ID'), 'current', 'teal'),
       renderStatTile('Total koin', progress.totalCoinsEarned.toLocaleString('id-ID'), 'coin', 'orange'),
     ].join('');
   }
 }
 
 /** Green while the coast is healthy, then orange, then red: the same three bands the lagoon shows. */
+/** Dawn has come and the day waits for the player to leave the workshop. */
+function isDawnShop(progress: PlayerProgress): boolean {
+  const s = progress.story;
+  return s.cycle === 'day' && s.flags.toolbox && s.marks.dawnShop === s.day;
+}
+
 function healthSwatch(p: number): 'green' | 'orange' | 'red' {
   return p >= P_DIRTY ? 'red' : p >= P_HEALTHY ? 'orange' : 'green';
 }

@@ -1,5 +1,5 @@
 /**
- * ALUN Arcade Gloss UI Kit — Cel-Shaded Outlined Cartoon Vector Icon Library.
+ * ALUN Arcade Gloss UI Kit: Cel-Shaded Outlined Cartoon Vector Icon Library.
  * Every icon uses bold #0d121d outlines, crisp highlights, and vivid multi-tone fills
  * to match the exact visual fidelity of glossy Roblox simulator UIs.
  */
@@ -11,7 +11,7 @@ export type UiIconName =
   | 'power'
   | 'charge'
   | 'echo'
-  | 'resonance'
+  | 'current'
   | 'energy'
   | 'regen'
   | 'combo'
@@ -116,11 +116,10 @@ export function getUiIconSvg(name: UiIconName, className = ''): string {
         <path d="M8 12C14 16 14 24 8 28M17 8C25 14 25 26 17 32M26 5C36 13 36 27 26 35" stroke="${INK}" stroke-width="1.6" stroke-linecap="round"/>
       </svg>`;
 
-    case 'resonance':
+    case 'current':
       return `<svg${cls} viewBox="0 0 40 40" fill="none">
-        <circle cx="15" cy="20" r="10.5" fill="#46dcff" fill-opacity="0.88" stroke="${INK}" stroke-width="3"/>
-        <circle cx="25" cy="20" r="10.5" fill="#ffdf4d" fill-opacity="0.88" stroke="${INK}" stroke-width="3"/>
-        <path d="M20 11L22.2 17.5L28 20L22.2 22.5L20 29L17.8 22.5L12 20L17.8 17.5L20 11Z" fill="#ffffff" stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"/>
+        <path d="m4 10 9 10-9 10m11-20 9 10-9 10m11-20 9 10-9 10" stroke="${INK}" stroke-width="7" stroke-linejoin="round"/>
+        <path d="m4 10 9 10-9 10m11-20 9 10-9 10m11-20 9 10-9 10" stroke="#98f4df" stroke-width="3" stroke-linejoin="round"/>
       </svg>`;
 
     case 'energy':

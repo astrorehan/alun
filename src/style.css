@@ -117,6 +117,10 @@ body {
 .hud .ui-speech-bubble, .hud .ui-toast { animation: none; }
 .hud .ui-speech-bubble::before, .hud .ui-speech-bubble::after { display: none; }
 .hud-action-stack .ui-btn { min-height: 44px; }
+.hud-action-stack .ui-notif-badge.hidden {
+  display: inline-flex !important;
+  visibility: hidden;
+}
 .hud-action-stack .ui-notif-badge {
   position: static;
   animation: none;
@@ -301,6 +305,130 @@ body {
 .hud-action-stack .is-guided {
   outline: 3px solid #ffea91;
   outline-offset: 3px;
+}
+
+/* the workshop button glows while the purse can pay for a tool, and calls once when it has waited long */
+.hud-shop-btn.is-ready {
+  animation: hudShopReady 1.8s ease-in-out infinite;
+}
+.hud-shop-btn.is-nudged {
+  animation: hudShopNudge 0.55s ease-in-out 4, hudShopReady 1.8s ease-in-out 2.2s infinite;
+}
+@keyframes hudShopReady {
+  50% {
+    box-shadow: var(--gloss-top), var(--lip-bot-sm), var(--shadow-btn), 0 0 0 4px rgba(255, 234, 88, 0.6), 0 0 24px rgba(255, 214, 64, 0.7);
+  }
+}
+@keyframes hudShopNudge {
+  0%, 100% { filter: none; }
+  50% {
+    filter: brightness(1.35);
+    box-shadow: var(--gloss-top), var(--lip-bot-sm), var(--shadow-btn), 0 0 0 6px #fff2ad, 0 0 34px rgba(255, 224, 72, 0.95);
+  }
+}
+
+/* the next tool on sale: its price and the coins towards it; gold once it can be bought */
+.hud-goal {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'icon name name'
+    'icon bar count';
+  align-items: center;
+  column-gap: 6px;
+  row-gap: 3px;
+  width: 176px;
+  min-height: 44px;
+  padding: 4px 10px 6px 6px;
+  border-radius: var(--radius-btn);
+  border: var(--border-md) solid var(--ink);
+  background: linear-gradient(180deg, #4b556e 0%, #2a3145 100%);
+  box-shadow: var(--gloss-top-soft), var(--lip-bot-sm), 0 4px 0 var(--ink);
+  color: #ffffff;
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: filter 0.12s ease;
+}
+.hud-goal:hover { filter: brightness(1.12); }
+.hud-goal:focus-visible { outline: 3px solid #fff2ad; outline-offset: 3px; }
+.hud-goal-copy { display: contents; }
+.hud-goal-icon {
+  grid-area: icon;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 2px solid var(--ink);
+  background: linear-gradient(180deg, var(--sw-top) 0%, var(--sw-bot) 100%);
+  box-shadow: var(--gloss-top-soft);
+}
+.hud-goal-icon svg { width: 24px; height: 24px; }
+.hud-goal-name {
+  grid-area: name;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 1.1;
+}
+.hud-goal-count {
+  grid-area: count;
+  font-size: 11.5px;
+  line-height: 1.1;
+  white-space: nowrap;
+  color: #ffe9a3;
+}
+.hud-goal-bar {
+  grid-area: bar;
+  position: relative;
+  height: 9px;
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--ink);
+  background: #171d2c;
+  overflow: hidden;
+}
+.hud-goal-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, #ffea58 0%, #f29612 100%);
+  transition: width 0.3s ease;
+}
+.hud-goal[data-ready='true'] {
+  background: linear-gradient(180deg, #ffea58 0%, #f29612 100%);
+  animation: hudGoalReady 1.6s ease-in-out infinite;
+}
+.hud-goal[data-ready='true'] .hud-goal-count { color: #ffffff; }
+.hud-goal[data-ready='true'] .hud-goal-fill { background: linear-gradient(180deg, #8dff7a 0%, #1db43c 100%); }
+@keyframes hudGoalReady {
+  50% {
+    box-shadow: var(--gloss-top-soft), var(--lip-bot-sm), 0 4px 0 var(--ink), 0 0 0 4px rgba(255, 234, 88, 0.55), 0 0 22px rgba(255, 214, 64, 0.7);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hud-shop-btn.is-ready, .hud-shop-btn.is-nudged, .hud-goal[data-ready='true'] { animation: none; }
+}
+@media (max-height: 640px), (max-width: 920px) {
+  .hud-goal { width: 142px; min-height: 38px; padding: 3px 8px 5px 5px; column-gap: 5px; }
+  .hud-goal-icon { width: 26px; height: 26px; border-radius: 8px; }
+  .hud-goal-icon svg { width: 19px; height: 19px; }
+  .hud-goal-name { font-size: 12px; }
+  .hud-goal-count { font-size: 10.5px; }
+  .hud-goal-bar { height: 7px; }
+}
+@media (max-width: 560px) {
+  .hud-goal { width: 104px; grid-template-areas: 'icon count' 'icon bar'; grid-template-columns: auto minmax(0, 1fr); }
+  .hud-goal-count { justify-self: start; }
+  .hud-goal-name { display: none; }
+  /* a phone held upright: Bu Sari's lines get the full width above the buttons */
+  .hud-bottom { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .hud-action-stack { justify-self: end; }
 }
 
 /* ================= OPENING FILM (LETTERBOX + SUBTITLES) ================= */
@@ -1794,6 +1922,33 @@ body {
   background: linear-gradient(180deg, #ffeb58 0%, #f29812 100%);
 }
 
+.tree-node-new {
+  display: none;
+  position: absolute;
+  top: calc(var(--node-font, 12px) * -0.95);
+  left: calc(var(--node-font, 12px) * -0.8);
+  padding: 1px 0.5em 2px;
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--ink);
+  background: linear-gradient(180deg, #ff8fb3 0%, #e0336b 100%);
+  font-size: calc(var(--node-font, 12px) * 0.86);
+  line-height: 1.1;
+  white-space: nowrap;
+  -webkit-text-stroke-width: calc(var(--node-font, 12px) * 0.2);
+  text-shadow: 0 1px 0 var(--ink);
+  pointer-events: none;
+}
+.tree-node.is-new .tree-node-new {
+  display: block;
+  animation: treeNewTag 1.4s ease-in-out infinite;
+}
+@keyframes treeNewTag {
+  50% { filter: brightness(1.25); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tree-node.is-new .tree-node-new { animation: none; }
+}
+
 /* news of a purchase: over the empty middle of the top row, gone by itself */
 .shop-toast {
   position: absolute;
@@ -2461,6 +2616,20 @@ body {
   position: relative;
 }
 
+/* the run's coin multiplier: a little coin and its factor */
+.combo-mult {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.86em;
+  color: #fff6c8;
+}
+.combo-mult:empty { display: none; }
+.combo-mult-icon {
+  width: 1.15em;
+  height: 1.15em;
+}
+
 .combo-timer {
   position: absolute;
   left: 14px;
@@ -2492,4 +2661,99 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .fly-coin, .fx-spark, .fx-ring, .combo-ghost { display: none; }
+}
+
+/* ================= COACH: one control lit, the rest dimmed (src/coach.ts) ================= */
+.coach {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+}
+.coach.is-in {
+  animation: coachIn 0.35s ease-out;
+}
+.coach-shade {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 8, 18, 0.72);
+  pointer-events: auto;
+  touch-action: none;
+}
+.coach-ring {
+  position: absolute;
+  border: 3.5px solid #ffe46b;
+  box-shadow: 0 0 0 3px var(--ink), 0 0 26px rgba(255, 220, 80, 0.75);
+  animation: coachRing 1.2s ease-in-out infinite;
+}
+.coach-arrow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 56px;
+  height: 56px;
+}
+.coach-arrow-bob {
+  width: 100%;
+  height: 100%;
+  animation: coachBob 0.9s ease-in-out infinite;
+}
+.coach-arrow svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 4px 0 var(--ink));
+}
+.coach-arrow.is-poked svg {
+  animation: coachPoke 0.4s var(--ease-bounce);
+}
+.coach-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  max-width: min(300px, calc(100vw - 24px));
+  padding: 8px 18px 10px;
+  border: var(--border-md) solid var(--ink);
+  border-radius: var(--radius-btn);
+  background: linear-gradient(180deg, var(--sw-top), var(--sw-bot));
+  box-shadow: var(--gloss-top), var(--lip-bot-sm), var(--shadow-pill);
+  color: #fff;
+  font-family: var(--font-display);
+  text-align: center;
+  white-space: nowrap;
+}
+.coach-title {
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.coach-sub {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.15;
+  white-space: normal;
+}
+@media (max-height: 640px), (max-width: 560px) {
+  .coach-title { font-size: 17px; }
+  .coach-sub { font-size: 12px; }
+  .coach-label { padding: 6px 14px 8px; }
+}
+@keyframes coachIn {
+  from { opacity: 0; }
+}
+@keyframes coachRing {
+  50% { box-shadow: 0 0 0 3px var(--ink), 0 0 8px rgba(255, 220, 80, 0.35); border-color: #fff6c4; }
+}
+@keyframes coachBob {
+  50% { transform: translateY(-9px); }
+}
+@keyframes coachPoke {
+  40% { transform: translateY(8px) scale(1.15); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .coach-ring, .coach-arrow-bob { animation: none; }
 }

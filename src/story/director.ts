@@ -1,7 +1,7 @@
 import type { GameSimulation } from '../simulation';
 import type { Entity, EntityKind, JobKind, JobResult, PirateKind, Point, PollutionSource, SavedPirate, StoryState, Wave } from '../types';
 import { PIRATE_KIND } from '../types';
-import { hitDamage, seedInterval } from '../upgrades';
+import { getUpgradeCost, hitDamage, isForSale, isUpgradeShown, newBlueprints, nextGoal, seedInterval, UPGRADE_DEFS, UPGRADE_MAP } from '../upgrades';
 import {
   COLLECTOR_NET,
   FIRE_SPOTS,
@@ -14,6 +14,7 @@ import {
   PIRATE_LANES,
   RAID_ANCHORS,
   SPILL_SPOTS,
+  SEA_ROCKS,
   VILLAGE_PIER,
   WORLD_H,
   WORLD_W,
@@ -106,6 +107,8 @@ export class Story {
   private handing: 'dolphin' | null = null;
   private pickDry = 0;
   private duskWarnedDay = 0;
+  /** Seconds of daytime the purse has been able to pay for a tool without a visit to the workshop. */
+  private readyFor = 0;
   private bossEscortTimer = 14;
 
   constructor(readonly sim: GameSimulation) {}
@@ -148,7 +151,7 @@ export class Story {
     this.padPushes = 0;
     this.offered = false;
     this.handing = null;
-    this.duskWarnedDay = s.dayTime >= DAY_DURATION - 25 ? s.day : 0;
+    this.duskWarnedDay = s.dayTime >= DAY_DURATION - 15 ? s.day : 0;
     this.bossEscortTimer = 14;
 
     // Sync maxPierHp with current pier_armor upgrade
@@ -162,6 +165,7 @@ export class Story {
       e.snagged = t.snagged;
       e.stranded = t.stranded;
       e.opening = t.opening;
+      e.bundle = t.bundle;
       e.pollution = t.pollution;
       e.age = 1;
     }
@@ -210,6 +214,7 @@ export class Story {
         };
         if (e.snagged) t.snagged = true;
         if (e.stranded) t.stranded = true;
+        if (e.bundle) t.bundle = e.bundle;
         if (e.opening) t.opening = true;
         if (e.pollution) t.pollution = e.pollution;
         return t;
@@ -227,7 +232,10 @@ export class Story {
       dmg: e.pirateDmg ?? 9,
       bounty: e.pirateBounty ?? 18,
       rotation: e.rotation,
+      vx: e.vx, vy: e.vy,
       dumpTime: e.pirateDumpTime,
+      ram: e.ram,
+      tow: e.tow,
     }));
     const box = this.sim.entities.find((e) => e.kind === 'toolbox');
     if (box) s.boxAt = { x: Math.round(box.x), y: Math.round(box.y) };
@@ -297,7 +305,10 @@ export class Story {
       pirateSpeed: p.speed,
       pirateDmg: p.dmg,
       pirateBounty: p.bounty,
+      vx: p.vx ?? 0, vy: p.vy ?? 0,
       pirateDumpTime: p.dumpTime,
+      ram: p.ram,
+      tow: p.tow,
     });
   }
 
@@ -316,10 +327,13 @@ export class Story {
       tag: 'approach',
       anchorIdx: this.pickAnchor(),
       attackWork: 0,
+      tow: variant === PIRATE_KIND.tug ? { strain: 0, returning: false } : undefined,
       pirateSpeed: spec.speed,
       pirateDmg: spec.dmg,
       pirateBounty: spec.bounty,
     });
+    // Give the film the camera before this wave queues any dialogue.
+    this.tryPirateFilm(e);
     const introMark = `pirate:${variant}`;
     if (spec.intro && this.s.marks[introMark] === undefined) {
       this.s.marks[introMark] = this.s.clock;
@@ -330,8 +344,7 @@ export class Story {
     return e;
   }
 
-  private movePirate(e: Entity, dt: number): boolean {
-    const a = RAID_ANCHORS[(e.anchorIdx ?? 0) % RAID_ANCHORS.length];
+  private tryPirateFilm(e: Entity): boolean {
     if (
       e.tag === 'approach' &&
       e.variant === PIRATE_KIND.raider &&
@@ -343,8 +356,69 @@ export class Story {
       this.touchSave();
       return true;
     }
+    return false;
+  }
+
+  private movePirate(e: Entity, dt: number): boolean {
+    if (this.tryPirateFilm(e)) return true;
+    const a = RAID_ANCHORS[(e.anchorIdx ?? 0) % RAID_ANCHORS.length];
     const speed = e.pirateSpeed ?? 50;
     const variant = pirateKind(e.variant);
+    if (e.tow) {
+      const tow = e.tow;
+      if (tow.strain >= 1) {
+        const bx = e.x - Math.cos(e.rotation) * 65, by = e.y - Math.sin(e.rotation) * 65;
+        for (const offset of [-20, 16, 44]) this.sim.addTrash('trash_crate', bx + offset, by);
+        this.sim.text(bx, by, 'MUATAN LEPAS!', '#ffe07d', 1);
+        e.tow = undefined;
+        this.sendOff(e);
+        this.touchSave();
+        return true;
+      }
+      if (e.x < 780) tow.returning = true;
+      const tx = tow.returning ? WORLD_W + 160 : 710;
+      steer(e, tx, 430, speed, dt);
+      face(e, Math.atan2(430 - e.y, tx - e.x), dt, 2.4);
+      if (tow.returning && e.x > WORLD_W + 70) this.sendOff(e);
+      return true;
+    }
+    if (variant === PIRATE_KIND.rammer && e.tag !== 'attack') {
+      if (!e.ram && e.x < WORLD_W - 100) {
+        e.ram = { phase: 'aim', time: 2, angle: Math.atan2(a.y - e.y, a.x - e.x) };
+      }
+      const ram = e.ram;
+      if (ram) {
+        ram.time -= dt;
+        e.rotation = ram.angle;
+        e.x += e.vx * dt;
+        e.y += e.vy * dt;
+        e.vx *= Math.exp(-2 * dt);
+        e.vy *= Math.exp(-2 * dt);
+        if (ram.phase === 'rush') {
+          e.x += Math.cos(ram.angle) * 245 * dt;
+          e.y += Math.sin(ram.angle) * 245 * dt;
+          if (hyp(e.x - a.x, e.y - a.y) < 40) {
+            const escort = this.s.job;
+            if (this.s.marks.lastBoat && escort?.kind === 'boat' && !escort.touched) {
+              escort.phase = 'turn';
+              escort.t = 0;
+              this.radio('PAK DAMAR', 'Jalurnyo ketutup! Aku putar balik.');
+            }
+            this.damagePier(e.pirateDmg ?? 19, e.x, e.y);
+            this.sendOff(e);
+          } else if (ram.time <= 0 || e.x < getShoreX(e.y) + 30 || SEA_ROCKS.some(r => hyp(e.x-r.x, e.y-r.y) < r.r + e.radius)) {
+            ram.phase = 'stun';
+            ram.time = 2.5;
+            this.sim.text(e.x, e.y, 'OLENG!', '#ffe07d', 1);
+            if (this.s.marks.lastBoat && this.s.job?.kind === 'boat') this.s.job.touched = true;
+          }
+        } else if (ram.time <= 0) {
+          if (ram.phase === 'aim') { ram.phase = 'rush'; ram.time = 3.4; }
+          else e.ram = undefined;
+        }
+        return true;
+      }
+    }
     const canFollowSignal = e.tag !== 'attack' && variant !== PIRATE_KIND.signal;
 
     // Mild separation so pirate swarms spread organically instead of stacking on 1 pixel
@@ -384,7 +458,7 @@ export class Story {
     } else {
       face(e, Math.atan2(PIER_END.y - e.y, PIER_END.x - e.x), dt, 2.4);
       if (d > 82) {
-        // Player's wave knocked them away from the pier — attack interrupted!
+        // Player's wave knocked them away from the pier, attack interrupted!
         e.tag = 'approach';
         e.attackWork = Math.max(0, (e.attackWork ?? 0) * 0.35);
       } else {
@@ -435,13 +509,11 @@ export class Story {
       );
     const auraGuard = inSignalAura ? 0.75 : 1;
     const buoyScale = w.kind === 'buoy_pulse' ? 0.52 : 1;
-    const resonanceHullScale = w.kind === 'resonance' ? 0.28 : 1;
     const dmg = Math.max(
       1,
       Math.round(
-        hitDamage(w.power, w.charge, w.kind === 'resonance', this.sim.stats.critBonus) *
+        hitDamage(w.power, w.charge, this.sim.stats.critBonus) *
           buoyScale *
-          resonanceHullScale *
           guard *
           auraGuard
       )
@@ -449,7 +521,7 @@ export class Story {
     // Knockback pushes raiders away from the pier; heavy & late-day hulls push through weaker waves!
     const powerPush = 0.55 + Math.sqrt(Math.max(0.1, w.power)) * 0.44;
     const massCap = 220 / Math.pow(Math.max(1.8, e.mass) / 3, 0.6);
-    const rawShove = (155 / Math.max(1.6, e.mass)) * powerPush * (w.kind === 'resonance' ? 1.15 : 1) * buoyScale;
+    const rawShove = (155 / Math.max(1.6, e.mass)) * powerPush * buoyScale;
     const shove = Math.min(massCap, rawShove) * guard * auraGuard;
     e.vx += px * shove;
     e.vy += py * shove;
@@ -457,10 +529,10 @@ export class Story {
     e.hp -= dmg;
     e.hitFlash = 0.24;
     this.sim.audio.playShipHit(this.sim.audio.worldXToPan(e.x, WORLD_W));
-    this.sim.shake(w.kind === 'resonance' ? 6.5 : 4);
-    this.sim.burst(e.x - 10, e.y, w.kind === 'resonance' ? '#ffe07d' : '#a8f9f3', 10);
+    this.sim.shake(4);
+    this.sim.burst(e.x - 10, e.y, '#a8f9f3', 10);
     const hitText = guarded ? `PERISAI -${dmg}` : `-${dmg}`;
-    this.sim.text(e.x, e.y - 36, hitText, guarded || w.kind === 'resonance' ? '#ffe07d' : '#ffffff', w.kind === 'resonance' ? 1.15 : 0.96);
+    this.sim.text(e.x, e.y - 36, hitText, guarded ? '#ffe07d' : '#ffffff', 0.96);
 
     if (this.sim.stats.comboEnergyReturn > 0) {
       this.sim.energy = Math.min(this.sim.stats.maxEnergy, this.sim.energy + this.sim.stats.comboEnergyReturn);
@@ -504,6 +576,12 @@ export class Story {
   damagePier(rawAmount: number, fromX: number, fromY: number): void {
     const s = this.s;
     if (s.defeated) return;
+    if (s.marks.fender) {
+      delete s.marks.fender;
+      this.sim.text(PIER_END.x, PIER_END.y, 'BAMBU MENAHAN!', '#8ef0c0', 1);
+      this.touchSave();
+      return;
+    }
     const dmg = Math.max(1, Math.round(rawAmount * (1 - this.sim.stats.pierArmor)));
     s.pierHp = Math.max(0, s.pierHp - dmg);
     this.sim.shake(7.5);
@@ -783,7 +861,12 @@ export class Story {
       if (!this.arrive()) break;
       const x = ax + (i ? (Math.random() - 0.5) * 140 : 0);
       const y = Math.max(64, Math.min(WORLD_H - 64, ay + (i ? (Math.random() - 0.5) * 140 : 0)));
-      this.sim.addTrash(this.pickSalvage(), x, y);
+      const e = this.sim.addTrash(this.pickSalvage(), x, y);
+      if (s.cycle === 'day') {
+        const roll = s.marks.bundleRoll ?? 0;
+        if (roll % 3 !== 2) e.bundle = this.pickSalvage();
+        s.marks.bundleRoll = roll + 1;
+      }
     }
   }
 
@@ -792,7 +875,7 @@ export class Story {
     if (s.cycle !== 'day') return;
     const lv = this.sim.stats.mangroveLevel;
     if (lv <= 0 || this.sim.progress.mangroves.length >= 19) return;
-    s.seedTimer -= dt;
+    s.seedTimer -= dt * 5 / 3;
     if (s.seedTimer > 0) return;
     s.seedTimer = seedInterval(lv);
     if (this.sim.entities.filter((e) => e.kind === 'mangrove_seed').length < 2) {
@@ -873,26 +956,58 @@ export class Story {
     const s = this.s;
     const filming = this.sim.hooks.filming();
     if (filming) return;
+    // the morning starts in the workshop: the day only begins once the player has been in
+    if (this.dawnShopPending()) return;
 
     s.dayTime += dt;
     s.step = 'day';
-    s.beacon = s.dayTime >= DAY_DURATION - 30;
+    s.beacon = s.dayTime >= DAY_DURATION - 15;
 
-    // Dusk warning 25s before nightfall
-    if (s.dayTime >= DAY_DURATION - 25 && this.duskWarnedDay !== s.day) {
+    // coins that could be a tool for a while: point at the workshop (the dusk call below does it once more)
+    const canBuy = this.sim.progress.coins >= (nextGoal(this.sim.progress)?.cost ?? Infinity);
+    this.readyFor = canBuy ? this.readyFor + dt : 0;
+    if (this.readyFor >= 24 && s.dayTime < DAY_DURATION - 18) {
+      this.readyFor = 0;
+      const ready = this.affordableNames();
+      if (ready.length) this.sim.hooks.shopNudge?.(ready[0]);
+    }
+
+    // Consolidate the final daytime freight near the collection route before the shop closes.
+    if (s.dayTime >= DAY_DURATION - 24 && s.marks.freightDay !== s.day) {
+      s.marks.freightDay = s.day;
+      for (const dy of [-42, 0, 42]) {
+        const crate = this.sim.addTrash('trash_crate', COLLECTOR_NET.x + 190, COLLECTOR_NET.y + dy);
+        crate.bundle = 'trash_battery';
+      }
+      this.sim.text(COLLECTOR_NET.x + 190, COLLECTOR_NET.y - 64, 'MUATAN SENJA!', '#ffe07d', 1);
+      this.touchSave();
+    }
+
+    // Dusk warning
+    if (s.dayTime >= DAY_DURATION - 15 && this.duskWarnedDay !== s.day) {
       this.duskWarnedDay = s.day;
       this.sim.audio.playAlert();
+      const ready = this.affordableNames();
+      if (ready.length) this.sim.hooks.shopNudge?.(ready[0]);
       if (isBossDay(s.day)) this.radio('BU SARI', 'Langit la gelap. Badai datang! Kalau masih ado koin, habiskan di bengkel sekarang.');
-      else if (!this.talk('dusk')) this.radio('BU SARI', `Senja. Kalau nak belanja atau nambal dermaga, sekarang. Malam ${s.day} sebentar lagi.`);
+      else if (!this.talk('dusk')) {
+        this.radio(
+          'BU SARI',
+          ready.length
+            ? `Senja! Koin kau cukup buat ${ready.slice(0, 2).join(' samo ')}. Pasang di bengkel sebelum gelap!`
+            : `Senja. Kalau nak nambal dermaga, sekarang. Malam ${s.day} sebentar lagi.`
+        );
+      }
     }
 
     // Daytime skirmish pirates: keeps Day active, tense & rewarding!
-    s.skirmishTimer -= dt;
-    if (s.skirmishTimer <= 0 && s.dayTime < DAY_DURATION - 16) {
+    s.skirmishTimer -= dt * 5 / 3;
+    if (s.skirmishTimer <= 0 && s.dayTime < DAY_DURATION - 15) {
       const active = this.activePirates().length;
       if (active < 4) {
         const firstScout = s.day === 1 && s.piratesSunk === 0;
-        const count = firstScout
+        const firstTug = s.day === 2 && !s.marks.firstTug;
+        const count = firstScout || firstTug
           ? 1
           : s.day >= 3
             ? Math.random() < 0.45 ? 3 : 2
@@ -909,7 +1024,9 @@ export class Story {
                 : Math.random() < 0.44
                   ? 1
                   : 0;
-          this.spawnPirate(variant, firstScout ? 0 : Math.floor(Math.random() * PIRATE_LANES.length), false);
+          const introduceTug = s.day >= 2 && !s.marks.firstTug && i === 0;
+          if (introduceTug) s.marks.firstTug = s.clock;
+          this.spawnPirate(introduceTug ? PIRATE_KIND.tug : variant, firstScout ? 0 : Math.floor(Math.random() * PIRATE_LANES.length), false);
         }
         this.sim.audio.playAlert();
         if (!(firstScout && this.talk('scout'))) this.radio('PAK DAMAR', 'Kapal layar robek siang-siang! Usir dio dari dermaga!');
@@ -918,8 +1035,8 @@ export class Story {
     }
 
     // Daytime side events (dolphins, fishers, trawlers, drum ships, forest fires) for bonus coins & narrative flavor
-    if (!s.job && s.dayTime < DAY_DURATION - 24 && s.clock >= s.calmUntil) {
-      s.sideEventTimer -= dt;
+    if (!this.sim.hooks.filming() && !s.job && s.dayTime < DAY_DURATION - 22 && s.clock >= s.calmUntil) {
+      s.sideEventTimer -= dt * 5 / 3;
       if (s.sideEventTimer <= 0) {
         this.launchDaySideEvent();
         s.sideEventTimer = 42;
@@ -959,8 +1076,10 @@ export class Story {
     s.nightTime = 0;
     s.beacon = true;
 
-    // Clear peaceful daytime side jobs so the night stays focused on wave combat
-    if (this.run && s.job && (s.job.kind === 'boat' || s.job.kind === 'calf' || s.job.kind === 'fire')) {
+    // Resume unfinished village work at dawn, with its original payout and remaining time.
+    if (this.run && s.job) {
+      this.run.snapshot();
+      s.morningJob = s.job;
       this.run.clear();
       this.run = null;
       s.job = null;
@@ -982,16 +1101,9 @@ export class Story {
     } else {
       this.sim.hooks.banner(
         `MALAM ${s.day} · SERBUAN BAJAK LAUT`,
-        `Bertahan dari ${s.waveTotal} kapal penjarah — jaga HP Dermaga!`,
+        `Bertahan dari ${s.waveTotal} kapal penjarah, jaga HP Dermaga!`,
         'orange'
       );
-      const lines = [
-        'Datang dio! Tahan mereka jauh dari dermaga.',
-        'Malam kedua. Ado perahu cepat samo penjarah berat. Yang berat tu hantam berkali-kali.',
-        'Malam ketiga, makin rapat. Pakai Gema, Pelampung, samo Resonansi kalau la punya.',
-        'Malam keempat. Mereka datang dari segala arah. Tahan sampai pagi!',
-      ];
-      this.radio('BU SARI', lines[Math.min(lines.length - 1, Math.max(0, s.day - 1))]);
     }
     this.touchSave();
   }
@@ -1020,7 +1132,26 @@ export class Story {
         this.sim.shake(5.5);
         this.sim.hooks.banner('GELOMBANG BESAR MENDEKAT!', 'Armada layar robek menyerbu serentak!', 'red');
       }
-      this.spawnPirate(item.variant, item.lane, true);
+      if (s.day === 1 && item.variant === PIRATE_KIND.rammer && !s.job) {
+        s.marks.lastBoat = 1;
+        this.start('boat', true, 0);
+        this.radio('PAK DAMAR', 'Perahu terakhir! Belokkan pendobrak, aku bawa bambu pelindung dermaga!');
+      }
+      const ship = this.spawnPirate(item.variant, item.lane, true);
+      if (!bossNight && s.waveSpawned === 0) {
+        const lines = [
+          'Datang dio! Tahan mereka jauh dari dermaga.',
+          'Malam kedua. Ado perahu cepat samo penjarah berat. Yang berat tu hantam berkali-kali.',
+          'Malam ketiga, makin rapat. Pakai Jalur Pasang, samo Gema atau Pelampung kalau la punya.',
+          'Malam keempat. Mereka datang dari segala arah. Tahan sampai pagi!',
+        ];
+        this.radio('BU SARI', lines[Math.min(lines.length - 1, Math.max(0, s.day - 1))]);
+      }
+      if (s.day === 1 && item.variant === PIRATE_KIND.rammer && s.marks.lastBoat) {
+        ship.x = 1130;
+        ship.y = 429;
+        ship.anchorIdx = 0;
+      }
       s.waveSpawned += 1;
       if (item.support && !s.job) {
         this.start(item.support, false, s.day % 2);
@@ -1051,6 +1182,10 @@ export class Story {
         this.run.clear();
         this.run = null;
         s.job = null;
+      }
+      if (s.marks.lastBoat && s.job?.kind === 'boat') {
+        if (s.job.phase !== 'turn') return;
+        if (this.run) this.settle(this.run, 'failed', 0, PIER_END, 'PAK DAMAR PUTAR BALIK');
       }
       this.finishNight(false);
     }
@@ -1094,6 +1229,13 @@ export class Story {
     s.sideEventTimer = 24;
     s.marks[`day${s.day}`] = s.clock;
 
+    if (s.morningJob) {
+      s.job = s.morningJob;
+      delete s.morningJob;
+      this.run = this.makeJob(s.job);
+      this.run.enter(true);
+    }
+
     // Fresh morning salvage wave so Day starts rich & exciting
     this.burstSalvage(5 + Math.min(5, this.sim.stats.supplyClusterMax));
 
@@ -1108,6 +1250,9 @@ export class Story {
       return;
     }
 
+    s.marks.dawnShop = s.day;
+    s.marks.dawnShopAt = s.clock + 1.6;
+
     this.sim.hooks.chapter(s.day);
     this.sim.hooks.banner(
       `FAJAR TIBA · HARI ${s.day}`,
@@ -1115,13 +1260,17 @@ export class Story {
         ? `Pantai bersih! Warga menambal dermaga +${freeHeal} HP. Bengkel buka!`
         : freeHeal > 0
           ? `Dermaga pulih +${freeHeal} HP. Bersihkan pantai & belanja di Bengkel!`
-          : 'Pantai kotor — tambal dermaga di Bengkel & sapu sampah!',
+          : 'Pantai kotor. Tambal dermaga di Bengkel & sapu sampah!',
       'green'
     );
+    const fresh = newBlueprints(this.sim.progress)
+      .filter((id) => isUpgradeShown(id, this.sim.progress))
+      .map((id) => UPGRADE_MAP[id].shortName);
+    const news = fresh.length ? ` Cetak biru baru di bengkel: ${fresh.join(', ')}.` : ' Bengkel ibu buka, alat kau bisa naik level lagi.';
     const morningLines: Record<number, string> = {
-      2: 'Pagi. Malam nanti penjarah berat samo kapal pukat mulai datang. Perkuat Tenaga samo Bentang di bengkel.',
-      3: 'Pagi. Armadanyo makin besar, kapal drum ikut turun. Gema Susulan samo Pelampung Penguat la bisa dibeli.',
-      4: 'Pagi. Malam ini mereka ngepung dari segala arah. Cari Resonansi samo Benteng Dermaga.',
+      2: `Pagi. Malam nanti penjarah berat samo kapal pukat mulai datang.${news}`,
+      3: `Pagi. Armadanyo makin besar, kapal drum ikut turun.${news}`,
+      4: `Pagi. Malam ini mereka ngepung dari segala arah.${news}`,
     };
     const told = s.day === 2 ? this.talk('dawn') : isBossDay(s.day) ? this.talk('storm') : false;
     if (!told) {
@@ -1129,7 +1278,7 @@ export class Story {
         'BU SARI',
         isBossDay(s.day)
           ? 'Langit hitam lagi... Muson balik malam ini. Habiskan koin di bengkel!'
-          : morningLines[s.day] ?? `Pagi hari ${s.day}. Patroli lanjut, malam nanti makin ganas.`
+          : morningLines[s.day] ?? `Pagi hari ${s.day}. Patroli lanjut, malam nanti makin ganas.${news}`
       );
     }
     this.touchSave();
@@ -1201,6 +1350,13 @@ export class Story {
   private afterJob(kind: JobKind, result: JobResult): void {
     const s = this.s;
     const ok = result === 'done';
+    if (kind === 'boat' && s.marks.lastBoat) {
+      delete s.marks.lastBoat;
+      if (ok) {
+        s.marks.fender = 1;
+        this.sim.text(PIER_END.x, PIER_END.y, 'PELINDUNG BAMBU +1', '#8ef0c0', 1);
+      }
+    }
     if (kind === 'dolphin' && ok) {
       s.flags.dolphin = true;
       s.saved.dolphins += 1;
@@ -1396,8 +1552,10 @@ export class Story {
     this.view.handover = 4;
     this.sim.burst(PIER_END.x, PIER_END.y, '#ffe07d', 24);
     this.sim.audio.playShopUnlock();
-    this.sim.award(35, PIER_END.x + 22, PIER_END.y - 26, 'UPAH DERMAGA!', '#ffe07d');
-    this.sim.hooks.banner('BENGKEL TERBUKA!', 'Buka Bengkel [E] & pasang alat pertamamu untuk memulai Hari 1!', 'gold');
+    // enough for Muatan, the tool the workshop walks the player through
+    const wage = Math.max(35, getUpgradeCost('trash_density', 0) - this.sim.progress.coins);
+    this.sim.award(wage, PIER_END.x + 22, PIER_END.y - 26, 'UPAH DERMAGA!', '#ffe07d');
+    this.sim.hooks.banner('BENGKEL TERBUKA!', 'Buka Bengkel [E] & pasang Muatan untuk memulai Hari 1!', 'gold');
     if (!this.talk('workshop')) this.radio('BU SARI', 'Bengkel la buka. Tombolnyo di kanan bawah.');
     this.touchSave();
   }
@@ -1414,7 +1572,7 @@ export class Story {
     s.sideEventTimer = 42;
     this.burstSalvage(6);
     this.sim.hooks.banner('HARI 1 · SIAPKAN PERTAHANAN!', 'Sapu sampah untuk koin · Tahan gelombang bajak laut saat Malam tiba!', 'green');
-    this.talk('dayOne');
+    if (!this.talk('dayOne')) this.radio('A.L.U.N.', 'Jalur Pasang siap. Tahan sampai tiga panah muncul, geser lalu lepas.');
     this.touchSave();
   }
 
@@ -1422,6 +1580,7 @@ export class Story {
     const s = this.s;
     if (!s.flags.toolbox) return false;
     let changed = false;
+    this.readyFor = 0;
     if (s.marks.workshopVisit === undefined) {
       s.marks.workshopVisit = s.clock;
       changed = true;
@@ -1430,7 +1589,37 @@ export class Story {
       this.beginDayOne();
       changed = true;
     }
+    if (this.dawnShopPending()) {
+      delete s.marks.dawnShop;
+      delete s.marks.dawnShopAt;
+      this.sim.hooks.banner(`HARI ${s.day} DIMULAI!`, 'Sapu rongsok jadi koin · Malam nanti bajak laut datang lagi.', 'green');
+      changed = true;
+    }
     return changed;
+  }
+
+  /** Dawn has come and the player has not been to the workshop yet: the day waits. */
+  dawnShopPending(): boolean {
+    const s = this.s;
+    return s.cycle === 'day' && s.flags.toolbox && s.marks.dawnShop === s.day;
+  }
+
+  /** Time for the workshop to open by itself (a moment after dawn, so the night's reward can land). */
+  dawnShopDue(): boolean {
+    return this.dawnShopPending() && this.s.clock >= (this.s.marks.dawnShopAt ?? 0);
+  }
+
+  /** Tools the purse can pay for right now, cheapest first, as "Tenaga Lv 3". */
+  affordableNames(): string[] {
+    const p = this.sim.progress;
+    return UPGRADE_DEFS.filter((d) => isForSale(d.id, p) && p.coins >= getUpgradeCost(d.id, p.upgrades[d.id] ?? 0))
+      .sort((a, b) => getUpgradeCost(a.id, p.upgrades[a.id] ?? 0) - getUpgradeCost(b.id, p.upgrades[b.id] ?? 0))
+      .map((d) => `${d.shortName} Lv ${(p.upgrades[d.id] ?? 0) + 1}`);
+  }
+
+  /** The cheapest tool on sale, for the HUD (null when everything waits for a later dawn). */
+  goal(): ReturnType<typeof nextGoal> {
+    return nextGoal(this.sim.progress);
   }
 
   sendOff(e: Entity): void {
@@ -1536,9 +1725,9 @@ export class Story {
       if (s.step === 'shop') {
         return {
           key: 'prep:shop',
-          title: '3/3 · Buka Bengkel [E] & pasang alat',
+          title: '3/3 · Buka Bengkel [E] & pasang Muatan',
           progress: 'Siap',
-          sub: 'Klik tombol Bengkel yang berkilau di kanan bawah, pasang alat pertamamu (Bentang atau Muatan), lalu mulai Hari 1!',
+          sub: 'Pasang Muatan di Bengkel, lalu mulai Hari 1!',
           icon: 'shop',
           swatch: 'gold',
         };
@@ -1558,6 +1747,9 @@ export class Story {
     // Active boss or night combat takes priority
     if (s.cycle === 'night') {
       if (this.run && s.job?.kind === 'boss') return this.run.objective();
+      if (s.marks.lastBoat && s.job?.kind === 'boat' && s.job.phase !== 'turn') {
+        return { key: 'night:last-boat', title: 'Perahu terakhir Pak Damar', sub: 'Belokkan Pendobrak ke samping dan bantu nelayan merapat. Bambu menahan satu serangan.', icon: 'boat', swatch: 'blue' };
+      }
       const pirates = this.activePirates();
       const nearest = pirates.sort((a, b) => a.x - b.x)[0];
       const rem = pirates.length + s.wavePlan.length;

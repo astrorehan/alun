@@ -1,3 +1,4 @@
+import { PIRATE_KIND } from '../types';
 import type { Entity, JobResult, JobState, Point, Wave } from '../types';
 import {
   DOLPHIN_SPOT,
@@ -89,19 +90,18 @@ export abstract class Job {
     return this.st.sim;
   }
 
-  /** One wave counts once against a hull. Scales freely with incremental upgrades, resonance, sonar crit & buoys! */
+  /** One wave counts once against a hull. Scales freely with incremental upgrades, sonar crit & buoys! */
   protected hullHit(e: Entity, w: Wave, px: number, py: number, shove: number): number {
     if (w.hitMap.has(e.id)) return 0;
     w.hitMap.set(e.id, w.age);
     this.s.touched = true;
     const buoyScale = w.kind === 'buoy_pulse' ? 0.52 : 1;
-    const resonanceHullScale = w.kind === 'resonance' ? 0.28 : 1;
     const k = shove * (0.55 + Math.sqrt(Math.max(0.1, w.power)) * 0.45) * buoyScale;
     e.vx += px * k;
     e.vy += py * k;
     const dmg = Math.max(
       1,
-      Math.round(hitDamage(w.power, w.charge, w.kind === 'resonance', this.sim.stats.critBonus) * buoyScale * resonanceHullScale)
+      Math.round(hitDamage(w.power, w.charge, this.sim.stats.critBonus) * buoyScale)
     );
     if (this.sim.stats.comboEnergyReturn > 0) {
       this.sim.energy = Math.min(this.sim.stats.maxEnergy, this.sim.energy + this.sim.stats.comboEnergyReturn);
@@ -204,7 +204,7 @@ export class DolphinJob extends Job {
     if (e.actionTimer > 0 && e.hp > 0 && w.kind !== 'buoy_pulse' && !w.hitMap.has(e.id)) {
       w.hitMap.set(e.id, w.age);
       this.s.touched = true;
-      const tear = w.kind === 'resonance' ? 3 : w.charge >= 0.55 ? 2 : 1;
+      const tear = w.charge >= 0.55 ? 2 : 1;
       e.hp = Math.max(0, e.hp - tear);
       this.s.hp = e.hp;
       this.st.touchSave();
@@ -272,7 +272,8 @@ export class BoatJob extends Job {
   private ease = 0;
 
   enter(resumed: boolean): void {
-    const at = resumed && this.s.at && this.s.phase !== 'start' ? this.s.at : this.lane.from;
+    const lastBoat = this.st.s.marks.lastBoat;
+    const at = resumed && this.s.at && this.s.phase !== 'start' ? this.s.at : lastBoat ? { x: 770, y: 405 } : this.lane.from;
     this.boat = this.sim.add('boat', at.x, at.y, {
       radius: 24,
       mass: 1.9,
@@ -283,8 +284,8 @@ export class BoatJob extends Job {
     if (resumed && this.s.phase !== 'start') return;
     const p = this.st.s.pollution;
     this.s.pay = PAY.boat + (p < P_DIRTY ? PAY.boatBonus : 0) + this.sim.stats.boatLevel * 13;
-    this.phase('sail');
-    this.st.radio(
+    this.phase(lastBoat ? 'home' : 'sail');
+    if (!lastBoat) this.st.radio(
       'PAK DAMAR',
       this.s.story
         ? 'Aku masuk lewat celah karang! Arusnyo nyeret ke batu, sapu lambung perahuku dari samping!'
@@ -345,6 +346,11 @@ export class BoatJob extends Job {
       return true;
     }
     const home = ph === 'home';
+    if (this.st.s.marks.lastBoat && home && !this.s.touched) {
+      const danger = this.st.activePirates().some(p => p.variant === PIRATE_KIND.rammer && p.ram?.phase !== 'stun');
+      if (danger && this.s.total < 13) return true;
+      if (danger) { this.phase('turn'); return true; }
+    }
     const tx = home ? VILLAGE_PIER.dockX : e.x - 100;
     const ty = home ? VILLAGE_PIER.dockY : this.lane.y;
     const dx = tx - e.x;
@@ -1177,7 +1183,7 @@ export class BossJob extends Job {
       if (!this.st.talk('mothership')) this.st.radio('BU SARI', 'Kapal induk lagi! Pecahkan alatnyo, baru hantam lambungnyo!');
       this.st.touchSave();
     }
-    const at = this.s.at ?? (this.s.phase === 'enter' ? { x: WORLD_W + 120, y: BOSS_STATION.y } : BOSS_STATION);
+    const at = this.s.at && this.s.at.x <= WORLD_W + 120 ? this.s.at : (this.s.phase === 'enter' ? { x: WORLD_W + 120, y: BOSS_STATION.y } : BOSS_STATION);
     this.ship = this.sim.add('trawler', at.x, at.y, {
       radius: 52,
       mass: 5,
@@ -1229,12 +1235,10 @@ export class BossJob extends Job {
     s.work = 0;
     s.turns += 1;
     if (s.turns % 2 === 1) {
-      s.seen.trawl = true;
       this.lowerTrawl();
       this.phase('gear_trawl');
       this.st.radio('A.L.U.N.', 'Pukat turun di tempat ikan bertelur. Sapu dua pelampung belang keluar.');
     } else {
-      s.seen.drum = true;
       this.lowerDrum();
       this.phase('gear_drum');
       this.st.radio('A.L.U.N.', 'Drum hanyut ke karang kanan bawah. Sapu menjauh dari karang!');
@@ -1246,6 +1250,10 @@ export class BossJob extends Job {
     this.trawl = null;
     if (this.drum) this.sim.remove(this.drum.id);
     this.drum = null;
+    if (this.s.phase === 'gear_trawl') this.s.seen.trawl = true;
+    if (this.s.phase === 'gear_drum') this.s.seen.drum = true;
+    this.s.hp = Math.max(1, this.s.hp - Math.ceil(this.maxHp * 0.32));
+    this.st.s.bossHp = this.s.hp;
     this.s.windowDamage = 0;
     this.phase('window');
     this.sim.text(this.ship!.x, this.ship!.y - 74, text, '#c8fff4', 1.15);
@@ -1331,16 +1339,17 @@ export class BossJob extends Job {
       if (w.kind !== 'buoy_pulse') this.s.touched = true;
       return 'push';
     }
-    const rawDmg = this.hullHit(e, w, px, py, 24);
+    if (!this.open) return 'hold';
+    const rawDmg = this.hullHit(e, w, px, py, 0);
     if (rawDmg <= 0) return 'hold';
-    // Heavy armor while deploying gear (15%) or entering (10%); full incremental burst during exposed window!
-    const armorScale = this.open ? 1 : this.s.phase === 'enter' ? 0.1 : 0.15;
-    const take = Math.min(this.s.hp, Math.max(1, Math.round(rawDmg * armorScale)));
+    const floor = this.s.seen.trawl && this.s.seen.drum ? 0 : Math.ceil(this.maxHp * 0.35);
+    const take = Math.min(Math.max(0, this.s.hp - floor), rawDmg);
     if (take <= 0) return 'hold';
     this.s.hp -= take;
     this.st.s.bossHp = this.s.hp;
+    if (floor > 0 && this.s.hp <= floor) this.phase('rest');
     this.showHit(e, take);
-    this.sim.shake(this.open ? 7.5 : 4);
+    this.sim.shake(7.5);
     this.st.touchSave();
     if (this.s.hp <= 0) {
       this.sim.burst(e.x, e.y, '#ffe07d', 48);
@@ -1370,7 +1379,7 @@ export class BossJob extends Job {
         return { key: 'boss:drum', title: 'Jauhkan drum Kapal Induk', sub: 'Sapu drum kuning menjauh dari karang kanan bawah.', icon: 'drum', swatch: 'gold', at: { x: d.x, y: d.y } };
       }
       case 'window':
-        return { key: `boss:window:${pct}`, title: 'Hantam lambung Kapal Induk!', sub: `Celah terbuka — lepaskan Gema & Resonansi penuh! · sisa ${pct}%`, icon: 'boss', swatch: 'red', at };
+        return { key: `boss:window:${pct}`, title: 'Hantam lambung Kapal Induk!', sub: `Celah terbuka, lepaskan ombak penuh! · sisa ${pct}%`, icon: 'boss', swatch: 'red', at };
       default:
         return { key: 'boss:rest', title: 'Hadapi Kapal Induk Badai Muson', sub: 'Hantam lambungnya dan gagalkan alatnya sambil menjaga dermaga!', icon: 'boss', swatch: 'purple', at };
     }

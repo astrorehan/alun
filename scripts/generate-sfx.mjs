@@ -60,7 +60,6 @@ export const SOUNDS = [
   { id: 'charge-full', pick: 2, dur: 0.8, infl: 0.75, max: 0.7, gain: -3, text: 'A bright sparkling chime ping with a shimmer, magical power fully charged cue for a game, clean, one-shot' },
   { id: 'wave-hit', pick: 3, dur: 0.5, infl: 0.75, max: 0.4, text: 'A wave of water slapping into a floating plastic bottle, short wet splashy thwack, close up, one-shot' },
   { id: 'shore-splash', pick: 0, dur: 1, infl: 0.65, text: 'Foamy ocean wave crest washing and fizzing softly onto wet sandy beach shoreline, crisp natural coastal surf splash' },
-  { id: 'resonance-burst', pick: 0, dur: 1.7, infl: 0.65, text: 'Magical tidal shockwave burst, deep ocean water boom layered with radiant crystalline chime and sparkling foamy spray, triumphant clean game power-up impact' },
   { id: 'splash', pick: 0, dur: 0.8, infl: 0.7, text: 'Natural crisp object splashing into clear tropical seawater with a lively bubbly plop and spray' },
 
   /* ---------------------------------------------------------------- the net and its pay */

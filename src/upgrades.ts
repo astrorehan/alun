@@ -1,18 +1,39 @@
 import { BASE_HIT, BASE_PIER_HP, createStory, salvageWeights } from './story/state';
 import type { ComputedStats, PlayerProgress, UpgradeDef, UpgradeId } from './types';
 
-/** Damage one hit does to a hull. Scales freely with incremental upgrades, charge, resonance & sonar crit! */
-export function hitDamage(power: number, charge: number, resonance: boolean, critBonus = 0): number {
-  return Math.ceil(BASE_HIT * power * (1 + charge * 0.85) * (resonance ? 2.45 : 1) * (1 + critBonus) - 1e-6);
+/** Damage one hit does to a hull. Scales freely with incremental upgrades, charge & sonar crit! */
+export function hitDamage(power: number, charge: number, critBonus = 0): number {
+  return Math.ceil(BASE_HIT * power * (1 + charge * 0.85) * (1 + critBonus) - 1e-6);
 }
 
 /** Tenaga Pasang as the player sees it: one hit of an uncharged wave. */
 export function basicHit(level: number): number {
-  return hitDamage(wavePowerAt(level), 0, false);
+  return hitDamage(wavePowerAt(level), 0);
 }
 
+/** Tenaga Pasang push and hull damage by level; the curve flattens after Lv 3 so one tool cannot carry the nights. */
+const WAVE_POWER = [1, 1.56, 2.28, 3.16, 3.8, 4.45, 5.1];
+
 function wavePowerAt(level: number): number {
-  return 1 + level * 0.48 + level * level * 0.08;
+  return WAVE_POWER[Math.max(0, Math.min(WAVE_POWER.length - 1, Math.round(level)))];
+}
+
+/** Coin bonus for a run of catches at this Harmoni Kombo level: steps of 10%, up to the cap. */
+export function comboMultiplier(combo: number, level: number): number {
+  const step = level > 0 ? 2 : 3;
+  return 1 + Math.min(comboCap(level) - 1, Math.floor(combo / step) * 0.1);
+}
+
+function comboCap(level: number): number {
+  return 1.5 + level * 0.5;
+}
+
+function comboWindow(level: number): number {
+  return 3.4 + level * 0.8;
+}
+
+function regenBoost(level: number): number {
+  return level * 0.55;
 }
 
 /** Seconds between the seedlings Bu Sari lets go. */
@@ -66,7 +87,7 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     name: 'Bentang Ombak',
     shortName: 'Bentang',
     branch: 'wave',
-    description: 'Busur ombak jauh lebih lebar — menyapu segerombolan rongsok dan menghantam banyak bajak laut sekaligus.',
+    description: 'Busur ombak jauh lebih lebar, menyapu banyak rongsok dan bajak laut sekaligus.',
     effectText: (lv) => `Lebar ombak +${lv * 28}%`,
     statLabel: 'LEBAR OMBAK',
     statBefore: (lv) => `x${(1 + lv * 0.28).toFixed(2)}`,
@@ -74,7 +95,7 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     cardSwatch: 'blue',
     maxLevel: 5,
     baseCost: 30,
-    costMult: 1.9,
+    costMult: 2.0,
     requires: ['core'],
     col: 2,
     row: 0,
@@ -93,7 +114,7 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     cardSwatch: 'blue',
     maxLevel: 6,
     baseCost: 42,
-    costMult: 1.95,
+    costMult: 2.05,
     requires: ['core'],
     col: 2,
     row: 1,
@@ -113,7 +134,7 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     cardSwatch: 'orange',
     maxLevel: 4,
     baseCost: 135,
-    costMult: 2.1,
+    costMult: 2.2,
     requires: ['wave_power'],
     col: 1,
     row: 1,
@@ -124,7 +145,7 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     name: 'Gema Susulan',
     shortName: 'Gema',
     branch: 'wave',
-    description: 'Setiap sapuan melepas rentetan ombak susulan otomatis di jalur yang sama — menggandakan sapuan & kerusakan!',
+    description: 'Setiap sapuan melepas ombak susulan otomatis di jalur yang sama.',
     effectText: (lv) => (lv === 0 ? '+1 ombak susulan otomatis' : `${lv} ombak susulan tiap sapuan`),
     statLabel: 'OMBAK SUSULAN',
     statBefore: (lv) => `${lv}`,
@@ -132,30 +153,30 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     cardSwatch: 'purple',
     maxLevel: 4,
     baseCost: 220,
-    costMult: 2.25,
+    costMult: 2.35,
     requires: ['wave_width'],
     col: 1,
     row: 0,
     icon: 'echo',
   },
   {
-    id: 'resonance_burst',
-    name: 'Resonansi Konstruktif',
-    shortName: 'Resonansi',
+    id: 'tidal_lane',
+    name: 'Jalur Panjang',
+    shortName: 'Jalur',
     branch: 'wave',
-    description: 'Saat dua ombak bertemu, air meledak menjadi gelombang kejut raksasa yang menghantam semua kapal di sekitarnya!',
-    effectText: (lv) => (lv === 0 ? 'Aktifkan ledakan pertemuan ombak' : `Radius & daya ledakan Lv ${lv}`),
-    statLabel: 'LEDAKAN',
-    statBefore: (lv) => (lv === 0 ? 'MATI' : `Lv ${lv}`),
-    statAfter: (lv) => `Lv ${lv + 1}`,
+    description: 'Arus Jalur Pasang makin panjang, menjangkau rongsok dan kapal yang lebih jauh.',
+    effectText: (lv) => `Panjang arus ${230 + 30 * lv}`,
+    statLabel: 'PANJANG ARUS',
+    statBefore: (lv) => String(230 + 30 * lv),
+    statAfter: (lv) => String(260 + 30 * lv),
     cardSwatch: 'gold',
     maxLevel: 4,
     baseCost: 380,
-    costMult: 2.35,
+    costMult: 2.45,
     requires: ['echo_wave', 'tidal_charge'],
     col: 0,
     row: 0.5,
-    icon: 'resonance',
+    icon: 'current',
   },
 
   // ================= BRANCH 2: ENERGY (TOP-RIGHT) =================
@@ -172,7 +193,7 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     cardSwatch: 'orange',
     maxLevel: 5,
     baseCost: 36,
-    costMult: 1.88,
+    costMult: 1.98,
     requires: ['core'],
     col: 4,
     row: 0,
@@ -183,14 +204,14 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     name: 'Regenerasi Energi',
     shortName: 'Regenerasi',
     branch: 'energy',
-    description: 'Energi pulih jauh lebih cepat dan setiap sapuan lebih hemat — bikin bisa kirim ombak tanpa henti.',
-    effectText: (lv) => `Pemulihan +${lv * 38}% · Biaya -${lv * 9}%`,
+    description: 'Energi pulih jauh lebih cepat dan setiap sapuan lebih hemat.',
+    effectText: (lv) => `Pemulihan +${Math.round(regenBoost(lv) * 100)}% · Biaya ombak -${lv * 10}%`,
     statLabel: 'PEMULIHAN',
-    statBefore: (lv) => `+${lv * 38}%`,
-    statAfter: (lv) => `+${(lv + 1) * 38}%`,
+    statBefore: (lv) => `+${Math.round(regenBoost(lv) * 100)}%`,
+    statAfter: (lv) => `+${Math.round(regenBoost(lv + 1) * 100)}%`,
     cardSwatch: 'orange',
     maxLevel: 5,
-    baseCost: 95,
+    baseCost: 70,
     costMult: 2.0,
     requires: ['tidal_energy'],
     col: 5,
@@ -202,15 +223,18 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     name: 'Harmoni Kombo',
     shortName: 'Kombo',
     branch: 'energy',
-    description: 'Setiap rongsok yang masuk jaring dan kapal yang dihantam langsung mengisi ulang energi ombakmu!',
-    effectText: (lv) => (lv === 0 ? 'Tangkapan & hantaman isi energi' : `+${lv * 5} energi tiap tangkapan/hantaman`),
-    statLabel: 'ENERGI BALIK',
-    statBefore: (lv) => `+${lv * 5}`,
-    statAfter: (lv) => `+${(lv + 1) * 5}`,
+    description: 'Kombo tangkapan bertahan lebih lama dan koinnya berlipat jauh lebih tinggi. Tiap tangkapan & hantaman juga mengisi energi!',
+    effectText: (lv) =>
+      lv === 0
+        ? `Kombo naik tiap 2 tangkapan · maks x${comboCap(1).toFixed(1)}`
+        : `Jeda kombo ${comboWindow(lv).toFixed(1)} dtk · +${lv * 6} energi tiap tangkapan`,
+    statLabel: 'KOIN KOMBO MAKS',
+    statBefore: (lv) => `x${comboCap(lv).toFixed(1)}`,
+    statAfter: (lv) => `x${comboCap(lv + 1).toFixed(1)}`,
     cardSwatch: 'purple',
     maxLevel: 4,
-    baseCost: 240,
-    costMult: 2.15,
+    baseCost: 150,
+    costMult: 2.1,
     requires: ['energy_regen'],
     col: 6,
     row: 0,
@@ -223,15 +247,15 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     name: 'Arus Pemandu',
     shortName: 'Pemandu',
     branch: 'ai',
-    description: 'A.L.U.N. membelokkan rongsok ke jaring, bantalan ke minyak, dan bibit ke tepi pantai secara otomatis.',
-    effectText: (lv) => (lv === 0 ? 'Sapuan berbelok ke tujuannya' : `Kekuatan pandu +${lv * 38}%`),
+    description: 'A.L.U.N. meluruskan sapuan yang sudah mengarah ke tujuannya: rongsok ke jaring, bantalan ke minyak, bibit ke tepi pantai.',
+    effectText: (lv) => (lv === 0 ? 'Sapuan searah diluruskan ke tujuannya' : `Kekuatan pandu +${lv * 38}%`),
     statLabel: 'PANDUAN',
     statBefore: (lv) => (lv === 0 ? 'MATI' : `+${lv * 38}%`),
     statAfter: (lv) => `+${(lv + 1) * 38}%`,
     cardSwatch: 'teal',
     maxLevel: 4,
     baseCost: 56,
-    costMult: 1.95,
+    costMult: 2.05,
     requires: ['core'],
     col: 2,
     row: 2,
@@ -250,7 +274,7 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     cardSwatch: 'teal',
     maxLevel: 3,
     baseCost: 140,
-    costMult: 2.15,
+    costMult: 2.25,
     requires: ['ai_guide'],
     col: 1,
     row: 2,
@@ -269,7 +293,7 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     cardSwatch: 'teal',
     maxLevel: 3,
     baseCost: 260,
-    costMult: 2.25,
+    costMult: 2.35,
     requires: ['ai_guide'],
     col: 1,
     row: 3,
@@ -282,7 +306,7 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     name: 'Arus Muatan Pesisir',
     shortName: 'Muatan',
     branch: 'eco',
-    description: 'Pasang laut membawa rongsok berkelompok besar sekaligus — sumber koin utama untuk mengejar upgrade mahal!',
+    description: 'Pasang laut membawa rongsok dalam kelompok besar. Sumber koin utama untuk upgrade mahal!',
     effectText: (lv) => (lv === 0 ? 'Rongsok datang berpasangan' : `Datang ${CLUSTER_MIN[lv]}–${CLUSTER_MAX[lv]} sekaligus`),
     statLabel: 'SEKALI DATANG',
     statBefore: (lv) => `${CLUSTER_MAX[Math.min(6, lv)]}`,
@@ -290,7 +314,7 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     cardSwatch: 'green',
     maxLevel: 6,
     baseCost: 36,
-    costMult: 1.9,
+    costMult: 2.0,
     requires: ['core'],
     col: 4,
     row: 1,
@@ -301,7 +325,7 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     name: 'Jaring Gotong Royong',
     shortName: 'Jaring',
     branch: 'eco',
-    description: 'Warga melebarkan Jaring Desa. Rongsok tersedot dari jarak jauh — panen koin jadi jauh lebih cepat!',
+    description: 'Warga melebarkan Jaring Desa. Rongsok yang lewat di dekat mulut jaring ikut tersedot masuk.',
     effectText: (lv) => `Lebar jaring +${lv * 24}%`,
     statLabel: 'LEBAR JARING',
     statBefore: (lv) => `+${lv * 24}%`,
@@ -309,7 +333,7 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     cardSwatch: 'green',
     maxLevel: 5,
     baseCost: 50,
-    costMult: 1.9,
+    costMult: 2.0,
     requires: ['trash_density'],
     col: 5,
     row: 1,
@@ -328,7 +352,7 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     cardSwatch: 'gold',
     maxLevel: 5,
     baseCost: 115,
-    costMult: 2.05,
+    costMult: 2.15,
     requires: ['net_expand'],
     col: 6,
     row: 1,
@@ -347,7 +371,7 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     cardSwatch: 'green',
     maxLevel: 4,
     baseCost: 70,
-    costMult: 1.95,
+    costMult: 2.05,
     requires: ['core'],
     col: 4,
     row: 2,
@@ -358,7 +382,7 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     name: 'Armada Nelayan',
     shortName: 'Nelayan',
     branch: 'eco',
-    description: 'Kemudi baru perahu nelayan — arus silang lebih ringan dan upah ikan siang hari meningkat.',
+    description: 'Kemudi baru perahu nelayan: arus silang lebih ringan dan upah ikan siang hari naik.',
     effectText: (lv) => (lv === 0 ? 'Arus silang penuh' : `Arus -${lv * 24}% · bonus upah +${lv * 13} koin`),
     statLabel: 'BONUS NELAYAN',
     statBefore: (lv) => `+${lv * 13}`,
@@ -366,7 +390,7 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     cardSwatch: 'blue',
     maxLevel: 3,
     baseCost: 140,
-    costMult: 2.05,
+    costMult: 2.15,
     requires: ['core'],
     col: 4,
     row: 3,
@@ -385,7 +409,7 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     cardSwatch: 'orange',
     maxLevel: 3,
     baseCost: 220,
-    costMult: 2.2,
+    costMult: 2.3,
     requires: ['unlock_mangrove'],
     col: 5,
     row: 2,
@@ -406,7 +430,7 @@ export const UPGRADE_DEFS: UpgradeDef[] = [
     cardSwatch: 'red',
     maxLevel: 5,
     baseCost: 65,
-    costMult: 1.95,
+    costMult: 2.05,
     requires: ['core'],
     col: 3,
     row: 3,
@@ -428,38 +452,105 @@ export function getUpgradeCost(id: UpgradeId, currentLevel: number): number {
   return Math.round(def.baseCost * Math.pow(def.costMult, currentLevel));
 }
 
-/** Pure incremental: every blueprint is available once the workshop opens! */
-export function hasBlueprint(id: UpgradeId, f: { toolbox: boolean }): boolean {
+/**
+ * The morning Bu Sari has each blueprint ready. Day 1 starts with two tools only; every dawn after a
+ * night survived brings new ones, so the workshop grows with the player instead of opening all at once.
+ */
+export const BLUEPRINT_DAY: Record<UpgradeId, number> = {
+  core: 1,
+  wave_power: 1,
+  trash_density: 1,
+  wave_width: 2,
+  net_expand: 2,
+  tidal_energy: 2,
+  energy_regen: 2,
+  pier_armor: 2,
+  tidal_charge: 2,
+  combo_flow: 3,
+  ai_guide: 3,
+  trash_rarity: 3,
+  unlock_mangrove: 3,
+  echo_wave: 3,
+  tidal_lane: 3,
+  ai_sonar: 4,
+  unlock_boats: 4,
+  unlock_forest: 4,
+  ai_buoy: 5,
+};
+
+/** Levels a tool can reach on the day its blueprint arrives; every later dawn allows one more. */
+const FIRST_DAY_LEVELS = 2;
+
+export function hasBlueprint(id: UpgradeId, f: { toolbox: boolean }, day: number): boolean {
   if (id === 'core') return true;
-  return f.toolbox;
+  return f.toolbox && day >= BLUEPRINT_DAY[id];
+}
+
+/** Highest level Bu Sari can build on this day. */
+export function levelCapOnDay(id: UpgradeId, day: number): number {
+  const opened = BLUEPRINT_DAY[id];
+  if (day < opened) return 0;
+  return Math.min(UPGRADE_MAP[id].maxLevel, FIRST_DAY_LEVELS + day - opened);
+}
+
+/** The first day on which `level` can be built. */
+export function dayForLevel(id: UpgradeId, level: number): number {
+  return BLUEPRINT_DAY[id] + Math.max(0, level - FIRST_DAY_LEVELS);
+}
+
+/** Tools whose blueprints arrived this very morning (none on Day 1: everything is new then). */
+export function newBlueprints(progress: PlayerProgress): UpgradeId[] {
+  const day = progress.story.day;
+  if (day <= 1 || !progress.story.flags.toolbox) return [];
+  return UPGRADE_DEFS.filter((d) => d.id !== 'core' && BLUEPRINT_DAY[d.id] === day).map((d) => d.id);
 }
 
 /** The tools this one builds on are installed. */
 export function hasTools(id: UpgradeId, upgrades: Record<UpgradeId, number>): boolean {
-  if (id === 'resonance_burst') return (upgrades.echo_wave ?? 0) > 0 || (upgrades.tidal_charge ?? 0) > 0;
+  if (id === 'tidal_lane') return (upgrades.echo_wave ?? 0) > 0 || (upgrades.tidal_charge ?? 0) > 0;
   return UPGRADE_MAP[id].requires.every((req) => (upgrades[req] ?? 0) > 0);
 }
 
-/** On the shelf: workshop open and parent tools installed. */
+/** On the shelf: blueprint arrived and parent tools installed. */
 export function isUpgradeUnlocked(id: UpgradeId, progress: PlayerProgress): boolean {
-  return hasBlueprint(id, progress.story.flags) && hasTools(id, progress.upgrades);
+  return hasBlueprint(id, progress.story.flags, progress.story.day) && hasTools(id, progress.upgrades);
 }
 
-/** Shown in the workshop: owned, unlocked, or one step ahead on the tree so players see the incremental goals! */
+/** Shown in the workshop: owned, or on the shelf today. */
 export function isUpgradeShown(id: UpgradeId, progress: PlayerProgress): boolean {
   if (id === 'core') return false;
   if (!progress.story.flags.toolbox) return false;
   return (progress.upgrades[id] ?? 0) > 0 || isUpgradeUnlocked(id, progress);
 }
 
-/** No chapter level caps: full maxLevel is always reachable! */
+/** Highest level on sale today: two on a blueprint's first day, one more every dawn after. */
 export function levelCap(id: UpgradeId, progress: PlayerProgress): number {
-  return progress.story.flags.toolbox ? UPGRADE_MAP[id].maxLevel : 0;
+  if (!progress.story.flags.toolbox) return 0;
+  return levelCapOnDay(id, progress.story.day);
 }
 
 export function isForSale(id: UpgradeId, progress: PlayerProgress): boolean {
   if (id === 'core') return false;
   return isUpgradeUnlocked(id, progress) && (progress.upgrades[id] ?? 0) < levelCap(id, progress);
+}
+
+/** The next level waits for a later dawn, not for coins. */
+export function isCappedToday(id: UpgradeId, progress: PlayerProgress): boolean {
+  if (id === 'core' || !progress.story.flags.toolbox || !hasTools(id, progress.upgrades)) return false;
+  const lv = progress.upgrades[id] ?? 0;
+  return lv < UPGRADE_MAP[id].maxLevel && lv >= levelCap(id, progress);
+}
+
+/** The cheapest tool on sale right now: what the HUD shows the player saving up for. */
+export function nextGoal(progress: PlayerProgress): { id: UpgradeId; level: number; cost: number } | null {
+  let best: { id: UpgradeId; level: number; cost: number } | null = null;
+  for (const def of UPGRADE_DEFS) {
+    if (!isForSale(def.id, progress)) continue;
+    const lv = progress.upgrades[def.id] ?? 0;
+    const cost = getUpgradeCost(def.id, lv);
+    if (!best || cost < best.cost) best = { id: def.id, level: lv + 1, cost };
+  }
+  return best;
 }
 
 export function countAffordableUpgrades(progress: PlayerProgress): number {
@@ -487,7 +578,7 @@ export function createInitialProgress(skipPrep = false): PlayerProgress {
     totalBoats: 0,
     totalFires: 0,
     totalWaves: 0,
-    totalResonances: 0,
+    totalCurrents: 0,
     victoryAchieved: false,
     endlessMode: false,
     journalSeen: [],
@@ -516,13 +607,15 @@ export function computeStats(progress: PlayerProgress): ComputedStats {
     wavePower: wavePowerAt(powerLv),
     waveDuration: 0.96 + powerLv * 0.11 + widthLv * 0.06,
     maxEnergy: 100 + (u.tidal_energy ?? 0) * 40,
-    energyRegen: 17.5 * (1 + regenLv * 0.38),
-    baseWaveCost: Math.max(7, 18.5 * (1 - regenLv * 0.09)),
+    energyRegen: 17.5 * (1 + regenBoost(regenLv)),
+    baseWaveCost: Math.max(6, 18.5 * (1 - regenLv * 0.1)),
     chargeUnlocked: chargeLv > 0,
     maxChargeBonus: chargeLv > 0 ? 1.7 + chargeLv * 0.42 : 1.3,
     echoCount: u.echo_wave ?? 0,
-    resonanceLevel: u.resonance_burst ?? 0,
-    comboEnergyReturn: comboLv * 5,
+    laneLevel: u.tidal_lane ?? 0,
+    comboEnergyReturn: comboLv * 6,
+    comboWindow: comboWindow(comboLv),
+    comboLevel: comboLv,
     aiGuideStrength: aiGuideLv > 0 ? 0.5 + aiGuideLv * 0.38 : 0,
     aiSonarLevel: sonarLv,
     critBonus: sonarLv * 0.18,

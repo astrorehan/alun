@@ -43,7 +43,7 @@ const silent = new Proxy(
 
 export type Style = 'biasa' | 'tanpa' | 'sejuta' | 'diam';
 
-/** Smart active-incremental shopping list across branches (width, power, eco: Muatan -> Jaring -> Kelangkaan, energy, echo, buoys, resonance, armor). */
+/** Smart active-incremental shopping list across branches (width, power, eco: Muatan -> Jaring -> Kelangkaan, energy, echo, buoys, tidal lanes, armor). */
 const SHOPPING: UpgradeId[] = [
   'wave_width',
   'trash_density',
@@ -62,14 +62,14 @@ const SHOPPING: UpgradeId[] = [
   'trash_rarity',
   'ai_sonar',
   'ai_buoy',
-  'resonance_burst',
+  'tidal_lane',
   'combo_flow',
   'pier_armor',
   'wave_power',
   'echo_wave',
   'energy_regen',
   'ai_buoy',
-  'resonance_burst',
+  'tidal_lane',
   'wave_width',
   'tidal_charge',
   'wave_power',
@@ -80,7 +80,7 @@ const SHOPPING: UpgradeId[] = [
   'ai_sonar',
   'ai_buoy',
   'echo_wave',
-  'resonance_burst',
+  'tidal_lane',
   'wave_power',
 ];
 
@@ -188,7 +188,7 @@ export class Session {
     const s = this.progress.story;
     if (!s.flags.toolbox || s.cycle === 'night') return;
     if (this.style === 'tanpa' || this.style === 'diam') {
-      if (s.cycle === 'prep' && s.step === 'shop') this.sim.story.leaveWorkshop();
+      if ((s.cycle === 'prep' && s.step === 'shop') || this.sim.story.dawnShopPending()) this.sim.story.leaveWorkshop();
       return;
     }
 
@@ -216,7 +216,7 @@ export class Session {
         again = false;
         for (const d of UPGRADE_DEFS) if (buy(d.id)) again = true;
       }
-      if (s.cycle === 'prep' && s.step === 'shop') this.sim.story.leaveWorkshop();
+      if ((s.cycle === 'prep' && s.step === 'shop') || this.sim.story.dawnShopPending()) this.sim.story.leaveWorkshop();
       return;
     }
 
@@ -225,12 +225,25 @@ export class Session {
       const want = (counts.get(id) ?? 0) + 1;
       counts.set(id, want);
       if (this.progress.upgrades[id] >= want) continue;
+      // a blueprint that has not come yet, or a level that waits for a later dawn
+      if (!isForSale(id, this.progress)) continue;
       if (buy(id)) break;
       // Don't deadlock on one expensive item if a cheaper early item is affordable
       if (getUpgradeCost(id, this.progress.upgrades[id]) > this.progress.coins * 1.8) continue;
       break;
     }
-    if (s.cycle === 'prep' && s.step === 'shop') this.sim.story.leaveWorkshop();
+    // when the list is done for today, whatever is left goes on the cheapest tool still on sale
+    const listDone = SHOPPING.every((id, i) => {
+      const want = SHOPPING.slice(0, i + 1).filter((x) => x === id).length;
+      return this.progress.upgrades[id] >= want || !isForSale(id, this.progress);
+    });
+    if (listDone) {
+      const cheap = UPGRADE_DEFS.filter((d) => isForSale(d.id, this.progress)).sort(
+        (a, b) => getUpgradeCost(a.id, this.progress.upgrades[a.id]) - getUpgradeCost(b.id, this.progress.upgrades[b.id])
+      )[0];
+      if (cheap) buy(cheap.id);
+    }
+    if ((s.cycle === 'prep' && s.step === 'shop') || this.sim.story.dawnShopPending()) this.sim.story.leaveWorkshop();
   }
 
   play(dt: number): void {

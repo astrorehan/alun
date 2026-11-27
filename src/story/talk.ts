@@ -47,14 +47,14 @@ export const SCENES = {
   workshop: {
     lines: [
       sari('Bengkel buka! Rongsok yang kamu kumpulin ibu tukar jadi alat. Jangan tanya caranya. Rahasia dapur.', 'senang'),
-      sari('Tombolnyo di kanan bawah tu. Pilih alat, bayar pakai koin, beres.'),
+      sari('Tombolnyo di kanan bawah tu. Pasang Muatan dulu, biar rongsok yang hanyut makin banyak.'),
     ],
   },
   /** Out of the workshop for the first time: how a day goes. */
   dayOne: {
     lines: [
       sari('Nah, mulai hari ini kau sapu rongsok sebanyak-banyaknyo. Rongsok jadi koin, koin jadi alat.'),
-      sari('Tapi sebelum matahari turun, ya. Malam tu... ah, nanti bae ibu ceritakan.', 'lega'),
+      sari('Coba Jalur Pasang. Tahan sampai tiga panah muncul, geser lalu lepas. Arusnyo bantu kau tiga detik.', 'lega'),
     ],
   },
   /** The first pirate scout comes in by day. */

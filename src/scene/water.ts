@@ -48,12 +48,11 @@ export interface Crest {
 export function crestOf(w: Wave): Crest {
   const t = w.age / w.maxAge;
   const alpha = Math.sin(Math.min(1, t * 5) * Math.PI * 0.5) * (1 - Math.pow(t, 2.1));
-  const ring = w.kind === 'ripple' || w.kind === 'resonance' || w.kind === 'buoy_pulse';
+  const ring = w.kind === 'ripple' || w.kind === 'buoy_pulse';
   const half = w.crestWidth * 0.5 * UNIT * 1.1;
   const power = clamp(w.power, 0.4, 6);
   let amp: number;
-  if (w.kind === 'resonance') amp = 2.0;
-  else if (w.kind === 'buoy_pulse') amp = 0.95;
+  if (w.kind === 'buoy_pulse') amp = 0.95;
   else if (w.kind === 'ripple') amp = 1.4 + w.charge * 0.9;
   else amp = 1.85 + half * 0.085 + w.charge * 1.45 + Math.min(1.1, (power - 1) * 0.3);
   if (w.kind === 'echo') amp *= 0.8;
@@ -68,7 +67,7 @@ export function crestOf(w: Wave): Crest {
     bow: 1.1 + half * 0.34 + w.charge * 0.9,
     radius: w.radius * UNIT,
     alpha: clamp(alpha, 0, 1),
-    gold: w.kind === 'resonance' ? 1 : w.charge > 0.65 ? 0.35 : 0,
+    gold: w.charge > 0.65 ? 0.35 : 0,
     seed: (w.id * 0.618) % 1,
     speed: Math.hypot(w.vx, w.vy) * UNIT,
     foam: w.kind === 'buoy_pulse' ? 0.35 : w.kind === 'ripple' ? 0.6 : 1,
@@ -1419,7 +1418,7 @@ void main(){
     #endif
   }
 
-  // ---------------- energy: resonance gold, AI cyan, plankton at night
+  // ---------------- energy: charged gold, AI cyan, plankton at night
   float gold = fm.b * (1. - .8 * uCine);
   #ifdef SPLIT_WATER
   foam = max(foam, max(max(crestAmount, wakeAmount), max(rockF, beachFoam)) * .7);

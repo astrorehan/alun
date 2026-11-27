@@ -210,30 +210,83 @@ function aiBuoy(): THREE.BufferGeometry {
 }
 
 /** A.L.U.N. himself: the radio voice finally has a body on screen. */
-function heroBuoy(): THREE.BufferGeometry {
-  const b = new Build(290);
-  const ring = new THREE.TorusGeometry(1.32, 0.46, 10, 40);
-  ring.rotateX(Math.PI / 2);
-  b.add(ring, { color: (p) => (Math.floor(((Math.atan2(p.z, p.x) + Math.PI) / 6.2832) * 12) % 3 === 0 ? _c.set('#fff6e4') : _c.set('#ff7a2a')), pos: [0, 0.1, 0], gloss: 0.5 });
-  b.add(new THREE.SphereGeometry(1.14, 24, 16), { color: (p) => _c.set('#e9f0ee').lerp(hex('#bcd6da'), smooth(1.6, 0.3, p.y)), pos: [0, 1.02, 0], scale: [1, 0.94, 1], gloss: 0.35 });
-  // batik wave band
-  b.cyl(1.07, 1.12, 0.26, { color: '#10808c', pos: [0, 0.5, 0], seg: 28, gloss: 0.3 });
-  for (let i = 0; i < 14; i++) {
-    const a = (i / 14) * 6.283;
-    b.ball(0.13, { color: i % 2 ? '#f7c948' : '#e8fbf4', pos: [Math.cos(a) * 1.12, 0.5 + (i % 2) * 0.04, Math.sin(a) * 1.12], seg: 7 });
+function heroBuoy(ink: THREE.Material) {
+  const root = new THREE.Group();
+  const head = new THREE.Group();
+  const shell = toon({ fAlbedo: 'emis = vFx.w * (1.1 + .6 * sin(uTime * 3.));' });
+  const part = (b: Build) => inked(mesh(b.geo(true), shell), ink);
+  const float = new Build(290);
+  for (let i = 0; i < 8; i++) {
+    const ring = new THREE.TorusGeometry(1.32, 0.46, 6, 3, Math.PI / 4);
+    ring.rotateZ(i * Math.PI / 4);
+    ring.rotateX(Math.PI / 2);
+    float.add(ring, { color: i % 2 ? '#fa7935' : '#fff1cf', pos: [0, 0.1, 0], gloss: 0.48 });
   }
-  // face plate, tipped up toward the gameplay camera
-  b.ball(0.9, { color: '#08222f', pos: [0, 1.34, 0.6], scale: [1, 0.78, 0.8], rot: [-0.62, 0, 0], seg: 20, gloss: 0.6 });
-  b.add(new THREE.TorusGeometry(0.86, 0.11, 8, 28), { color: '#10808c', pos: [0, 1.36, 0.64], scale: [1.02, 0.8, 1], rot: [-0.62, 0, 0] });
-  b.bar([0, 2.0, -0.05], [0.12, 2.9, -0.1], 0.07, 0.05, { color: '#10808c' });
-  b.ball(0.22, { color: '#ffe07d', pos: [0.13, 3.02, -0.1], seg: 10, glow: 0.8 });
-  // two leaf ears
-  for (const s of [-1, 1]) {
-    const g = new THREE.SphereGeometry(1, 10, 7);
-    g.scale(0.5, 0.1, 0.26);
-    b.add(g, { color: '#4fd17f', pos: [s * 1.2, 1.6, -0.05], rot: [0, 0, s * 0.7], gloss: 0.3 });
+  root.add(part(float), head);
+  const b = new Build(291);
+  b.profile([
+    [0.19, 0.75, 0.76],
+    [0.56, 1.07, 1.06],
+    [1.05, 1.14, 1.14],
+    [1.57, 1.03, 1],
+    [1.88, 0.74, 0.7],
+    [2.055, 0.34, 0.32]
+  ], 16, { color: '#bbd3d5', top: '#fff7df', gloss: 0.35 });
+  b.cyl(1.107, 1.08, 0.23, { color: '#117d82', pos: [0, 0.62, 0], seg: 16 });
+  for (let i = 0; i < 8; i++) {
+    const angle = (i + 0.5) * Math.PI / 4;
+    b.ico(1, 0, {
+      color: '#ffd471',
+      pos: [Math.sin(angle) * 1.085, 0.62, Math.cos(angle) * 1.085],
+      scale: [0.12, 0.08, 0.035],
+      rot: [0, angle, 0]
+    });
   }
-  return b.geo(true);
+  b.ball(0.9, { color: '#102f3d', pos: [0, 1.34, 0.6], scale: [1, 0.78, 0.8], rot: [-0.62, 0, 0], seg: 14, gloss: 0.6 });
+  b.add(new THREE.TorusGeometry(0.86, 0.08, 5, 18), { color: '#198992', pos: [0, 1.46, 0.8], scale: [1.02, 0.8, 1], rot: [-0.62, 0, 0] });
+  b.cyl(0.15, 0.21, 0.18, { color: '#17606b', pos: [0, 2.07, -0.05], seg: 8 });
+  for (const side of [-1, 1]) {
+    const root: Vec = [side * 0.88, 1.42, -0.03];
+    const tip: Vec = [side * 1.61, 1.98, -0.12];
+    const ridge: Vec = [side * 1.28, 1.7, 0.15];
+    const back: Vec = [side * 1.28, 1.68, -0.18];
+    const rim: Vec[] = [root, [side * 1.36, 1.51, 0], tip, [side * 1.18, 1.86, -0.05]];
+    if (side < 0) rim.reverse();
+    const vertices: number[] = [];
+    for (let i = 0; i < rim.length; i++) {
+      const next = rim[(i + 1) % rim.length];
+      vertices.push(...rim[i], ...next, ...ridge, ...next, ...rim[i], ...back);
+    }
+    const leaf = new THREE.BufferGeometry();
+    leaf.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    leaf.computeVertexNormals();
+    b.add(leaf, { color: '#349d6b', top: '#beea77', gloss: 0.24 });
+  }
+  head.add(part(b));
+
+  const whip = new Build();
+  whip.bar([0, 0, 0], [0.12, 0.78, -0.05], 0.064, 0.044, { color: '#31505a' });
+  whip.ico(0.22, 1, { color: '#ffda69', pos: [0.13, 0.85, -0.05], glow: 0.8 });
+  const antenna = part(whip);
+  antenna.position.set(0, 2.12, -0.05);
+  head.add(antenna);
+
+  const eyeMat = toon({ fLight: 'c = vec3(.35, 1.35, 1.5) * 1.25;' });
+  const eyeGeo = new Build().add(new THREE.CapsuleGeometry(0.17, 0.2, 2, 8), { color: '#8ff6ff' }).geo();
+  const eyes = [-1, 1].map(side => {
+    const eye = mesh(eyeGeo, eyeMat, false);
+    eye.position.set(side * 0.32, 1.78, 1.12);
+    eye.rotation.x = -0.62;
+    head.add(eye);
+    return eye;
+  });
+  const smile = new Build().add(new THREE.TorusGeometry(0.24, 0.065, 5, 12, Math.PI), { color: '#8ff6ff', rot: [0, 0, Math.PI] }).geo();
+  const mouth = mesh(smile, eyeMat, false);
+  mouth.position.set(0, 1.46, 1.3);
+  mouth.rotation.x = -0.55;
+  head.add(mouth);
+  root.scale.setScalar(1.32);
+  return { root, head, eyes, antenna };
 }
 
 function trawler(): THREE.BufferGeometry {
@@ -510,7 +563,7 @@ export class Actors {
   private buoys: THREE.Mesh[] = [];
   private buoyU: { value: number }[] = [];
   private hero: THREE.Group;
-  private eyes: THREE.Mesh[] = [];
+  private radio: ReturnType<typeof heroBuoy>;
   private heroYaw = 0;
   private heroJoy = 0;
   private boss: THREE.Mesh;
@@ -547,7 +600,7 @@ export class Actors {
     });
     const ink = outlineMaterial(1.7, '#15202c');
     const boatOf = (hull: string, stripe: string, sail: string, shirt: string): THREE.BufferGeometry => {
-      const man = person({ shirt, sarong: '#2f4f7a', hat: 'caping', scale: 0.92 });
+      const man = person({ shirt, sarong: '#2f4f7a', hat: 'caping', moustache: true, scale: 0.92 });
       return new Build(1).merge(perahu(hull, stripe, sail)).merge(man, matrixOf([-1.0, 0.28, 0], [0, 1.2, 0])).geo(true);
     };
     const geos: Record<Kind, THREE.BufferGeometry> = {
@@ -562,7 +615,7 @@ export class Actors {
       battery: battery(),
       relic: relic(),
       seed: seed(),
-      boat0: boatOf('#d8342c', '#f2b62c', '#e8342f', '#fff6e4'),
+      boat0: boatOf('#d8342c', '#f2b62c', '#e8342f', '#38669d'),
       boat1: boatOf('#14807c', '#f2c14a', '#14a39a', '#f2c14a'),
     };
     for (const k of Object.keys(geos) as Kind[]) {
@@ -591,28 +644,8 @@ export class Actors {
     }
 
     /* ---- hero */
-    this.hero = new THREE.Group();
-    const hp = toon({ fAlbedo: 'emis = vFx.w * (1.1 + .6 * sin(uTime * 3.));' });
-    const body = inked(mesh(heroBuoy(), hp), ink);
-    body.frustumCulled = false;
-    this.hero.add(body);
-    const eyeMat = toon({ fLight: 'c = vec3(.35, 1.35, 1.5) * 1.25;' });
-    for (const s of [-1, 1]) {
-      const e = new Build(1).add(new THREE.CapsuleGeometry(0.17, 0.2, 4, 10), { color: '#8ff6ff' }).geo();
-      const m = mesh(e, eyeMat, false);
-      m.position.set(s * 0.32, 1.78, 1.12);
-      m.rotation.x = -0.62;
-      m.frustumCulled = false;
-      this.eyes.push(m);
-      this.hero.add(m);
-    }
-    const smile = new Build(1).add(new THREE.TorusGeometry(0.24, 0.065, 5, 12, Math.PI), { color: '#8ff6ff', rot: [0, 0, Math.PI] }).geo();
-    const sm = mesh(smile, eyeMat, false);
-    sm.position.set(0, 1.46, 1.3);
-    sm.rotation.x = -0.55;
-    sm.frustumCulled = false;
-    this.hero.add(sm);
-    this.hero.scale.setScalar(1.32);
+    this.radio = heroBuoy(ink);
+    this.hero = this.radio.root;
     this.group.add(this.hero);
 
     /* ---- trawler */
@@ -1035,14 +1068,24 @@ void main(){
     const want = this.cine > 0.25 ? Math.atan2(this.eye.x - p.x, this.eye.z - p.z) : clamp(Math.atan2(tx - p.x, Math.max(2, tz - p.z + 16)), -0.85, 0.85);
     const turn = Math.atan2(Math.sin(want - this.heroYaw), Math.cos(want - this.heroYaw));
     this.heroYaw += turn * Math.min(1, dt * 4);
-    const hop = Math.abs(Math.sin(t * 9)) * 0.55 * Math.min(1, this.heroJoy * 1.5);
-    this.hero.position.set(p.x, h + hop, p.z);
-    this.q.setFromEuler(new THREE.Euler(Math.sin(t * 1.2) * 0.06, this.heroYaw, Math.cos(t * 0.9) * 0.06, 'YXZ'));
+    const joy = this.heroJoy;
+    const beat = (1 - joy) * Math.PI * 2;
+    const recoil = Math.sin(beat * 1.5) * joy;
+    const hop = Math.max(0, Math.sin(beat)) * 0.32 * joy;
+    this.hero.position.set(p.x, h + hop * 0.24, p.z);
+    this.q.setFromAxisAngle(UP, this.heroYaw);
     this.q2.setFromUnitVectors(UP, this.nrm);
     this.hero.quaternion.copy(this.q).premultiply(this.q2);
-    const blink = (t % 3.7) < 0.12 ? 0.12 : 1;
-    const happy = this.heroJoy > 0.15 ? 0.45 : 1;
-    for (const e of this.eyes) e.scale.set(1, blink * happy, 1);
+    const { head, antenna, eyes } = this.radio;
+    const glance = clamp(turn, -0.56, 0.56);
+    head.position.y = hop * 0.45 + Math.sin(t * 2.2) * 0.036;
+    head.rotation.set(-recoil * 0.10 + 0.035 * Math.sin(t * 1.6), glance * 0.7, -glance * 0.24 + 0.045 * Math.sin(t * 1.3));
+    antenna.rotation.z = -0.065 * Math.sin(t * 2.2 - 0.6) + recoil * 0.43 + glance * 0.23;
+    const blink = 1 - 0.92 * Math.max(0, 1 - Math.abs((t % 3.7) - 0.105) / 0.105);
+    for (let i = 0; i < eyes.length; i++) {
+      eyes[i].scale.y = blink * (1 - joy * 0.5);
+      eyes[i].position.x = (i ? 0.32 : -0.32) + glance * 0.055;
+    }
     const sp = this.fx.sprites;
     sp.shadow(p.x, p.z, 1.85, 1.55, -this.heroYaw, .42 + hop, .38);
     sp.push(p.x, h + 0.06, p.z, 2.55, 2.45, 0, 1, 1, 1, 0.4 * (1 - look.bio * 0.5), SP.ring, MODE.flat, 0, 0.9);

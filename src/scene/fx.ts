@@ -215,8 +215,8 @@ void main(){
           const s = lerp(3, 8.5, r()) * k;
           this.spray(x - dz * l, 0.4, z + dx * l, dx * s + (r() - 0.5) * 2, lerp(2.4, 6.2, r()) * k, dz * s + (r() - 0.5) * 2, lerp(0.06, 0.16, r()) * (0.8 + w.charge * 0.4), lerp(0.5, 0.95, r()), w.charge > 0.65 && r() < 0.3 ? 2 : 0);
         }
-      } else this.burst(x, 0.3, z, n, 6 * k, w.kind === 'resonance' ? 2 : 0, 0.13);
-      this.water.splash({ x, z, radius: 1.4 + w.charge * 1.6, foam: 0.6, impulse: 1.1 + w.charge, gold: w.kind === 'resonance' ? 1 : 0 });
+      } else this.burst(x, 0.3, z, n, 6 * k, 0, 0.13);
+      this.water.splash({ x, z, radius: 1.4 + w.charge * 1.6, foam: 0.6, impulse: 1.1 + w.charge, gold: 0 });
     }
     if (this.seenWave.size > 200) {
       const live = new Set(sim.waves.map((w) => w.id));
@@ -227,7 +227,7 @@ void main(){
     const alive = new Set<number>();
     for (const w of sim.waves) {
       alive.add(w.id);
-      if (w.kind === 'ripple' || w.kind === 'resonance' || w.kind === 'buoy_pulse') continue;
+      if (w.kind === 'ripple' || w.kind === 'buoy_pulse') continue;
       const left = 1 - w.age / w.maxAge;
       if (left > 0.3) this.lastCrest.set(w.id, { x: toX(w.x), z: toZ(w.y), dx: Math.cos(w.angle), dz: Math.sin(w.angle), half: w.crestWidth * 0.5 * UNIT, ring: false, charge: w.charge });
       else if (left < 0.26 && this.lastCrest.has(w.id)) {
