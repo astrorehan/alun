@@ -555,70 +555,6 @@ body {
   }
 }
 
-/* ================= TITLE SCREEN (BOLD HEROIC LAUNCH CARD) ================= */
-.title-screen {
-  align-items: center;
-  justify-content: flex-start;
-  padding: clamp(24px, 5vw, 68px);
-  background: linear-gradient(
-    90deg,
-    rgba(6, 15, 32, 0.5) 0%,
-    rgba(6, 15, 32, 0.2) 44%,
-    rgba(6, 15, 32, 0) 68%
-  );
-}
-
-.title-modal {
-  width: min(760px, 100%);
-  padding: 54px 34px 30px;
-  gap: 22px;
-}
-
-.title-hero {
-  display: flex;
-  align-items: center;
-  gap: 22px;
-}
-
-.title-emblem {
-  width: 108px;
-  height: 108px;
-  flex-shrink: 0;
-  border-radius: 26px;
-  border: var(--border-xl) solid var(--ink);
-  background-image:
-    var(--pattern-checker-white),
-    linear-gradient(180deg, #5be2ff 0%, #1574e8 100%);
-  background-size: 22px 22px, 100% 100%;
-  box-shadow: var(--gloss-top), var(--lip-bot-md), 0 6px 0 var(--ink);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.title-emblem svg {
-  width: 72px;
-  height: 72px;
-  filter: drop-shadow(0 3.5px 0 rgba(13, 18, 29, 0.48));
-}
-
-.game-title {
-  font-size: clamp(66px, 7.5vw, 94px);
-  line-height: 0.92;
-  margin: 4px 0 8px;
-}
-
-.game-subtitle {
-  font-size: 17px;
-  line-height: 1.48;
-  color: #e4f0ff;
-  font-weight: 800;
-}
-
-.game-subtitle strong {
-  color: #ffffff;
-}
-
 .title-actions,
 .modal-actions {
   display: flex;
@@ -1102,24 +1038,6 @@ body {
   .ui-supply-line {
     flex-wrap: wrap;
   }
-  .title-modal {
-    padding: 38px 16px 18px;
-    gap: 14px;
-  }
-  .title-emblem {
-    width: 72px;
-    height: 72px;
-  }
-  .title-emblem svg {
-    width: 48px;
-    height: 48px;
-  }
-  .game-title {
-    font-size: 52px;
-  }
-  .game-subtitle {
-    font-size: 14.5px;
-  }
   .victory-modal,
   .credits-modal,
   .settings-modal {
@@ -1340,40 +1258,6 @@ body {
     font-size: 12px;
   }
 
-  .title-screen {
-    padding: 12px 18px;
-  }
-  .title-modal {
-    width: min(620px, 100%);
-    padding: 26px 18px 14px;
-    gap: 9px;
-  }
-  .title-emblem {
-    width: 60px;
-    height: 60px;
-  }
-  .title-emblem svg {
-    width: 40px;
-    height: 40px;
-  }
-  .title-hero {
-    gap: 14px;
-  }
-  .game-title {
-    font-size: 42px;
-    margin: 0 0 2px;
-  }
-  .game-subtitle {
-    font-size: 13px;
-    line-height: 1.3;
-  }
-  .title-actions {
-    gap: 9px;
-  }
-  .title-actions .ui-btn {
-    font-size: 15px;
-    padding: 6px 14px 8px;
-  }
   .victory-modal,
   .credits-modal,
   .settings-modal,
@@ -1452,9 +1336,8 @@ body {
   max-width: 100%;
   max-height: 100%;
 }
-.title-modal { padding: clamp(20px, 4vw, 48px); }
 @media (max-height: 500px) {
-  .title-actions .ui-btn, .ui-tab { min-height: 40px; }
+  .ui-tab { min-height: 40px; }
   .victory-modal { overflow-y: auto; }
   .victory-modal .ui-modal-ribbon { position: static; align-self: center; transform: none; }
 }
@@ -2756,4 +2639,217 @@ body {
 }
 @media (prefers-reduced-motion: reduce) {
   .coach-ring, .coach-arrow-bob { animation: none; }
+}
+
+/* ================= TITLE SCREEN: an ocean card whose checkers drift for ever ================= */
+.title-screen {
+  align-items: center;
+  justify-content: flex-start;
+  padding: clamp(16px, 5vw, 72px);
+  background: linear-gradient(90deg, rgba(6, 15, 32, 0.55) 0%, rgba(6, 15, 32, 0.2) 46%, rgba(6, 15, 32, 0) 70%);
+}
+.title-modal {
+  --tile: 56px;
+  isolation: isolate;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'hero' 'sub' 'best' 'actions';
+  justify-items: start;
+  align-content: center;
+  row-gap: 14px;
+  width: min(540px, 100%);
+  padding: 34px 34px 46px;
+  background: linear-gradient(165deg, #2a86d6 0%, #1c56a8 34%, #173a85 64%, #131f57 100%);
+  box-shadow:
+    inset 0 3.5px 0 rgba(170, 228, 255, 0.4),
+    inset 0 -6px 0 rgba(7, 10, 26, 0.5),
+    var(--shadow-modal);
+}
+.title-drift {
+  position: absolute;
+  inset: calc(var(--tile) * -1) 0 0 calc(var(--tile) * -1);
+  z-index: -2;
+  background-image: var(--pattern-checker-white);
+  background-size: var(--tile) var(--tile);
+  opacity: 0.85;
+  will-change: transform;
+  animation: titleDrift 5s linear infinite;
+  pointer-events: none;
+}
+/* light from the top left, deeper water at the bottom; it stays still while the checkers move under it */
+.title-modal::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(110% 80% at 0% 0%, rgba(140, 230, 255, 0.32), transparent 58%),
+    linear-gradient(180deg, transparent 45%, rgba(8, 14, 40, 0.5) 100%);
+  pointer-events: none;
+}
+@keyframes titleDrift {
+  to { transform: translate(var(--tile), var(--tile)); }
+}
+.title-waves {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  z-index: -1;
+  width: calc(100% + 120px);
+  height: 30px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='30' viewBox='0 0 120 30'%3E%3Cpath d='M0 14 Q15 4 30 14 T60 14 T90 14 T120 14 V30 H0Z' fill='%2357d6ff' fill-opacity='0.28'/%3E%3Cpath d='M0 20 Q15 11 30 20 T60 20 T90 20 T120 20 V30 H0Z' fill='%230d1640' fill-opacity='0.55'/%3E%3C/svg%3E") repeat-x 0 0 / 120px 30px;
+  will-change: transform;
+  animation: titleWaves 4s linear infinite;
+  pointer-events: none;
+}
+@keyframes titleWaves {
+  to { transform: translateX(-120px); }
+}
+
+.title-hero {
+  grid-area: hero;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.title-emblem {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100px;
+  height: 100px;
+  border-radius: 26px;
+  border: var(--border-xl) solid var(--ink);
+  background-image: var(--pattern-checker-white), linear-gradient(180deg, #5be2ff 0%, #1574e8 100%);
+  background-size: 22px 22px, 100% 100%;
+  box-shadow: var(--gloss-top), var(--lip-bot-md), 0 6px 0 var(--ink);
+  animation: titleEmblemDrift 2.5s linear infinite, titleFloat 3.2s ease-in-out infinite;
+}
+.title-emblem svg {
+  width: 66px;
+  height: 66px;
+  filter: drop-shadow(0 3.5px 0 rgba(13, 18, 29, 0.48));
+}
+@keyframes titleEmblemDrift {
+  to { background-position: 22px 22px, 0 0; }
+}
+@keyframes titleFloat {
+  50% { translate: 0 -5px; }
+}
+.title-name {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.game-title {
+  margin: 0;
+  font-size: clamp(64px, 7vw, 92px);
+  line-height: 0.9;
+  letter-spacing: 0.02em;
+  text-shadow: 0 5px 0 var(--ink), 0 10px 0 rgba(9, 20, 60, 0.45);
+}
+.title-kicker {
+  padding: 4px 12px 5px;
+  border: 2.5px solid var(--ink);
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, #ffe46b 0%, #f29a1c 100%);
+  box-shadow: var(--gloss-top-soft), 0 2.5px 0 var(--ink);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.game-subtitle {
+  grid-area: sub;
+  max-width: 44ch;
+  margin: 0;
+  color: #e9f5ff;
+  font-size: 16.5px;
+  font-weight: 800;
+  line-height: 1.42;
+  text-shadow: 0 2px 0 rgba(8, 14, 40, 0.55);
+}
+.title-best {
+  grid-area: best;
+  margin: 0;
+}
+.title-actions {
+  grid-area: actions;
+  justify-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  margin-top: 4px;
+}
+.title-actions .ui-btn { justify-content: center; }
+
+/* phones held upright and narrow windows */
+@media (max-width: 560px) {
+  .title-screen { justify-content: center; }
+  .title-modal { --tile: 44px; padding: 26px 20px 40px; row-gap: 12px; }
+  .title-emblem { width: 72px; height: 72px; border-radius: 20px; }
+  .title-emblem svg { width: 48px; height: 48px; }
+  .game-title { font-size: 58px; }
+  .title-kicker { font-size: 11.5px; }
+  .game-subtitle { font-size: 14.5px; }
+}
+/* short landscape screens: name on the left, buttons on the right */
+@media (max-height: 500px) {
+  .title-screen { justify-content: center; padding: 12px 16px; }
+  .title-modal {
+    --tile: 40px;
+    width: min(720px, 100%);
+    grid-template-columns: minmax(0, 1fr) minmax(190px, 240px);
+    grid-template-areas: 'hero actions' 'sub actions' 'best actions';
+    column-gap: 22px;
+    row-gap: 8px;
+    padding: 18px 20px 30px;
+  }
+  .title-emblem { width: 58px; height: 58px; border-radius: 16px; border-width: var(--border-md); }
+  .title-emblem svg { width: 38px; height: 38px; }
+  .title-hero { gap: 12px; }
+  .game-title { font-size: 44px; text-shadow: 0 3.5px 0 var(--ink); }
+  .title-kicker { font-size: 10.5px; padding: 2px 9px 3px; }
+  .game-subtitle { font-size: 13px; line-height: 1.3; }
+  .title-actions { align-self: center; gap: 9px; margin-top: 0; }
+  .title-actions .ui-btn { min-height: 40px; padding: 7px 14px 9px; font-size: 15px; }
+  .title-actions .ui-btn.ui-btn-lg { font-size: 17px; }
+  .title-waves { height: 22px; background-size: 120px 22px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .title-drift, .title-waves, .title-emblem { animation: none; }
+}
+
+
+/* Lanjutkan: the word large, the saved day small beneath it; a long chapter name ends in "..." inside the button */
+.title-actions, .title-actions .ui-btn { min-width: 0; }
+.title-actions { flex-wrap: nowrap; }
+.title-continue-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  line-height: 1.05;
+}
+.title-continue-copy > span {
+  max-width: calc(100% + 8px);
+  /* room for the ink outline and its drop, which overflow would otherwise clip */
+  margin: -3px -4px -5px;
+  padding: 3px 4px 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.title-continue-sub {
+  margin-top: 2px;
+  font-size: 14px;
+  color: #eaffd9;
+}
+.title-continue-sub:empty { display: none; }
+@media (max-height: 500px) {
+  .title-continue-sub { font-size: 11.5px; margin-top: 1px; }
 }

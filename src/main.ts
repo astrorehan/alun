@@ -287,6 +287,7 @@ class AlunApp {
         const scene: Scene = SCENES[id];
         this.ui.startTalk(scene.lines, scene.hold !== false);
       },
+      unsay: (id) => this.ui.dropRadio(SCENES[id].lines.map((l) => l.text)),
       coins: (amount, x, y) => {
         // what was earned in the water flies up to the purse
         const at = this.renderer.worldToScreen?.(x, y);
@@ -776,16 +777,16 @@ class AlunApp {
           this.ui.closeConfirm();
           return;
         }
-        if (this.ui.isSettingsOpen()) {
-          e.preventDefault();
-          this.audio.playUiClick();
-          this.ui.closeSettings();
-          return;
-        }
         if (this.ui.isCreditsOpen()) {
           e.preventDefault();
           this.audio.playUiClick();
           this.ui.closeCredits();
+          return;
+        }
+        if (this.ui.isSettingsOpen()) {
+          e.preventDefault();
+          this.audio.playUiClick();
+          this.ui.closeSettings();
           return;
         }
         if (this.phase === 'upgrade') {

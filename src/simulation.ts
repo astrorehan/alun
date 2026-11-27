@@ -28,6 +28,8 @@ export interface SimHooks {
   radio: (sender: string, text: string) => void;
   /** Bu Sari tells something (see story/talk.ts). Without it, her lines go out over the radio. */
   talk?: (id: SceneId) => void;
+  /** A remark that no longer fits: drop it if it is still waiting for the radio. */
+  unsay?: (id: SceneId) => void;
   /** Coins were paid out at this place in the lagoon. */
   coins: (amount: number, x: number, y: number) => void;
   /** Something worth keeping happened: save now. */

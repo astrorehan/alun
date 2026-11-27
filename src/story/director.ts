@@ -947,6 +947,8 @@ export class Story {
       this.spawnBox();
       this.sim.burst(MOORING.x, MOORING.y, '#e5ffff', 16, 'foam');
       this.sim.audio.playShopUnlock();
+      // "keep going" makes no sense once the last piece is in
+      this.sim.hooks.unsay?.('firstCatch');
       if (!this.talk('chest')) this.radio('BU SARI', 'Peti ibuk di tambatan tu. Dorong ke ujung dermaga.');
       this.touchSave();
     }
