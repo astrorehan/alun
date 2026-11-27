@@ -28,6 +28,7 @@ const sim = new GameSimulation(audio, {
   pierHurt: (hp, max) => console.log(`[PIER] ${hp}/${max}`),
   defeat: () => console.log('[DEFEAT] Dermaga runtuh!'),
   dolphin: (e) => rescue(e),
+  raider: (e) => pirates(e),
   filming: () => filming,
   worsen: () => {},
   ending: () => ending(),
@@ -43,7 +44,7 @@ const step = (dt: number): void => {
   const stats = computeStats(progress);
   const film = renderer.openingActive;
   // under the opening the lagoon only drifts, the same as in the game
-  if (film) {
+  if (film || renderer.piratesActive) {
     sim.updateAmbientOnly(dt, progress, stats);
     sim.bob(dt);
   } else sim.update(dt * renderer.director.speed, progress, stats);
@@ -68,6 +69,30 @@ function rescue(e: Entity): boolean {
   return true;
 }
 
+/** The first raider's film, as the game plays it. */
+function pirates(e: Entity): boolean {
+  const stage = $('stage');
+  const glass = $('spyglass');
+  filming = true;
+  stage.classList.add('film');
+  renderer.playPirates(
+    sim,
+    e.id,
+    {
+      caption: say,
+      scope: (open, on) => {
+        glass.classList.toggle('on', on);
+        glass.style.setProperty('--open', open.toFixed(3));
+      },
+    },
+    () => {
+      filming = false;
+      stage.classList.remove('film');
+    }
+  );
+  return true;
+}
+
 function ending(): void {
   const stage = $('stage');
   stage.classList.add('film');
@@ -85,6 +110,9 @@ const chapter = (n: number): void => {
   progress.story = s;
   progress.shopUnlocked = n > 1;
   renderer.cancelRescue();
+  renderer.cancelPirates();
+  $('stage').classList.remove('film');
+  $('spyglass').classList.remove('on');
   filming = false;
   renderer.forceEco = null;
   renderer.forceTod = null;
@@ -251,6 +279,10 @@ onButtons('spawn', 's', (v) => {
   else if (v === 'deposit') sim.story.showDeposit();
   else if (v === 'fire') sim.add('fire', 250, 258, { radius: 24, mass: 99, hp: 2.6, maxHp: 2.6 });
   else if (v === 'ending') ending();
+  else if (v === 'pirates') {
+    chapter(1);
+    sim.story.spawnPirate(0, 0, false);
+  }
 });
 onButtons('chapters', 'n', (v, b) => {
   pick('chapters', b);
@@ -260,6 +292,11 @@ onButtons('chapters', 'n', (v, b) => {
 window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   const k = e.key.toLowerCase();
+  if (renderer.piratesActive && ['escape', 'enter', ' '].includes(k)) {
+    e.preventDefault();
+    renderer.skipPiratesFilm();
+    return;
+  }
   if (k === 'h') $('panel').classList.toggle('hide');
   else if (k === ' ') {
     api.paused = !api.paused;

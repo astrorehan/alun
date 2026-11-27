@@ -27,6 +27,7 @@ import { Actors } from './actors';
 import { Opening, type OpeningHooks } from './opening';
 import { Rescue, type RescueHooks } from './rescue';
 import { Ending, type EndingHooks } from './ending';
+import { Pirates, type PirateHooks } from './pirates';
 import { coastLook, murkOf } from './health';
 import { StoryLayer } from './story';
 import { shoreAt, simX, simY, toX, toZ, UNIT } from './space';
@@ -213,6 +214,7 @@ export class SceneRenderer {
   private rescue: Rescue;
   private story: StoryLayer;
   private ending: Ending;
+  private pirates: Pirates;
   private text: TextLayer;
 
   private canvas: HTMLCanvasElement;
@@ -340,6 +342,7 @@ export class SceneRenderer {
     this.story.onCheer = () => this.village.cheer();
     this.actors.guests = this.story.guests;
     this.ending = new Ending(this.story, this.fx);
+    this.pirates = new Pirates(this.water, this.fx, this.story);
     this.staticGroup.add(this.story.staticGroup);
 
     this.underDynGroup.add(this.reef.dynGroup);
@@ -354,6 +357,7 @@ export class SceneRenderer {
     this.dynGroup.add(this.story.group);
     this.dynGroup.add(this.opening.group);
     this.dynGroup.add(this.rescue.group);
+    this.dynGroup.add(this.pirates.group);
 
     this.worldScene.add(this.staticGroup, this.underDynGroup, this.dynGroup);
 
@@ -634,7 +638,7 @@ void main(){ gl_FragColor = vec4(texture2D(tSrc, vUv).rgb, uOpacity); }`,
     this.phase = phase;
     this.forceNextFrame = true;
     // the opening flies the camera itself, and so does a dolphin's film a save was in the middle of
-    if (phase === 'intro' || this.rescue.filming || this.ending.active) return;
+    if (phase === 'intro' || this.rescue.filming || this.ending.active || this.pirates.filming) return;
     const mode = phase === 'title' ? 'title' : 'play';
     if (first) this.director.snap(mode);
     else this.director.setMode(mode, 2.8);
@@ -684,6 +688,38 @@ void main(){ gl_FragColor = vec4(texture2D(tSrc, vUv).rgb, uOpacity); }`,
 
   skipEnding(): void {
     if (this.ending.active) this.director.skip();
+  }
+
+  /**
+   * The first raider's film: out to the ship (entity `id`), its crew, and the captain's spyglass on the
+   * village pier. `done` runs once, at its end or when it is skipped, with the camera on its way home.
+   */
+  playPirates(sim: GameSimulation, id: number, hooks: PirateHooks, done: () => void): void {
+    this.pirates.end();
+    this.pirates.begin(sim, id, hooks);
+    this.director.film(
+      (t, out) => this.pirates.shoot(t, out, this.director.playPose),
+      () => {
+        this.pirates.end();
+        done();
+      }
+    );
+    this.forceNextFrame = true;
+  }
+
+  skipPiratesFilm(): void {
+    if (this.pirates.filming) this.director.skip();
+  }
+
+  /** Drops the pirates' film without ceremony (reset, new game), the camera straight back to play. */
+  cancelPirates(): void {
+    if (!this.pirates.filming) return;
+    this.pirates.end();
+    this.director.setMode('play', 1.2);
+  }
+
+  get piratesActive(): boolean {
+    return this.pirates.filming;
   }
 
   /** Where a place in the lagoon is on the page, in CSS pixels. Off to the side of the screen still has a direction. */
@@ -1131,7 +1167,13 @@ void main(){ gl_FragColor = vec4(texture2D(tSrc, vUv).rgb, uOpacity); }`,
     this.opening.drawBoatShadow();
     // after the sprite batch is opened, so the marker rings make it to the screen
     if (this.ending.active) this.ending.update(Math.max(0, this.director.clock));
+    if (this.pirates.filming) {
+      // something else took the camera: the film is over
+      if (this.director.inCutscene) this.pirates.film(this.director.clock, cam.position);
+      else this.pirates.end();
+    }
     this.story.update(dt, this.time, sim, this.look, this.rescue);
+    this.pirates.update(dt, this.time, sim);
     this.actors.update(dt, this.time, sim, stats, this.look, cam.position, cine);
     this.rescue.update(dt, this.time, this.look.swell, sim);
     this.fx.sprites.end();

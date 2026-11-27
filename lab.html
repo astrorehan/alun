@@ -33,11 +33,14 @@
       .film .bar { height: 9.5vh; }
       #caption { position: absolute; left: 50%; bottom: calc(9.5vh + 18px); transform: translateX(-50%); max-width: 80vw; text-align: center; color: #fff; font: 700 26px Fredoka, system-ui, sans-serif; text-shadow: 0 2px 0 #0d121d, 0 0 6px #0d121d; pointer-events: none; }
       #caption b { display: block; font-size: 14px; letter-spacing: 0.12em; color: #74f3ff; }
+      #spyglass { --open: 0; --r: calc(var(--open) * 37vmin); position: absolute; inset: 0; pointer-events: none; display: none; background: radial-gradient(circle at 50% 48%, transparent calc(var(--r) - 1px), rgba(4, 6, 10, 0.96) calc(var(--r) + 1.6vmin), #04060a 100%); }
+      #spyglass.on { display: block; }
     </style>
   </head>
   <body>
     <div id="stage">
       <canvas id="lab-canvas"></canvas>
+      <div id="spyglass"></div>
       <div class="bar top"></div>
       <div class="bar bottom"></div>
       <div id="caption"></div>
@@ -102,6 +105,7 @@
             <button data-s="buoy">AI buoy</button>
             <button data-s="loot">Rare loot</button>
             <button data-s="ending">Ending</button>
+            <button data-s="pirates">Pirates</button>
           </div>
         </div>
         <div class="row">

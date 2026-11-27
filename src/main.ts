@@ -14,6 +14,7 @@ import { SCENES, type Scene } from './story/talk';
 import { GameUI } from './ui';
 import type { EndingHooks } from './scene/ending';
 import type { OpeningHooks } from './scene/opening';
+import type { PirateHooks } from './scene/pirates';
 import type { RescueHooks } from './scene/rescue';
 import type { QualitySetting, Tier } from './scene/quality';
 import type { QualityState } from './scene/SceneRenderer';
@@ -33,6 +34,10 @@ interface GameRenderer {
   worldToScreen?(x: number, y: number): { x: number; y: number } | null;
   playEnding?(sim: GameSimulation, hooks: EndingHooks, done: () => void): void;
   skipEnding?(): void;
+  playPirates?(sim: GameSimulation, id: number, hooks: PirateHooks, done: () => void): void;
+  skipPiratesFilm?(): void;
+  cancelPirates?(): void;
+  readonly piratesActive?: boolean;
   setSettingsOpen?(open: boolean): void;
   getQualityState?(): QualityState;
   setQualitySetting?(setting: QualitySetting, persist?: boolean): void;
@@ -61,6 +66,8 @@ class AlunApp {
   private rescue: 'film' | 'help' | 'free' | null = null;
   /** The closing film is running. */
   private ending = false;
+  /** The film that introduces the raiders' crew is running. */
+  private pirates = false;
   /** The browser refused to keep the last save. */
   private saveFailed = false;
   /** Birdsong the opening asks for while it runs. */
@@ -105,10 +112,11 @@ class AlunApp {
         void this.landscape.request();
         this.audio.unlock();
         this.cancelRescue();
+        this.cancelPirates();
         this.enterLagoon(true);
       },
       onOpenShop: (tab?: ShopTab) => {
-        if (this.phase === 'playing' && this.progress.shopUnlocked && !this.ui.isSettingsOpen() && !this.ending && !this.ui.isTalking()) {
+        if (this.phase === 'playing' && this.progress.shopUnlocked && !this.ui.isSettingsOpen() && !this.ending && !this.pirates && !this.ui.isTalking()) {
           if (this.sim.story.s.cycle === 'night' && tab !== 'journal') {
             this.ui.explainNightShop();
             return;
@@ -144,6 +152,7 @@ class AlunApp {
         this.progress = createInitialProgress();
         this.hasSave = false;
         this.cancelRescue();
+        this.cancelPirates();
         this.sim.initLagoon(this.progress, computeStats(this.progress), true);
         this.sim.lagoonInitialized = false;
         this.phase = 'title';
@@ -167,6 +176,7 @@ class AlunApp {
             this.progress = createInitialProgress();
             this.hasSave = false;
             this.cancelRescue();
+            this.cancelPirates();
             // the title's lagoon is the empty one again, not the one that was being played
             this.sim.initLagoon(this.progress, computeStats(this.progress), true);
             this.sim.lagoonInitialized = false;
@@ -296,7 +306,8 @@ class AlunApp {
       },
       defeat: () => this.handleDefeat(),
       dolphin: (e) => this.startRescue(e),
-      filming: () => this.rescue !== null,
+      raider: (e) => this.startPirates(e),
+      filming: () => this.rescue !== null || this.pirates,
       worsen: (kind) => {
         if (kind !== 'trash') this.ui.pulseHealth();
       },
@@ -383,6 +394,7 @@ class AlunApp {
     this.hasSave = false;
     this.ui.forgetProgress();
     this.cancelRescue();
+    this.cancelPirates();
     this.sim.lagoonInitialized = false;
     this.save();
     this.startOpening();
@@ -395,6 +407,7 @@ class AlunApp {
     this.hasSave = false;
     this.ui.forgetProgress();
     this.cancelRescue();
+    this.cancelPirates();
     this.sim.lagoonInitialized = false;
     this.audio.setShopDuck(false);
     this.enterLagoon(true);
@@ -427,6 +440,7 @@ class AlunApp {
     this.sim.initLagoon(this.progress, stats, true);
     this.phase = 'intro';
     this.ui.showPhase('intro');
+    this.audio.setOpeningMusic(true);
     this.renderer.playOpening(
       this.sim,
       stats,
@@ -449,6 +463,9 @@ class AlunApp {
     if (this.phase === 'intro') {
       this.audio.playUiClick();
       this.renderer.skipOpening?.();
+    } else if (this.pirates) {
+      this.audio.playUiClick();
+      this.renderer.skipPiratesFilm?.();
     } else if (this.ending) {
       this.audio.playUiClick();
       this.renderer.skipEnding?.();
@@ -462,6 +479,7 @@ class AlunApp {
   private finishOpening(): void {
     if (this.phase !== 'intro') return;
     this.audio.setMotor(0);
+    this.audio.setOpeningMusic(false);
     this.sim.story.layOpening();
     this.phase = 'playing';
     this.ui.showPhase('playing');
@@ -510,6 +528,57 @@ class AlunApp {
       },
     });
     return true;
+  }
+
+  /**
+   * The first raider of the story: the camera swings out to the ship, shows its crew of pirates and looks
+   * through the captain's spyglass at the village pier. False when there is no film to show.
+   */
+  private startPirates(e: Entity): boolean {
+    if (!this.renderer.playPirates || skipFilms(this.settings) || this.rescue || this.ui.isTalking() || this.phase !== 'playing') return false;
+    this.pirates = true;
+    this.sim.drag.active = false;
+    this.sim.drag.pointerId = -1;
+    this.audio.setWaveCharge(0);
+    this.audio.holdMusic(true);
+    this.ui.setFilm(true);
+    this.renderer.playPirates(
+      this.sim,
+      e.id,
+      {
+        caption: (kicker, line) => this.ui.setIntroCaption(kicker, line),
+        sound: (kind, strength) => {
+          if (kind === 'drum') this.audio.playPirateBeat(strength);
+          else if (kind === 'horn') this.audio.playRaidHorn();
+          else if (kind === 'glass') this.audio.playUiClick();
+          else if (kind === 'tension') this.audio.playAlert();
+          else this.audio.playAlunWake();
+        },
+        scope: (open, on) => this.ui.setSpyglass(open, on),
+      },
+      () => this.finishPirates()
+    );
+    return true;
+  }
+
+  /** The film is over or skipped: return control of the lagoon to the player. */
+  private finishPirates(): void {
+    if (!this.pirates) return;
+    this.pirates = false;
+    this.ui.setSpyglass(0, false);
+    this.ui.setFilm(false);
+    this.audio.holdMusic(false);
+    this.save();
+  }
+
+  /** Puts the pirates' film away without a word (new game, reset, continue). */
+  private cancelPirates(): void {
+    if (!this.pirates) return;
+    this.pirates = false;
+    this.renderer.cancelPirates?.();
+    this.ui.setSpyglass(0, false);
+    this.ui.setFilm(false);
+    this.audio.holdMusic(false);
   }
 
   /** The story is over: dawn, Pak Damar at the pier, the dolphins beside him. */
@@ -561,7 +630,8 @@ class AlunApp {
     if (tod === 'night') return { level: 0.03, gulls: 0.05 };
     const eco = stats.ecoPercent / 100;
     let level = tod === 'dawn' ? 0.95 : tod === 'sunset' ? 0.1 + 0.4 * eco : 0.15 + 0.85 * eco;
-    if (this.rescue === 'film') level *= 0.25;
+    // the whole lagoon holds its breath while the dolphin is in trouble, and while the pirates come in
+    if (this.rescue === 'film' || this.pirates) level *= 0.25;
     if (this.phase === 'upgrade') level *= 0.6;
     return { level, gulls: tod === 'sunset' ? 0.2 : 0.45 };
   }
@@ -677,7 +747,7 @@ class AlunApp {
         }
       }
       // during a film the only keys that do anything are skip and mute
-      if (this.phase === 'intro' || this.ending || this.rescue === 'film' || this.rescue === 'free') {
+      if (this.phase === 'intro' || this.ending || this.pirates || this.rescue === 'film' || this.rescue === 'free') {
         if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           this.skipFilm();
@@ -759,7 +829,7 @@ class AlunApp {
 
     this.canvas.addEventListener('pointerdown', (e) => {
       this.audio.unlock();
-      if (this.phase !== 'playing' || this.ui.isSettingsOpen() || this.ending || this.ui.isTalking()) return;
+      if (this.phase !== 'playing' || this.ui.isSettingsOpen() || this.ending || this.pirates || this.ui.isTalking()) return;
       if (this.rescue === 'film' || this.rescue === 'free') return;
       if (e.button !== 0 && e.pointerType === 'mouse') return;
 
@@ -839,9 +909,10 @@ class AlunApp {
     }
 
     const stats = computeStats(this.progress);
-    const filming = this.ending || this.rescue === 'film' || this.rescue === 'free';
-    // the lagoon waits while a window is open, the ending plays, or Bu Sari is talking
-    const activePlay = this.phase === 'playing' && !this.ui.isSettingsOpen() && !this.ending && !this.ui.isTalking();
+    // a film the renderer has dropped (something else took the camera) is over here too
+    if (this.pirates && this.renderer.piratesActive === false) this.finishPirates();
+    const filming = this.ending || this.pirates || this.rescue === 'film' || this.rescue === 'free';
+    const activePlay = this.phase === 'playing' && !this.ui.isSettingsOpen() && !this.ending && !this.pirates && !this.ui.isTalking();
     let guideObjective: Objective | null = null;
 
     if (activePlay) {

@@ -157,6 +157,9 @@ export class StoryLayer {
   /** Set while a film moves the boat and the dolphins itself. */
   film: StoryFilm | null = null;
   onCheer: (() => void) | null = null;
+  /** Where each raider was drawn this frame, by entity id, for the crew that rides it. */
+  readonly raiders = new Map<number, THREE.Matrix4>();
+  private raiderPool: THREE.Matrix4[] = [];
 
   private batch = {} as Record<Piece, Batch>;
   private ropes: THREE.InstancedMesh;
@@ -396,6 +399,7 @@ export class StoryLayer {
     this.fishN = 0;
     this.lamps.length = 0;
     this.guests.length = 0;
+    this.raiders.clear();
     const live = !this.veiled && sim.lagoonInitialized && !!sim.progress;
 
     if (live) {
@@ -698,6 +702,11 @@ export class StoryLayer {
       pitch: Math.sin(this.t * 0.9 + e.id) * 0.06 + hit * 0.22,
       phase: 0.1,
     });
+    if (k === 'raider') {
+      const n = this.raiders.size;
+      const m = (this.raiderPool[n] ??= new THREE.Matrix4());
+      this.raiders.set(e.id, m.copy(this.m4));
+    }
     const v = Math.hypot(e.vx, e.vy) * UNIT;
     const c = Math.cos(e.rotation);
     const s = Math.sin(e.rotation);
