@@ -27,7 +27,8 @@ export interface SimHooks {
   radio: (sender: string, text: string) => void;
   /** Bu Sari tells something (see story/talk.ts). Without it, her lines go out over the radio. */
   talk?: (id: SceneId) => void;
-  coins: () => void;
+  /** Coins were paid out at this place in the lagoon. */
+  coins: (amount: number, x: number, y: number) => void;
   /** Something worth keeping happened: save now. */
   save: () => void;
   chapter: (n: number) => void;
@@ -70,6 +71,8 @@ const TRASH_BODY: Partial<Record<EntityKind, [TrashRarity, number, number]>> = {
 };
 
 const MAX_PARTICLES = 260;
+/** Seconds a combo waits for the next catch. */
+export const COMBO_WINDOW = 3.4;
 const MAX_FLOATING_TEXTS = 42;
 
 export class GameSimulation {
@@ -94,6 +97,8 @@ export class GameSimulation {
   public netPulse = 0;
   public flashAlpha = 0;
   public shoreSplash = 0;
+  /** Seconds since the wave being held reached full power, or -1. */
+  public chargeFullAge = -1;
 
   public bossActive = false;
   /** A raider lies across the mouth of the net. */
@@ -385,8 +390,15 @@ export class GameSimulation {
       const maxCap = stats.chargeUnlocked ? 1.0 : 0.45;
       this.drag.charge = Math.min(maxCap, Math.max(0, (this.drag.holdTime - 0.08) * chargeSpeed));
       this.audio.setWaveCharge(this.drag.charge);
+      if (this.chargeFullAge >= 0) this.chargeFullAge += dt;
+      // only a wave that can really be charged says it is full; the short hold without it fills at once
+      else if (stats.chargeUnlocked && this.drag.charge >= maxCap - 1e-6) {
+        this.chargeFullAge = 0;
+        this.audio.playChargeFull();
+      }
     } else {
       this.audio.setWaveCharge(0);
+      this.chargeFullAge = -1;
     }
 
     for (const m of progress.mangroves) {
@@ -475,6 +487,10 @@ export class GameSimulation {
 
     progress.totalWaves += 1;
     this.screenShake = Math.max(this.screenShake, 2.2 + effectiveCharge * 5.2);
+    if (effectiveCharge >= 0.85) {
+      this.hitstopTimer = Math.max(this.hitstopTimer, 0.045);
+      this.flashAlpha = Math.max(this.flashAlpha, 0.06);
+    }
     this.audio.playWaveLaunch(effectiveCharge, false, this.audio.worldXToPan(spawnX, WORLD_W));
     return true;
   }
@@ -844,6 +860,11 @@ export class GameSimulation {
         e.vx += finalDirX * kick;
         e.vy += finalDirY * kick;
         e.hitFlash = 0.14;
+        if (isTrashKind(e.kind) || e.kind === 'mangrove_seed') {
+          const hard = lifeFade * (0.55 + w.charge * 0.7) * (w.isEcho ? 0.6 : 1);
+          this.audio.playWaveHit(hard, e.mass, this.audio.worldXToPan(e.x, WORLD_W));
+          this.kickSpray(e.x, e.y, finalDirX, finalDirY, 3 + Math.round(w.charge * 4));
+        }
       }
     }
   }
@@ -1068,8 +1089,10 @@ export class GameSimulation {
     if (rarity === 'legendary') {
       this.shake(7.5);
       this.flashAlpha = Math.max(this.flashAlpha, 0.16);
+      this.hitstopTimer = Math.max(this.hitstopTimer, 0.07);
     } else if (rarity === 'epic') {
       this.shake(4);
+      this.hitstopTimer = Math.max(this.hitstopTimer, 0.03);
     }
     this.audio.playTrashCollect(this.comboCount, rarity, this.audio.worldXToPan(COLLECTOR_NET.x, WORLD_W));
     this.burst(COLLECTOR_NET.x, COLLECTOR_NET.y, color, rarity === 'legendary' ? 22 : rarity === 'epic' ? 14 : 8);
@@ -1104,12 +1127,17 @@ export class GameSimulation {
 
   private incrementCombo(stats: ComputedStats): void {
     this.comboCount += 1;
-    this.comboTimer = 3.4;
+    this.comboTimer = COMBO_WINDOW;
     if (stats.comboEnergyReturn > 0) {
       this.energy = Math.min(stats.maxEnergy, this.energy + stats.comboEnergyReturn);
     }
     if (this.comboCount >= 5 && this.comboCount % 5 === 0) {
+      // every fifth in a row: coins spill, the net flares and the world catches its breath
       this.audio.playComboMilestone(this.comboCount);
+      this.text(COLLECTOR_NET.x + 8, COLLECTOR_NET.y - 84, `KOMBO ×${this.comboCount}!`, this.comboCount >= 20 ? '#d9a8ff' : this.comboCount >= 10 ? '#ff9b8a' : '#ffe07d', 1.45);
+      this.burst(COLLECTOR_NET.x, COLLECTOR_NET.y, '#ffe07d', 16, 'spark');
+      this.shake(3.5);
+      this.hitstopTimer = Math.max(this.hitstopTimer, 0.035);
     }
   }
 
@@ -1118,7 +1146,7 @@ export class GameSimulation {
     this.progress.coins += amount;
     this.progress.totalCoinsEarned += amount;
     this.text(x, y, `+${amount}`, color, subtext ? 1.15 : 0.94, subtext);
-    this.hooks.coins();
+    this.hooks.coins(amount, x, y);
   }
 
   /** Puts a thing in the water. */
@@ -1216,6 +1244,27 @@ export class GameSimulation {
       this.particles.shift();
     }
     this.particles.push(p);
+  }
+
+  /** Droplets thrown on in the direction something was struck. */
+  private kickSpray(x: number, y: number, dx: number, dy: number, count: number): void {
+    for (let i = 0; i < count; i++) {
+      const a = Math.atan2(dy, dx) + (Math.random() - 0.5) * 1.1;
+      const spd = 70 + Math.random() * 120;
+      this.pushParticle({
+        x,
+        y,
+        vx: Math.cos(a) * spd,
+        vy: Math.sin(a) * spd,
+        size: 2.2 + Math.random() * 2.8,
+        life: 0,
+        maxLife: 0.32 + Math.random() * 0.25,
+        color: '#e8ffff',
+        alpha: 0.9,
+        kind: 'foam',
+        drag: 0.9,
+      });
+    }
   }
 
   public burst(

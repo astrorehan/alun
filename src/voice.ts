@@ -1,4 +1,4 @@
-import type { TropicalAudio } from './audio';
+import type { BlipId, TropicalAudio } from './audio';
 import type { VoiceMode } from './settings';
 import type { Mood } from './story/talk';
 
@@ -6,7 +6,7 @@ import type { Mood } from './story/talk';
  * The people on the radio. Bu Sari opens each line of her scenes with a short exclamation in her
  * own voice, picked by the line's mood ("Aduh, aduh...", "Eh! Eh, eh!"); the clips are made by
  * `npm run generate:voice` and listed in public/audio/voice/manifest.json. Every other line is
- * typed with a babble: a short pitched syllable per vowel, a beep for the machine.
+ * typed with a babble: one recorded syllable per vowel, pitched for the speaker, a chirp for the machine.
  */
 
 interface Take {
@@ -20,24 +20,21 @@ interface Manifest {
 }
 
 interface Babble {
+  /** The recorded syllable (scripts/generate-sfx.mjs). */
+  clip: BlipId;
+  /** Playback rate: the speaker's pitch. */
   pitch: number;
   /** How far one syllable may wander from the speaker's pitch. */
   spread: number;
-  wave: OscillatorType;
-  formant: number;
-  q: number;
-  peak: number;
-  /** Pitch at the end of a syllable, as part of where it began. */
-  glide: number;
-  len: number;
+  volume: number;
 }
 
-/** How each speaker babbles: the machine beeps, the fisherman rumbles. */
+/** How each speaker babbles: the machine chirps, the fisherman knocks low, the others tap. */
 const BABBLE: Record<string, Babble> = {
-  'A.L.U.N.': { pitch: 900, spread: 0.7, wave: 'square', formant: 2100, q: 1.1, peak: 0.06, glide: 1.35, len: 0.05 },
-  'BU SARI': { pitch: 300, spread: 0.32, wave: 'triangle', formant: 1200, q: 1.3, peak: 0.17, glide: 0.9, len: 0.07 },
-  'PAK DAMAR': { pitch: 140, spread: 0.26, wave: 'sawtooth', formant: 760, q: 1.6, peak: 0.11, glide: 0.93, len: 0.075 },
-  'PENJAGA RIMBA': { pitch: 205, spread: 0.28, wave: 'triangle', formant: 950, q: 1.4, peak: 0.15, glide: 0.92, len: 0.07 },
+  'A.L.U.N.': { clip: 'blip-alun', pitch: 1, spread: 0.5, volume: 0.34 },
+  'BU SARI': { clip: 'blip-mid', pitch: 1.12, spread: 0.24, volume: 0.42 },
+  'PAK DAMAR': { clip: 'blip-low', pitch: 0.86, spread: 0.2, volume: 0.5 },
+  'PENJAGA RIMBA': { clip: 'blip-mid', pitch: 0.9, spread: 0.22, volume: 0.42 },
 };
 
 /** The squelch comes first; the voice starts just after it. */
@@ -167,32 +164,10 @@ export class RadioVoice {
     node.start(at);
   }
 
-  /** One babble syllable: a pitched blip through the speaker's own formant. */
+  /** One babble syllable: the speaker's recorded blip at a pitch near their own. */
   public blip(sender: string): void {
-    const out = this.audio.voiceOut();
-    if (!out || !this.audio.running) return;
     const b = BABBLE[sender] ?? BABBLE['PENJAGA RIMBA'];
-    const { ctx, bus } = out;
-    const t = ctx.currentTime + 0.005;
-    const osc = ctx.createOscillator();
-    const filter = ctx.createBiquadFilter();
-    const gain = ctx.createGain();
-    const f = b.pitch * (1 - b.spread / 2 + Math.random() * b.spread);
-    osc.type = b.wave;
-    osc.frequency.setValueAtTime(f, t);
-    osc.frequency.exponentialRampToValueAtTime(f * b.glide, t + b.len);
-    filter.type = 'bandpass';
-    filter.frequency.value = b.formant;
-    filter.Q.value = b.q;
-    gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(b.peak, t + 0.008);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + b.len);
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(bus);
-    osc.onended = () => gain.disconnect();
-    osc.start(t);
-    osc.stop(t + b.len + 0.02);
+    this.audio.playBlip(b.clip, b.pitch * (1 - b.spread / 2 + Math.random() * b.spread), b.volume);
   }
 
   /** The voice slider was let go: one of Bu Sari's happy exclamations, or her babble. */

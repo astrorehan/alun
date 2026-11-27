@@ -22,6 +22,7 @@ import {
   UPGRADE_MAP,
 } from './upgrades';
 import { getUiIconSvg, type UiIconName } from './ui-kit/icons';
+import type { HudJuice } from './juice';
 import type { QualitySetting, Tier } from './scene/quality';
 import type { QualityState } from './scene/SceneRenderer';
 import { TEXT_CPS, type GameSettings, type VolumeChannel } from './settings';
@@ -345,6 +346,8 @@ export class GameUI {
   private messages: HudMessage[] = [];
   private messageLeft = 0;
   private displayedCoins = -1;
+  /** Coins on screen flying to the purse, bursts and the combo chip's pops. */
+  public juice: HudJuice | null = null;
   private lastHudCoinsText = '';
   private lastComboText = '';
   private lastEnergyText = '';
@@ -719,6 +722,7 @@ export class GameUI {
   /** A new story or an erased one: nothing on screen may come from the old one. */
   public forgetProgress(): void {
     this.displayedCoins = -1;
+    this.juice?.reset();
     this.lastHudCoinsText = '';
     this.lastShopSig = '';
     this.lastEcoPct = -1;
@@ -1024,7 +1028,7 @@ export class GameUI {
     this.hudEcoWrap.classList.toggle('hidden', !inRun);
     this.hudTimePill.classList.toggle('hidden', !inRun);
     if (!this.hud.hasAttribute('data-ready')) this.hud.dataset.ready = 'true';
-    const exactCoins = Math.floor(progress.coins);
+    const exactCoins = Math.floor(progress.coins - (this.juice?.pending() ?? 0));
     if (this.displayedCoins < 0 || exactCoins < this.displayedCoins) {
       this.displayedCoins = exactCoins;
     } else if (exactCoins > this.displayedCoins) {
@@ -1759,6 +1763,9 @@ export class GameUI {
     btn.classList.remove('is-bumped');
     void btn.offsetWidth;
     btn.classList.add('is-bumped');
+    // the tool bursts and the purse it was paid from jumps
+    this.juice?.burstAt(btn);
+    this.juice?.popNumber(this.upgradeCoins, false);
   }
 
   /** The news pops up beside the tool that changed, inside the map, then fades; it covers nothing for long. */
