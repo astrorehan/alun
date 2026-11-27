@@ -446,7 +446,8 @@ function turtle(): THREE.BufferGeometry {
   return b.geo();
 }
 
-function bird(): THREE.BufferGeometry {
+/** A gull, nose at +X; the wing tips carry aFx.y for the flap. */
+export function bird(): THREE.BufferGeometry {
   const b = new Build(330);
   b.ball(0.26, { color: '#ffffff', scale: [2.3, 0.75, 0.8], seg: 9 });
   b.ball(0.16, { color: '#ffffff', pos: [0.6, 0.06, 0], seg: 7 });

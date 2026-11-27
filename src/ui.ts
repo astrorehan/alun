@@ -177,6 +177,7 @@ export class GameUI {
   private app = el('app');
   private hud = el('hud');
   private titleScreen = el('title-screen');
+  private btnTitleToggle = el('btn-title-toggle') as HTMLButtonElement;
   private introOverlay = el('intro-overlay');
   private introCaption = el('intro-caption');
   private introKicker = el('intro-kicker');
@@ -461,6 +462,10 @@ export class GameUI {
       this.openSettings(e.currentTarget as HTMLElement);
     };
     click('btn-title-settings', openSettingsFrom);
+    this.btnTitleToggle.addEventListener('click', () => {
+      this.handlers.onUiClick?.();
+      this.setTitleCollapsed(!this.titleScreen.classList.contains('is-collapsed'));
+    });
     click('btn-hud-settings', openSettingsFrom);
     const closeSettings = (): void => {
       this.handlers.onUiClick?.();
@@ -715,9 +720,18 @@ export class GameUI {
     this.hud.classList.toggle('hidden', !visible);
   }
 
+  private setTitleCollapsed(collapsed: boolean): void {
+    this.titleScreen.classList.toggle('is-collapsed', collapsed);
+    this.btnTitleToggle.setAttribute('aria-expanded', String(!collapsed));
+    const label = collapsed ? 'Tampilkan menu' : 'Sembunyikan menu';
+    this.btnTitleToggle.setAttribute('aria-label', label);
+    this.btnTitleToggle.title = label;
+  }
+
   public showPhase(phase: GamePhase): void {
     this.app.dataset.phase = phase;
     this.titleScreen.classList.toggle('hidden', phase !== 'title');
+    if (phase === 'title') this.setTitleCollapsed(false);
     if (phase === 'intro' && this.introOverlay.classList.contains('hidden')) this.setIntroCaption('', '');
     this.introOverlay.classList.toggle('hidden', phase !== 'intro');
     this.syncHudVisibility();

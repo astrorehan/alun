@@ -174,7 +174,8 @@ export function pirateScale(day: number): number {
 
 export function pirateSpec(variant: PirateKind, day: number, isNight: boolean): PirateSpec {
   const sc = pirateScale(day) * (isNight ? 1 : 0.85);
-  const dmgSc = 1 + Math.max(0, day - 1) * 0.32;
+  // Day 1 hits softer: a new player is still learning to aim the waves.
+  const dmgSc = day <= 1 ? 0.7 : 1 + (day - 1) * 0.32;
   const spdSc = 1 + Math.min(0.75, Math.max(0, day - 1) * 0.13);
   const massSc = 1 + Math.min(2.4, Math.max(0, day - 1) * 0.35);
   const bountySc = 1 + Math.max(0, day - 1) * 0.3;
@@ -197,47 +198,39 @@ export function buildNightWave(day: number): { plan: WaveSpawn[]; hugeFlags: num
   };
 
   if (day === 1) {
-    // Punchy PvZ Day 1 night: 14 ships (1.5x), tighter pairs + simultaneous 6-ship huge wave!
-    add(1.2, 0, 0);
-    add(5.0, 1, 1);
-    add(9.2, 0, 3);
-    add(11.4, 1, 2);
-    add(16.0, 0, 4);
-    add(18.0, 1, 0);
-    add(23.0, 0, 2);
-    add(26.5, 1, 5);
-    // HUGE WAVE (6 ships)
+    // First night, for someone who has only the basic wave: 8 ships, one at a time with room to
+    // breathe, then a small huge wave of 3. Playtesters lost the pier twice with 13.
+    add(2.0, 0, 0);
+    add(8.5, 0, 3);
+    add(14.5, 1, 1);
+    add(20.5, 0, 4);
+    add(27.0, 0, 2);
+    // HUGE WAVE (3 ships)
     add(35, PIRATE_KIND.rammer, 0, true);
-    add(36.4, 0, 1);
-    add(37.1, 1, 4);
-    add(37.8, 0, 2);
-    add(38.5, 1, 5);
+    add(37.5, 0, 2);
+    add(40.0, 0, 5);
     return { plan, hugeFlags: [35 / NIGHT_DURATION] };
   }
 
   if (day === 2) {
-    // 20 ships (1.5x) + Brutes, Shields & Trawl support
+    // 16 ships + Brutes, Shields & Trawl support (was 20: a little lighter after Day 1 playtests)
     add(1.2, 1, 0);
     add(4.2, 0, 2);
     add(7.0, 1, 4);
     add(10.0, 0, 1);
     add(13.2, 2, 3, false, 'trawl');
-    add(15.5, 1, 0);
     add(18.5, 0, 5);
     add(21.5, PIRATE_KIND.shield, 2);
     add(24.5, PIRATE_KIND.rammer, 4);
     add(27.5, 2, 1);
     add(30.0, PIRATE_KIND.shield, 5);
-    add(32.5, 1, 0);
-    // HUGE WAVE (8 ships)
+    // HUGE WAVE (6 ships)
     add(38, 2, 0, true);
     add(38.6, PIRATE_KIND.shield, 3);
     add(39.2, 1, 1);
     add(39.8, 0, 4);
     add(40.4, 1, 2);
-    add(41.0, 0, 5);
     add(41.6, 2, 3);
-    add(42.2, 1, 0);
     return { plan, hugeFlags: [38 / NIGHT_DURATION] };
   }
 

@@ -1,7 +1,7 @@
 /**
  * What Bu Sari tells the player when the story stops for her: the first steps, and the moments
  * that say what is going on in the lagoon. She does not read her lines aloud: each one opens
- * with a short exclamation in her own voice for its mood ("Aduh, aduh...", "Eh! Eh, eh!"),
+ * with a short exclamation in her own voice for its mood (one word: "Aduh...", "Hoi!"),
  * recorded by `npm run generate:voice`, and the words are typed while she talks. Everyone else,
  * and Bu Sari the rest of the time, talks in short written radio lines.
  */

@@ -3,7 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" href="data:," />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>ALUN · Gema Pesisir Tropis</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -187,36 +193,57 @@
 
       <!-- ================= TITLE OVERLAY (ARCADE TROPICAL LAUNCH) ================= -->
       <section id="title-screen" class="overlay title-screen">
-        <div class="ui-modal-frame title-modal">
-          <div class="title-drift" aria-hidden="true"></div>
-          <div class="title-hero">
-            <div class="title-emblem" id="title-emblem"></div>
-            <div class="title-name">
-              <h1 class="game-title t-stroke-xl">ALUN</h1>
-              <span class="title-kicker t-stroke-xs">Gema Pesisir Tropis</span>
+        <div class="title-dock" id="title-dock">
+          <div class="ui-modal-frame title-modal">
+            <div class="title-drift" aria-hidden="true"></div>
+            <div class="title-hero">
+              <div class="title-emblem" id="title-emblem"></div>
+              <div class="title-name">
+                <h1 class="game-title t-stroke-xl">ALUN</h1>
+                <span class="title-kicker t-stroke-xs">Gema Pesisir Tropis</span>
+              </div>
             </div>
-          </div>
-          <p class="game-subtitle">Bersihkan teluk di siang hari, perkuat ombakmu di Bengkel, dan tahan bajak laut setiap malam!</p>
-          <div id="title-best" class="title-best t-stroke-xs hidden"></div>
+            <p class="game-subtitle">Bersihkan teluk di siang hari, perkuat ombakmu di Bengkel, dan tahan bajak laut setiap malam!</p>
+            <div id="title-best" class="title-best t-stroke-xs hidden"></div>
 
-          <div class="title-actions">
-            <button type="button" id="btn-continue" class="ui-btn ui-btn-lg t-stroke-md hidden" data-swatch="green">
-              <span class="ui-btn-icon" id="title-continue-icon"></span>
-              <span class="title-continue-copy">
-                <span id="continue-label">Lanjutkan</span>
-                <span id="continue-sub" class="title-continue-sub t-stroke-xs"></span>
-              </span>
-            </button>
-            <button type="button" id="btn-play" class="ui-btn ui-btn-lg t-stroke-md" data-swatch="green">
-              <span class="ui-btn-icon" id="title-play-icon"></span>
-              <span>Permainan Baru</span>
-            </button>
-            <button type="button" id="btn-title-settings" class="ui-btn t-stroke-sm" data-swatch="purple">
-              <span class="ui-btn-icon" id="title-settings-icon"></span>
-              <span>Pengaturan</span>
-            </button>
+            <div class="title-actions">
+              <button type="button" id="btn-continue" class="ui-btn ui-btn-lg t-stroke-md hidden" data-swatch="green">
+                <span class="ui-btn-icon" id="title-continue-icon"></span>
+                <span class="title-continue-copy">
+                  <span id="continue-label">Lanjutkan</span>
+                  <span id="continue-sub" class="title-continue-sub t-stroke-xs"></span>
+                </span>
+              </button>
+              <button type="button" id="btn-play" class="ui-btn ui-btn-lg t-stroke-md" data-swatch="green">
+                <span class="ui-btn-icon" id="title-play-icon"></span>
+                <span>Permainan Baru</span>
+              </button>
+              <button type="button" id="btn-title-settings" class="ui-btn t-stroke-sm" data-swatch="purple">
+                <span class="ui-btn-icon" id="title-settings-icon"></span>
+                <span>Pengaturan</span>
+              </button>
+            </div>
+            <div class="title-waves" aria-hidden="true"></div>
           </div>
-          <div class="title-waves" aria-hidden="true"></div>
+          <button
+            type="button"
+            id="btn-title-toggle"
+            class="title-drawer-toggle"
+            aria-expanded="true"
+            aria-controls="title-dock"
+            aria-label="Sembunyikan menu"
+            title="Sembunyikan menu"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M15.5 5.2C13 7.8 9.2 10.6 9.2 12C9.2 13.4 13 16.2 15.5 18.8"
+                stroke="currentColor"
+                stroke-width="4.2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
         </div>
       </section>
 
@@ -635,8 +662,8 @@
     <dialog id="rotate-prompt" class="rotate-prompt" aria-labelledby="rotate-title">
       <div class="phone-symbol" aria-hidden="true"></div>
       <h2 id="rotate-title">Putar HP ke samping</h2>
-      <p>Laguna dimainkan dalam posisi horizontal.</p>
-      <button type="button" id="btn-landscape" class="ui-btn t-stroke-sm" data-swatch="teal">Aktifkan layar horizontal</button>
+      <p id="rotate-desc">Laguna dimainkan dalam layar penuh horizontal.</p>
+      <button type="button" id="btn-landscape" class="ui-btn t-stroke-sm" data-swatch="teal">Aktifkan layar penuh horizontal</button>
     </dialog>
 
     <script type="module" src="/src/main.ts"></script>

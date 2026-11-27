@@ -1015,7 +1015,7 @@ export class Story {
             ? Math.random() < 0.45 ? 3 : 2
             : s.day >= 2
               ? 2
-              : Math.random() < 0.45 ? 2 : 1;
+              : 1;
         for (let i = 0; i < count; i++) {
           const variant: PirateKind = firstScout
             ? 0
@@ -1033,7 +1033,8 @@ export class Story {
         this.sim.audio.playAlert();
         if (!(firstScout && this.talk('scout'))) this.radio('PAK DAMAR', 'Kapal layar robek siang-siang! Usir dio dari dermaga!');
       }
-      s.skirmishTimer = Math.max(16, 28 - s.day * 2.2) + Math.random() * 5;
+      // Day 1 gives a new player more quiet time between raids.
+      s.skirmishTimer = (s.day === 1 ? 38 : Math.max(16, 28 - s.day * 2.2)) + Math.random() * 5;
     }
 
     // Daytime side events (dolphins, fishers, trawlers, drum ships, forest fires) for bonus coins & narrative flavor

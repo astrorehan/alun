@@ -28,22 +28,30 @@ const FFMPEG = process.env.FFMPEG ?? 'ffmpeg';
 const FFPROBE = process.env.FFPROBE ?? 'ffprobe';
 const MODEL_ID = 'eleven_v3';
 
-/** Per speaker and mood (see Mood in src/story/talk.ts), a few takes to pick from. */
+/**
+ * Per speaker and mood (see Mood in src/story/talk.ts), a few takes to pick from. A take is the
+ * text sent to ElevenLabs, or [text, cut]: the take is kept only up to `cut` seconds (measured on
+ * the trimmed take), so she says one word ("Aduh...") instead of the whole run ("Aduh, aduh,
+ * aduh..."). Players found the repeats tiring; the cut keeps the voice they already approved.
+ */
 const MUMBLES = {
   'BU SARI': {
     file: 'sari',
     moods: {
-      ngobrol: ['Nah, nah... hmm.', 'Hmm, iyo, iyo...', 'Jadi... cak ini, ha.'],
-      senang: ['[laughs] Hehehe! Nah, nah, nah!', '[laughs] Haha! Iyo, iyo!'],
-      kaget: ['[surprised] Eh! Eh, eh, eh... alamak!', '[surprised] Hah?! Eh, eh!'],
-      cemas: ['[nervous] Aduh, aduh, aduh...', '[nervous] Waduh... waduh, waduh.'],
-      teriak: ['[shouting] Hoi! Hoi!', '[shouting] Awas! Hei!'],
-      bisik: ['[whispers] Ssst... hmm...'],
+      ngobrol: [['Nah, nah... hmm.', 0.57], ['Hmm, iyo, iyo...', 0.43]],
+      senang: [['[laughs] Hehehe! Nah, nah, nah!', 1.29], ['[laughs] Haha! Iyo, iyo!', 1.22]],
+      kaget: [['[surprised] Eh! Eh, eh, eh... alamak!', 0.27], ['[surprised] Hah?! Eh, eh!', 0.43]],
+      cemas: [['[nervous] Aduh, aduh, aduh...', 0.47], ['[nervous] Waduh... waduh, waduh.', 1.07]],
+      teriak: [['[shouting] Hoi! Hoi!', 0.48], ['[shouting] Awas! Hei!', 0.49]],
+      bisik: [['[whispers] Ssst... hmm...', 0.36]],
       lega: ['[sighs] Haaah...'],
       sedih: ['[sad] Yaa ampun...'],
     },
   },
 };
+
+/** How long the end of a cut take fades, so the word does not stop with a click. */
+const CUT_FADE = 0.07;
 
 /** FNV-1a over UTF-16 units: names a kept take by voice and words. */
 function hash(s) {
@@ -74,14 +82,16 @@ async function tts(voice, text) {
 }
 
 /** Silence trimmed from both ends, rumble cut, and every take brought to the same loudness. */
-async function processTake(raw, out) {
-  const trim = [
+async function processTake(raw, out, cut) {
+  const steps = [
     'silenceremove=start_periods=1:start_threshold=-50dB:start_silence=0.02',
     'areverse',
     'silenceremove=start_periods=1:start_threshold=-50dB:start_silence=0.08',
     'areverse',
     'highpass=f=70',
-  ].join(',');
+  ];
+  if (cut) steps.push('asetpts=N/SR/TB', `atrim=end=${cut}`, `afade=t=out:st=${(cut - CUT_FADE).toFixed(3)}:d=${CUT_FADE}`);
+  const trim = steps.join(',');
   // too short for loudnorm to measure well: level by average loudness, never past -1.5 dB peak
   const { stderr } = await run(FFMPEG, ['-hide_banner', '-nostats', '-i', raw, '-af', `${trim},volumedetect`, '-f', 'null', '-']);
   const mean = Number(/mean_volume: (-?[\d.]+) dB/.exec(stderr)?.[1] ?? -20);
@@ -109,9 +119,10 @@ const jobs = [];
 for (const [sender, { file, moods }] of Object.entries(MUMBLES)) {
   const voice = cast[sender]?.voice;
   for (const [mood, texts] of Object.entries(moods)) {
-    texts.forEach((text, i) => {
+    texts.forEach((take, i) => {
+      const [text, cut] = Array.isArray(take) ? take : [take, 0];
       const raw = path.join(RAW_DIR, `mumble-${hash(`${voice}\u0001${text}`)}.mp3`);
-      jobs.push({ sender, voice, mood, text, raw, name: `${file}-${mood}-${i + 1}.mp3` });
+      jobs.push({ sender, voice, mood, text, cut, raw, name: `${file}-${mood}-${i + 1}.mp3` });
     });
   }
 }
@@ -134,7 +145,7 @@ if (!processOnly) {
 const manifest = { version: 3, mumbles: {} };
 for (const j of jobs) {
   if (!(await exists(j.raw))) continue;
-  const d = await processTake(j.raw, path.join(OUT_DIR, j.name));
+  const d = await processTake(j.raw, path.join(OUT_DIR, j.name), j.cut);
   const bySender = (manifest.mumbles[j.sender] ??= {});
   (bySender[j.mood] ??= []).push({ f: j.name, d });
 }
