@@ -28,6 +28,7 @@ import { Opening, type OpeningHooks } from './opening';
 import { Rescue, type RescueHooks } from './rescue';
 import { Ending, type EndingHooks } from './ending';
 import { Pirates, type PirateHooks } from './pirates';
+import { BeachSign } from './beachsign';
 import { coastLook, murkOf } from './health';
 import { StoryLayer } from './story';
 import { shoreAt, simX, simY, toX, toZ, UNIT } from './space';
@@ -215,6 +216,7 @@ export class SceneRenderer {
   private story: StoryLayer;
   private ending: Ending;
   private pirates: Pirates;
+  private beachSign: BeachSign;
   private text: TextLayer;
 
   private canvas: HTMLCanvasElement;
@@ -328,6 +330,14 @@ export class SceneRenderer {
     this.staticGroup.add(this.flora.group);
     this.staticGroup.add(this.village.group);
     this.staticGroup.add(this.beach.group);
+    // the beach's name board; once its lettering is in the game's font the cached views are redrawn
+    this.beachSign = new BeachSign(() => {
+      this.staticValid = false;
+      this.refreshStage = -1;
+      this.shadow.invalidateStatic();
+      this.cachedShadowSunDir.set(0, 0, 0);
+    });
+    this.staticGroup.add(this.beachSign.group);
 
     this.water = new Water();
     this.water.init(this.gl, this.fs);

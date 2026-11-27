@@ -72,7 +72,7 @@ export const TIERS: Record<Tier, Quality> = {
     lite: false,
     ultra: false,
     cached: true,
-    cameraScale: 0.43,
+    cameraScale: 0.55,
     directLdr: true,
     waterDetail: 1,
     msaa: 0,
@@ -80,8 +80,8 @@ export const TIERS: Record<Tier, Quality> = {
     fxaa: false,
     bloomLevels: 3,
     bloomStartDiv: 4,
-    dprCap: 1.25,
-    mp: 2.6,
+    dprCap: 1.5,
+    mp: 3.2,
     target: 21,
     field: [640, 480],
     foam: [512, 384],
@@ -210,7 +210,9 @@ export function guessTier(gl: WebGLRenderingContext | WebGL2RenderingContext): T
   if (!name) return 'medium';
   if (/swiftshader|llvmpipe|basic render|mali|adreno|powervr/i.test(name)) return 'low';
   if (/intel/i.test(name) && !/iris|arc/i.test(name)) return 'low';
-  if (/iris|vega|radeon(\(tm\))? graphics|geforce (mx|gt )|geforce (8|9)\d\dm|apple/i.test(name)) return 'medium';
+  // Apple silicon handles High on a Retina screen; Auto still steps down if frames run long
+  if (/apple/i.test(name)) return 'high';
+  if (/iris|vega|radeon(\(tm\))? graphics|geforce (mx|gt )|geforce (8|9)\d\dm/i.test(name)) return 'medium';
   if (/rtx|gtx|radeon rx|arc /i.test(name)) return 'high';
   return 'medium';
 }

@@ -943,7 +943,7 @@ export class TropicalAudio {
   }
 
   /** A gull calling over the water, from the sea side of the screen. */
-  private playGull(): void {
+  public playGull(): void {
     this.playBuffer('seagull', {
       volume: 0.2 + Math.random() * 0.1,
       rate: 0.92 + Math.random() * 0.16,

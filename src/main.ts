@@ -451,6 +451,7 @@ class AlunApp {
         sound: (kind, strength) => {
           if (kind === 'splash') this.audio.playSplash(strength);
           else if (kind === 'throw') this.audio.playToss();
+          else if (kind === 'gull') this.audio.playGull();
           else this.audio.playAlunWake();
         },
         motor: (level) => this.audio.setMotor(level),

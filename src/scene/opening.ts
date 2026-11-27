@@ -3,6 +3,7 @@ import type { GameSimulation } from '../simulation';
 import type { ComputedStats } from '../types';
 import type { Actors } from './actors';
 import { Build, matrixOf } from './build';
+import { DAMAR_AT, DAMAR_CAPTIONS, DAMAR_LEN, Damar } from './damar';
 import { TITLE_POSE, type Pose } from './director';
 import type { Fx } from './fx';
 import { outlineMaterial } from './gfx';
@@ -13,33 +14,48 @@ import { perahu, person, propPair } from './village';
 import type { Water } from './water';
 
 /**
- * The opening: a drone tour of the lagoon as it was, a boat of tourists who leave their rubbish in it,
- * and A.L.U.N. waking up to a closed pier. Everything is the live scene with the camera flown by hand.
- * Four bottles and two bags go over the side; by the last shot the current has carried those six to
- * where the player finds them.
+ * The opening: a drone tour of the lagoon as it was, Pak Damar going out to fish, a boat of tourists who
+ * leave their rubbish in it, and A.L.U.N. waking up to a closed pier. Everything is the live scene with the
+ * camera flown by hand. Four bottles and two bags go over the side; by the last shot the current has
+ * carried those six to where the player finds them.
+ *
+ * Pak Damar's part (`Damar`) is cut in after the village. The rest of the film keeps its own clock, which
+ * stands still while his part runs: `filmTime` maps the opening's clock onto it.
  */
 
 export interface OpeningHooks {
   /** A subtitle to show, or two empty strings to clear it. */
   caption?: (kicker: string, line: string) => void;
-  /** One-off sounds: a splash, a throw, A.L.U.N. coming online. */
-  sound?: (kind: 'splash' | 'throw' | 'alun', strength: number) => void;
+  /** One-off sounds: a splash, a throw, a gull, A.L.U.N. coming online. */
+  sound?: (kind: 'splash' | 'throw' | 'alun' | 'gull', strength: number) => void;
   /** Outboard motor loudness, 0..1, every frame. */
   motor?: (level: number) => void;
   /** How much birdsong there should be, 0..1, every frame: a full chorus that falls silent with the rubbish. */
   birds?: (level: number) => void;
 }
 
-/** Seconds. */
-export const OPENING_LENGTH = 32.5;
+/** Seconds, Pak Damar's part included. */
+export const OPENING_LENGTH = 32.5 + DAMAR_LEN;
 
-const CAPTIONS: { from: number; to: number; kicker: string; line: string }[] = [
-  { from: 0.7, to: 5.0, kicker: 'PAGI DI PESISIR', line: 'Laguna Alun, jernih dan tenang.' },
+/** The rest of the film's clock: everything below is written in it. */
+function filmTime(t: number): number {
+  return t < DAMAR_AT ? t : t < DAMAR_AT + DAMAR_LEN ? DAMAR_AT : t - DAMAR_LEN;
+}
+
+const BASE_CAPTIONS: { from: number; to: number; kicker: string; line: string }[] = [
+  { from: 0.7, to: 5.0, kicker: 'PAGI DI PANTAI PANJANG', line: 'Laguna Alun, jernih dan tenang.' },
   { from: 6.0, to: 9.6, kicker: 'DESA NELAYAN', line: 'Warga hidup dari laut yang bersih.' },
   { from: 10.6, to: 14.2, kicker: 'TEMPAT PEMIJAHAN', line: 'Di sekitar karang inilah ikan bertelur.' },
   { from: 15.2, to: 18.9, kicker: 'TAMU DATANG', line: 'Rombongan wisatawan menyeberang ke laguna...' },
   { from: 19.6, to: 25.2, kicker: 'TAPI...', line: '...sampahnya dibuang begitu saja ke laut.' },
   { from: 25.9, to: 31.6, kicker: 'BU SARI MENGHIDUPKAN A.L.U.N.', line: 'Dermaga tertutup sampah. Bersihkan sebelum malam datang!' },
+];
+
+/** On the opening's own clock, Pak Damar's in their place. */
+const CAPTIONS = [
+  ...BASE_CAPTIONS.filter((c) => c.from < DAMAR_AT),
+  ...DAMAR_CAPTIONS,
+  ...BASE_CAPTIONS.filter((c) => c.from >= DAMAR_AT).map((c) => ({ ...c, from: c.from + DAMAR_LEN, to: c.to + DAMAR_LEN })),
 ];
 
 /** When A.L.U.N. comes online. */
@@ -258,6 +274,7 @@ const FACE = Math.PI / 2;
 export class Opening {
   readonly group = new THREE.Group();
   private boat = new THREE.Group();
+  private damar: Damar;
   private riders: Rider[] = [];
   private bag: THREE.Mesh;
   private plan: Throw[] = [];
@@ -336,6 +353,9 @@ export class Opening {
     this.boat.add(this.bag);
 
     this.group.add(this.boat);
+    this.boat.visible = false;
+    this.damar = new Damar(water, fx);
+    this.group.add(this.damar.group);
     this.group.visible = false;
   }
 
@@ -357,6 +377,8 @@ export class Opening {
     this.r = rng(4242);
     this.bag.visible = true;
     this.plan = [];
+    this.group.visible = true;
+    this.damar.begin({ sound: (kind, strength) => this.hooks.sound?.(kind, strength) });
 
     // the six pieces that close the pier: four bottles by hand, two bags out of the sack
     const dumps = 2;
@@ -417,7 +439,12 @@ export class Opening {
   }
 
   /** The camera, one pose per frame. False when the film is over. */
-  shoot(t: number, out: Pose, play: Pose): boolean {
+  shoot(clock: number, out: Pose, play: Pose): boolean {
+    if (clock >= DAMAR_AT && clock < DAMAR_AT + DAMAR_LEN) {
+      this.damar.shoot(clock, out);
+      return true;
+    }
+    const t = filmTime(clock);
     const o = this.out;
     if (t < 5.5) {
       // lift off the beach and back over the water: the whole bay opens up
@@ -484,10 +511,10 @@ export class Opening {
     } else if (t < 29) {
       // A.L.U.N., with what is left of the morning behind him
       this.put(out, this.alun.at(t, o), t, 0.7);
-    } else if (t < OPENING_LENGTH) {
+    } else if (t < 32.5) {
       // rise into the game
       this.alun.at(29, o);
-      const k = smooth(0, 1, (t - 29) / (OPENING_LENGTH - 29));
+      const k = smooth(0, 1, (t - 29) / (32.5 - 29));
       out.pos.set(lerp(o[0], play.pos.x, k), lerp(o[1], play.pos.y, k), lerp(o[2], play.pos.z, k));
       out.look.set(lerp(o[3], play.look.x, k), lerp(o[4], play.look.y, k), lerp(o[5], play.look.z, k));
       out.fov = lerp(o[6], play.fov, k);
@@ -512,15 +539,18 @@ export class Opening {
     out.fov = o[6];
   }
 
-  /** Moves the boat and its people, and lets things fly. `t` is the camera's clock. */
-  update(t: number, dt: number, time: number, swell: number, cam: THREE.Vector3): void {
+  /** Moves the boats and their people, and lets things fly. `clock` is the camera's clock. */
+  update(clock: number, dt: number, time: number, swell: number, cam: THREE.Vector3): void {
     if (!this.sim || !this.stats) return;
+    const t = filmTime(clock);
     this.clock = t;
     if (t >= DRIFTED_AT) this.carry();
+    // Pak Damar, until the story takes him over waiting outside the closed pier
+    this.damar.update(clock, dt, time, swell, this.drifted);
 
     /* subtitles */
     let cap = -1;
-    for (let i = 0; i < CAPTIONS.length; i++) if (t >= CAPTIONS[i].from && t < CAPTIONS[i].to) cap = i;
+    for (let i = 0; i < CAPTIONS.length; i++) if (clock >= CAPTIONS[i].from && clock < CAPTIONS[i].to) cap = i;
     if (cap !== this.shown) {
       this.shown = cap;
       if (cap >= 0) this.hooks.caption?.(CAPTIONS[cap].kicker, CAPTIONS[cap].line);
@@ -537,7 +567,7 @@ export class Opening {
 
     /* the boat */
     const on = t >= BOAT_FROM && t <= BOAT_TO;
-    this.group.visible = on;
+    this.boat.visible = on;
     if (!on) {
       this.hooks.motor?.(0);
     } else {
@@ -559,7 +589,7 @@ export class Opening {
   }
 
   drawBoatShadow(): void {
-    if (!this.active || !this.group.visible) return;
+    if (!this.active || !this.boat.visible) return;
     const { x, z } = this.boat.position;
     this.fx.sprites.shadow(x, z, 5.4, 2.2, -this.boat.rotation.y, .85, .4);
   }
@@ -714,6 +744,8 @@ export class Opening {
     this.stats = null;
     this.clock = -1;
     this.group.visible = false;
+    this.boat.visible = false;
+    this.damar.end();
     this.hooks.motor?.(0);
     this.hooks.caption?.('', '');
     this.hooks = {};
