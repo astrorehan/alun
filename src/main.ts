@@ -776,16 +776,16 @@ class AlunApp {
           this.ui.closeConfirm();
           return;
         }
-        if (this.ui.isSettingsOpen()) {
-          e.preventDefault();
-          this.audio.playUiClick();
-          this.ui.closeSettings();
-          return;
-        }
         if (this.ui.isCreditsOpen()) {
           e.preventDefault();
           this.audio.playUiClick();
           this.ui.closeCredits();
+          return;
+        }
+        if (this.ui.isSettingsOpen()) {
+          e.preventDefault();
+          this.audio.playUiClick();
+          this.ui.closeSettings();
           return;
         }
         if (this.phase === 'upgrade') {
